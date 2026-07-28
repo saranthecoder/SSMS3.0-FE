@@ -83,47 +83,59 @@ export const AuthProvider = ({ children }) => {
   // Fetch public config (active servers list + policy)
   const refreshTrafficConfig = async () => {
     try {
-      const defaultBase = import.meta.env.VITE_API_URL || '';
-      const { data } = await axios.get(`${defaultBase}/api/traffic/public-config`);
-      
+      const candidates = [
+        import.meta.env.VITE_API_URL,
+        import.meta.env.VITE_API_URL1,
+        import.meta.env.VITE_API_URL2,
+        import.meta.env.VITE_API_URL3,
+        ...(trafficConfigRef.current.servers?.map(s => s.url) || [])
+      ].filter(Boolean);
+
+      const uniqueCandidates = [...new Set(candidates.map(u => u.trim().endsWith('/') ? u.trim().slice(0, -1) : u.trim()))];
+
+      let data = null;
+      for (const baseUrl of uniqueCandidates) {
+        try {
+          const res = await axios.get(`${baseUrl}/api/traffic/public-config`, { timeout: 4000 });
+          if (res.data && res.data.servers) {
+            data = res.data;
+            break;
+          }
+        } catch (e) {
+          // ignore & try next candidate
+        }
+      }
+
+      if (!data) return;
+
       setTrafficConfig(prev => {
-        const envServers = getEnvServers();
-        const dbServers = data.servers || [];
-        const merged = [...envServers];
-        
-        dbServers.forEach(dbS => {
+        const dbServers = (data.servers || []).map(dbS => {
           const cleanUrl = dbS.url.trim().endsWith('/') ? dbS.url.trim().slice(0, -1) : dbS.url.trim();
-          const exists = merged.some(s => s.url === cleanUrl);
-          if (!exists) {
-            merged.push({
-              id: dbS.id || dbS._id,
-              name: dbS.name,
-              url: cleanUrl,
-              isPrimary: dbS.isPrimary,
-              status: dbS.status || 'unknown',
-              responseTime: dbS.responseTime || 0,
-              isActive: true
-            });
-          }
+          return {
+            id: dbS.id || dbS._id,
+            name: dbS.name,
+            url: cleanUrl,
+            isPrimary: dbS.isPrimary,
+            status: dbS.status || 'unknown',
+            responseTime: dbS.responseTime || 0,
+            isActive: dbS.isActive !== undefined ? dbS.isActive : true
+          };
         });
-        
-        // Retain statuses from previous state if URLs match
-        const finalServers = merged.map(s => {
-          const prevMatch = prev.servers?.find(ps => ps.url === s.url);
-          if (prevMatch) {
-            return {
-              ...s,
-              status: prevMatch.status !== 'unknown' ? prevMatch.status : s.status,
-              responseTime: prevMatch.responseTime > 0 ? prevMatch.responseTime : s.responseTime
-            };
+
+        const envServers = getEnvServers();
+        const merged = [...dbServers];
+
+        envServers.forEach(envS => {
+          const exists = merged.some(s => s.url === envS.url);
+          if (!exists) {
+            merged.push(envS);
           }
-          return s;
         });
 
         const nextConfig = {
           policy: data.policy || prev.policy || 'failover',
           manualSelectedServerId: data.manualSelectedServerId || prev.manualSelectedServerId || null,
-          servers: finalServers
+          servers: merged
         };
         
         localStorage.setItem('trafficConfig', JSON.stringify(nextConfig));
@@ -140,7 +152,7 @@ export const AuthProvider = ({ children }) => {
       await refreshTrafficConfig();
     };
 
-    const delayId = setTimeout(syncConfig, 2500);
+    const delayId = setTimeout(syncConfig, 1000);
     const intervalId = setInterval(syncConfig, 60000);
 
     return () => {
@@ -153,18 +165,26 @@ export const AuthProvider = ({ children }) => {
     refreshTrafficConfig();
   }, []);
 
+  const isOnWebDomain = typeof window !== 'undefined' && 
+    window.location.hostname !== 'localhost' && 
+    window.location.hostname !== '127.0.0.1';
+
   // Calculate active socket URL
   const getSocketUrl = () => {
     const { servers, policy, manualSelectedServerId } = trafficConfig;
-    const activeServers = servers && servers.length > 0 
-      ? servers.filter(s => s.status !== 'offline') 
+    let activeServers = servers && servers.length > 0 
+      ? servers.filter(s => s.status !== 'offline' && s.isActive !== false) 
       : [];
     
+    if (isOnWebDomain) {
+      activeServers = activeServers.filter(s => !s.url.includes('localhost') && !s.url.includes('127.0.0.1'));
+    }
+
     if (activeServers.length > 0) {
       let chosenServer = activeServers[0];
       if (policy === 'manual') {
         const selected = servers.find(s => s.id === manualSelectedServerId || s._id === manualSelectedServerId);
-        if (selected && selected.status !== 'offline') {
+        if (selected && selected.status !== 'offline' && (!isOnWebDomain || !selected.url.includes('localhost'))) {
           chosenServer = selected;
         }
       } else if (policy === 'latency') {
@@ -221,17 +241,21 @@ export const AuthProvider = ({ children }) => {
       // Calculate the base URL based on traffic policy
       const currentConfig = trafficConfigRef.current;
       const { policy, servers, manualSelectedServerId } = currentConfig;
-      const activeServers = servers && servers.length > 0 
-        ? servers.filter(s => s.status !== 'offline') 
+      let activeServers = servers && servers.length > 0 
+        ? servers.filter(s => s.status !== 'offline' && s.isActive !== false) 
         : [];
 
+      if (isOnWebDomain) {
+        activeServers = activeServers.filter(s => !s.url.includes('localhost') && !s.url.includes('127.0.0.1'));
+      }
+
       if (activeServers.length > 0) {
-        let selectedUrl = `${import.meta.env.VITE_API_URL}/api`;
+        let selectedUrl = `${activeServers[0].url}/api`;
 
         switch (policy) {
           case 'manual': {
             const selected = servers.find(s => s.id === manualSelectedServerId || s._id === manualSelectedServerId);
-            if (selected && selected.status !== 'offline') {
+            if (selected && selected.status !== 'offline' && (!isOnWebDomain || !selected.url.includes('localhost'))) {
               selectedUrl = `${selected.url}/api`;
             } else {
               selectedUrl = `${activeServers[0].url}/api`;
