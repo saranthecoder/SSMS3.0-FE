@@ -15,6 +15,8 @@ const TrafficManagement = () => {
   const [policy, setPolicy] = useState('failover');
   const [cpuThreshold, setCpuThreshold] = useState(80);
   const [manualSelectedServerId, setManualSelectedServerId] = useState('');
+  const [pingIntervalSeconds, setPingIntervalSeconds] = useState(60);
+  const [requestsPerPing, setRequestsPerPing] = useState(1);
   
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -37,24 +39,25 @@ const TrafficManagement = () => {
   // Browser latency stats
   const [browserLatencies, setBrowserLatencies] = useState({});
 
-  // Live time-series telemetry data buffer (last 12 time snapshots)
+  // Live time-series telemetry data buffer (last 15 time snapshots)
   const [telemetryHistory, setTelemetryHistory] = useState([]);
 
   const recordTelemetrySnapshot = (currentServers) => {
     if (!currentServers || currentServers.length === 0) return;
-    const timeLabel = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const timeLabel = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
     const newPoint = { time: timeLabel };
 
     currentServers.forEach(s => {
-      const isOnline = s.status === 'online';
+      const isOnline = s.isActive && s.status === 'online';
       newPoint[`${s.name}_cpu`] = isOnline ? (s.cpuUsage || 18) : 0;
       newPoint[`${s.name}_mem`] = isOnline ? (s.memoryUsage || 32) : 0;
-      newPoint[`${s.name}_lat`] = isOnline ? (s.responseTime || 15) : 0;
+      newPoint[`${s.name}_lat`] = isOnline ? (s.responseTime || 0) : 0;
+      newPoint[`${s.name}_speed`] = isOnline ? (s.reqPerMin || 0) : 0;
     });
 
     setTelemetryHistory(prev => {
       const updated = [...prev, newPoint];
-      return updated.length > 12 ? updated.slice(-12) : updated;
+      return updated.length > 15 ? updated.slice(-15) : updated;
     });
   };
 
@@ -69,6 +72,8 @@ const TrafficManagement = () => {
       setPolicy(configRes.data.policy);
       setCpuThreshold(configRes.data.cpuThreshold || 80);
       setManualSelectedServerId(configRes.data.manualSelectedServerId || '');
+      setPingIntervalSeconds(configRes.data.pingIntervalSeconds || (configRes.data.pingIntervalMinutes ? configRes.data.pingIntervalMinutes * 60 : 60));
+      setRequestsPerPing(configRes.data.requestsPerPing || 1);
       recordTelemetrySnapshot(serversRes.data);
     } catch (err) {
       console.error('Failed to load traffic config', err);
@@ -88,16 +93,16 @@ const TrafficManagement = () => {
     };
     init();
 
-    // Auto-poll live traffic metrics every 4 seconds
+    const intervalMs = Math.max(5000, (pingIntervalSeconds || 60) * 1000);
     const interval = setInterval(() => {
       axios.get('/traffic/servers').then(res => {
         setServers(res.data);
         recordTelemetrySnapshot(res.data);
       }).catch(err => console.error('Traffic poll error', err));
-    }, 4000);
+    }, intervalMs);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [pingIntervalSeconds]);
 
   useEffect(() => {
     if (servers.length > 0 && servers.some(s => s.status === 'unknown')) {
@@ -112,15 +117,17 @@ const TrafficManagement = () => {
       await axios.post('/traffic/config', {
         policy,
         cpuThreshold,
-        manualSelectedServerId: policy === 'manual' ? manualSelectedServerId : null
+        manualSelectedServerId: policy === 'manual' ? manualSelectedServerId : null,
+        pingIntervalSeconds: Number(pingIntervalSeconds),
+        requestsPerPing: Number(requestsPerPing)
       });
       await refreshTrafficConfig();
       await fetchConfigAndServers();
       Swal.fire({
         icon: 'success',
         title: 'Configuration Saved',
-        text: 'Traffic routing policy & CPU threshold updated.',
-        timer: 1500,
+        text: `Traffic policy updated. Health pings set to every ${pingIntervalSeconds} seconds (${requestsPerPing} req/cycle).`,
+        timer: 1800,
         showConfirmButton: false
       });
     } catch (err) {
@@ -145,10 +152,24 @@ const TrafficManagement = () => {
     }
     
     try {
+      const updatedIsActive = !server.isActive;
       await axios.put(`/traffic/servers/${server._id}`, {
-        isActive: !server.isActive
+        isActive: updatedIsActive
       });
-      setServers(prev => prev.map(s => s._id === server._id ? { ...s, isActive: !s.isActive } : s));
+      setServers(prev => {
+        const next = prev.map(s => s._id === server._id ? { 
+          ...s, 
+          isActive: updatedIsActive, 
+          status: updatedIsActive ? s.status : 'offline',
+          responseTime: updatedIsActive ? s.responseTime : 0,
+          cpuUsage: updatedIsActive ? s.cpuUsage : 0,
+          memoryUsage: updatedIsActive ? s.memoryUsage : 0,
+          reqPerMin: updatedIsActive ? s.reqPerMin : 0,
+          requestCount: updatedIsActive ? s.requestCount : 0
+        } : s);
+        recordTelemetrySnapshot(next);
+        return next;
+      });
       await refreshTrafficConfig();
     } catch (err) {
       Swal.fire({
@@ -536,13 +557,17 @@ const TrafficManagement = () => {
           <div className="flex items-center gap-2">
             <Activity className="text-emerald-500 animate-pulse" size={22} />
             <div>
-              <h2 className="text-xl font-bold text-slate-800 dark:text-white">Graphical Cluster Load Telemetry</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Live time-series CPU utilization, RAM memory, and response latency wave streaming</p>
+              <h2 className="text-xl font-bold text-slate-800 dark:text-white">Graphical Cluster Load & Speed Telemetry</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">1-minute interval time-series graphing: CPU, latency (ms), and request speed (req/min)</p>
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs">
+            <span className="px-3 py-1 bg-sky-500/10 text-sky-500 border border-sky-500/20 rounded-lg font-bold flex items-center gap-1.5">
+              <Clock size={13} />
+              1 Min Request Frequency
+            </span>
             <span className="px-3 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-lg font-bold">
-              Auto-Scale Limit: {cpuThreshold}% CPU
+              Auto-Scale: {cpuThreshold}% CPU
             </span>
           </div>
         </div>
@@ -551,14 +576,14 @@ const TrafficManagement = () => {
           {/* Chart 1: Live CPU Load % Over Time */}
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-inner">
             <div className="flex justify-between items-center text-xs font-bold text-slate-700 dark:text-slate-300">
-              <span className="flex items-center gap-1.5"><Cpu size={14} className="text-emerald-500" /> Live CPU Load (%) Over Time</span>
-              <span className="text-[10px] text-emerald-500 font-mono flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" /> Live Streaming</span>
+              <span className="flex items-center gap-1.5"><Cpu size={14} className="text-emerald-500" /> Live CPU Load (%) (1-Min Axis)</span>
+              <span className="text-[10px] text-emerald-500 font-mono flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" /> 1 min frequency</span>
             </div>
             <div className="h-60 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={telemetryHistory.length > 0 ? telemetryHistory : [
-                  { time: '12:50:00', 'Local Server_cpu': 18, 'Primary Server_cpu': 0 },
-                  { time: '12:50:04', 'Local Server_cpu': 24, 'Primary Server_cpu': 0 }
+                  { time: '22:30:00', 'Local Server_cpu': 18 },
+                  { time: '22:31:00', 'Local Server_cpu': 24 }
                 ]}>
                   <defs>
                     <linearGradient id="cpuGradLocal" x1="0" y1="0" x2="0" y2="1">
@@ -595,34 +620,46 @@ const TrafficManagement = () => {
             </div>
           </div>
 
-          {/* Chart 2: Live Latency Response Time (ms) Over Time */}
+          {/* Chart 2: Latency (ms) & Request Speed (req/min) Over Time */}
           <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 shadow-inner">
             <div className="flex justify-between items-center text-xs font-bold text-slate-700 dark:text-slate-300">
-              <span className="flex items-center gap-1.5"><Network size={14} className="text-sky-500" /> Response Time Latency (ms) Over Time</span>
-              <span className="text-[10px] text-sky-400 font-mono flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-ping" /> Real-Time Gateway</span>
+              <span className="flex items-center gap-1.5"><Network size={14} className="text-sky-500" /> Speed (req/min) & Latency (ms) (1-Min Axis)</span>
+              <span className="text-[10px] text-sky-400 font-mono flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-ping" /> Exact Time Axis</span>
             </div>
             <div className="h-60 w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={telemetryHistory.length > 0 ? telemetryHistory : [
-                  { time: '12:50:00', 'Local Server_lat': 15, 'Primary Server_lat': 0 },
-                  { time: '12:50:04', 'Local Server_lat': 60, 'Primary Server_lat': 0 }
+                  { time: '22:30:00', 'Local Server_lat': 15, 'Local Server_speed': 22 },
+                  { time: '22:31:00', 'Local Server_lat': 60, 'Local Server_speed': 24 }
                 ]}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
                   <XAxis dataKey="time" stroke="#64748b" fontSize={10} />
-                  <YAxis stroke="#64748b" fontSize={10} unit="ms" />
+                  <YAxis stroke="#64748b" fontSize={10} />
                   <Tooltip 
                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', fontSize: '12px' }}
                     itemStyle={{ color: '#38bdf8' }}
                   />
                   {servers.map((s, idx) => (
                     <Line 
-                      key={s._id} 
+                      key={`${s._id}_lat`} 
                       type="monotone" 
                       dataKey={`${s.name}_lat`} 
-                      name={`${s.name} Latency`} 
+                      name={`${s.name} Latency (ms)`} 
                       stroke={idx === 0 ? '#0284c7' : '#f43f5e'} 
                       strokeWidth={3} 
                       dot={{ r: 4, fill: idx === 0 ? '#0284c7' : '#f43f5e' }} 
+                    />
+                  ))}
+                  {servers.map((s, idx) => (
+                    <Line 
+                      key={`${s._id}_speed`} 
+                      type="monotone" 
+                      dataKey={`${s.name}_speed`} 
+                      name={`${s.name} Speed (req/min)`} 
+                      stroke={idx === 0 ? '#10b981' : '#f59e0b'} 
+                      strokeWidth={2} 
+                      strokeDasharray="3 3"
+                      dot={{ r: 3, fill: idx === 0 ? '#10b981' : '#f59e0b' }} 
                     />
                   ))}
                 </LineChart>
@@ -702,6 +739,83 @@ const TrafficManagement = () => {
                 </select>
               </div>
             )}
+
+            {/* Server Keep-Alive & Ping Frequency Settings */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 space-y-3">
+              <label className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider block">
+                Server Keep-Alive & Latency Ping
+              </label>
+              
+              <div className="space-y-3.5 bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div>
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5"><Clock size={14} className="text-sky-500" /> Ping Frequency (Seconds)</span>
+                    <span className="text-[10px] text-sky-400 font-mono font-extrabold">{pingIntervalSeconds} sec ({Math.round(pingIntervalSeconds / 60 * 10) / 10} min)</span>
+                  </span>
+
+                  {/* Input number box for seconds */}
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min="5"
+                      max="3600"
+                      value={pingIntervalSeconds}
+                      onChange={e => setPingIntervalSeconds(Math.max(5, Number(e.target.value) || 5))}
+                      className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-extrabold text-slate-800 dark:text-white focus:outline-none focus:border-emerald-500 shadow-sm"
+                      placeholder="Enter seconds (e.g. 30, 60, 300)"
+                    />
+                    <span className="px-3 py-2 bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-bold rounded-xl flex items-center">
+                      Sec
+                    </span>
+                  </div>
+
+                  {/* Preset Quick Seconds Buttons */}
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {[
+                      { sec: 10, label: '10s' },
+                      { sec: 30, label: '30s' },
+                      { sec: 60, label: '60s (1m)' },
+                      { sec: 300, label: '300s (5m ★ Best)' },
+                      { sec: 600, label: '600s (10m)' }
+                    ].map(item => (
+                      <button
+                        key={item.sec}
+                        type="button"
+                        onClick={() => setPingIntervalSeconds(item.sec)}
+                        className={`py-1 px-2.5 rounded-lg text-[11px] font-bold transition-all border cursor-pointer ${
+                          pingIntervalSeconds === item.sec
+                            ? 'bg-emerald-500 text-white border-emerald-500 shadow-sm'
+                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-emerald-500'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5 flex items-center gap-1.5">
+                    <Zap size={14} className="text-amber-500" /> Requests per Cycle (Keep Server Awake)
+                  </span>
+                  <select
+                    value={requestsPerPing}
+                    onChange={e => setRequestsPerPing(Number(e.target.value))}
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value={1}>1 Request per cycle</option>
+                    <option value={2}>2 Requests per cycle</option>
+                    <option value={3}>3 Requests per cycle</option>
+                    <option value={5}>5 Requests per cycle</option>
+                    <option value={10}>10 Requests per cycle</option>
+                  </select>
+                </div>
+
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Sends health check HTTP requests every <strong>{pingIntervalSeconds} sec</strong> ({requestsPerPing} req/cycle) to measure latency and keep free cloud backend nodes awake.
+                </p>
+              </div>
+            </div>
 
             <button 
               onClick={handleSaveConfig}
