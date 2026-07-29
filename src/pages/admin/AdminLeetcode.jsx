@@ -4,6 +4,8 @@ import Swal from 'sweetalert2';
 import { Plus, Code, Link as LinkIcon, Loader2, RefreshCw, Search, Clock, Edit, Trash2, CheckCircle } from 'lucide-react';
 import Loader from '../../components/Loader';
 
+import { useAuth } from '../../context/AuthContext';
+
 const formatLocalISO = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
@@ -14,6 +16,7 @@ const formatLocalISO = (dateStr) => {
 };
 
 const AdminLeetcode = () => {
+  const { selectedBatchId, batchesList } = useAuth();
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -27,6 +30,7 @@ const AdminLeetcode = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const fetchProblems = async (bId) => {
+    if (!bId) return;
     try {
       const { data } = await axios.get(`/leetcode/batch/${bId}`);
       setPastProblems(data);
@@ -40,9 +44,13 @@ const AdminLeetcode = () => {
       try {
         const { data } = await axios.get('/batches');
         setBatches(data);
-        if (data.length > 0) {
-          setFormData(f => ({ ...f, batchId: data[0]._id }));
-          fetchProblems(data[0]._id);
+        const targetBatchId = (selectedBatchId && selectedBatchId !== 'all') 
+          ? selectedBatchId 
+          : (data[0]?._id || '');
+        
+        if (targetBatchId) {
+          setFormData(f => ({ ...f, batchId: targetBatchId }));
+          fetchProblems(targetBatchId);
         }
       } catch (error) {
         console.error('Error fetching batches:', error);
@@ -51,7 +59,7 @@ const AdminLeetcode = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [selectedBatchId]);
 
 
   const handleBatchChange = (e) => {

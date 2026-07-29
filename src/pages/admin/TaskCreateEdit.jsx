@@ -104,7 +104,10 @@ const TaskCreateEdit = () => {
           });
           setRequiredLinks(task.requiredLinks || []);
         } else if (batchesRes.data.length > 0) {
-          setFormData(f => ({ ...f, batchId: batchesRes.data[0]._id }));
+          const defaultBatchId = (selectedBatchId && selectedBatchId !== 'all') 
+            ? selectedBatchId 
+            : batchesRes.data[0]._id;
+          setFormData(f => ({ ...f, batchId: defaultBatchId }));
         }
       } catch (error) {
         console.error('Failed to fetch task allocation resources:', error);
@@ -115,7 +118,7 @@ const TaskCreateEdit = () => {
     };
 
     fetchBatchesAndTask();
-  }, [id, isEditMode]);
+  }, [id, isEditMode, selectedBatchId]);
 
   const handleFileChange = (e) => {
     setSelectedFile(e.target.files[0]);
