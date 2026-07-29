@@ -354,7 +354,25 @@ const BatchManagement = () => {
       }
     } catch (error) {
       console.error('Google sheet fetch error:', error);
-      Swal.fire('Fetch Failed', error.response?.data?.message || 'Failed to fetch Google Sheet. Make sure sheet is set to "Anyone with the link can view".', 'error');
+      Swal.fire({
+        title: 'Publish Sheet Required',
+        html: `
+          <div className="text-left space-y-3 text-sm text-slate-700 dark:text-slate-300">
+            <p>Google Sheets requires public web publishing permission to extract data via link.</p>
+            <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900/50 rounded-xl space-y-1 text-xs">
+              <p className="font-bold text-indigo-800 dark:text-indigo-300">Easy Fix (Takes 5 seconds):</p>
+              <ol className="list-decimal pl-4 space-y-1">
+                <li>In Google Sheets, click <strong>File → Share → Publish to web</strong></li>
+                <li>Select <strong>Comma-separated values (.csv)</strong> and click <strong>Publish</strong></li>
+                <li>Copy and paste that published link here!</li>
+              </ol>
+            </div>
+            <p className="text-xs text-slate-500">Or click <strong>File → Download → Microsoft Excel (.xlsx)</strong> in Google Sheets and use <strong>Choose Excel File</strong> above.</p>
+          </div>
+        `,
+        icon: 'info',
+        confirmButtonText: 'Got it'
+      });
     } finally {
       setFetchingSheet(false);
     }
@@ -1071,7 +1089,9 @@ const BatchManagement = () => {
                           {fetchingSheet ? 'Fetching...' : 'Fetch & Load Sheet'}
                         </button>
                       </div>
-                      <p className="text-[11px] text-slate-400">Make sure your Google Sheet link is set to <strong>"Anyone with the link can view"</strong>.</p>
+                      <p className="text-[11px] text-slate-400">
+                        💡 <strong>Pro-tip:</strong> Click <strong>File → Share → Publish to web</strong> in Google Sheets, select <strong>CSV</strong>, click Publish, and paste that link here for instant import!
+                      </p>
                     </form>
                   </div>
 
