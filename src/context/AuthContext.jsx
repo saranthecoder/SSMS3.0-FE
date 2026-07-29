@@ -18,60 +18,65 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState(null);
   
-  // Collect environment-defined servers (VITE_API_URL1, VITE_API_URL2, VITE_API_URL3)
+  // Primary server defined in .env
+  const getPrimaryEnvServer = () => {
+    const rawUrl = (import.meta.env.VITE_API_URL || 'https://ssms3-0-be.onrender.com').trim();
+    const cleanUrl = rawUrl.endsWith('/') ? rawUrl.slice(0, -1) : rawUrl;
+    return {
+      id: 'env_primary',
+      name: 'Primary Server (.env)',
+      url: cleanUrl,
+      isPrimary: true,
+      status: 'online',
+      responseTime: 0,
+      isActive: true
+    };
+  };
+
+  // Helper to collect all env backup servers
   const getEnvServers = () => {
-    const envUrls = [
+    const primary = getPrimaryEnvServer();
+    const backupUrls = [
       import.meta.env.VITE_API_URL1,
       import.meta.env.VITE_API_URL2,
-      import.meta.env.VITE_API_URL3,
-      import.meta.env.VITE_API_URL
+      import.meta.env.VITE_API_URL3
     ].filter(Boolean);
     
-    const uniqueUrls = [...new Set(envUrls.map(url => url.trim().endsWith('/') ? url.trim().slice(0, -1) : url.trim()))];
+    const uniqueBackupUrls = [...new Set(backupUrls.map(url => url.trim().endsWith('/') ? url.trim().slice(0, -1) : url.trim()))]
+      .filter(u => u !== primary.url);
     
-    return uniqueUrls.map((url, idx) => {
-      const isPrimary = idx === 0 || url === (import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '');
-      return {
-        id: `env_${idx}`,
-        name: isPrimary ? 'Primary Server' : `Backend Server ${idx + 1}`,
-        url: url,
-        isPrimary: isPrimary,
-        status: 'unknown',
-        responseTime: 0,
-        isActive: true
-      };
-    });
+    const backups = uniqueBackupUrls.map((url, idx) => ({
+      id: `env_backup_${idx}`,
+      name: `Backup Node ${idx + 1}`,
+      url: url,
+      isPrimary: false,
+      status: 'unknown',
+      responseTime: 0,
+      isActive: true
+    }));
+
+    return [primary, ...backups];
   };
 
   // State for traffic manager
   const [trafficConfig, setTrafficConfig] = useState(() => {
-    const envServers = getEnvServers();
+    const primaryServer = getPrimaryEnvServer();
     try {
       const saved = localStorage.getItem('trafficConfig');
       const parsed = saved ? JSON.parse(saved) : null;
-      if (parsed) {
-        // Merge saved data with env servers
-        const mergedServers = envServers.map(envS => {
-          const match = parsed.servers?.find(s => s.url === envS.url);
-          if (match) {
-            return {
-              ...envS,
-              status: match.status,
-              responseTime: match.responseTime,
-              isActive: match.isActive !== undefined ? match.isActive : true
-            };
-          }
-          return envS;
-        });
+      if (parsed && Array.isArray(parsed.servers)) {
+        const secondaryServers = parsed.servers
+          .filter(s => s.url !== primaryServer.url)
+          .map(s => ({ ...s, isPrimary: false }));
         return {
           policy: parsed.policy || 'failover',
           manualSelectedServerId: parsed.manualSelectedServerId || null,
-          servers: mergedServers
+          servers: [primaryServer, ...secondaryServers]
         };
       }
-      return { policy: 'failover', manualSelectedServerId: null, servers: envServers };
+      return { policy: 'failover', manualSelectedServerId: null, servers: [primaryServer] };
     } catch (e) {
-      return { policy: 'failover', manualSelectedServerId: null, servers: envServers };
+      return { policy: 'failover', manualSelectedServerId: null, servers: [primaryServer] };
     }
   });
 
@@ -109,28 +114,23 @@ export const AuthProvider = ({ children }) => {
       if (!data) return;
 
       setTrafficConfig(prev => {
+        const primaryServer = getPrimaryEnvServer();
         const dbServers = (data.servers || []).map(dbS => {
           const cleanUrl = dbS.url.trim().endsWith('/') ? dbS.url.trim().slice(0, -1) : dbS.url.trim();
+          const isPrimary = cleanUrl === primaryServer.url;
           return {
             id: dbS.id || dbS._id,
-            name: dbS.name,
+            name: isPrimary ? 'Primary Server (.env)' : dbS.name,
             url: cleanUrl,
-            isPrimary: dbS.isPrimary,
+            isPrimary: isPrimary,
             status: dbS.status || 'unknown',
             responseTime: dbS.responseTime || 0,
             isActive: dbS.isActive !== undefined ? dbS.isActive : true
           };
         });
 
-        const envServers = getEnvServers();
-        const merged = [...dbServers];
-
-        envServers.forEach(envS => {
-          const exists = merged.some(s => s.url === envS.url);
-          if (!exists) {
-            merged.push(envS);
-          }
-        });
+        const secondaryServers = dbServers.filter(s => s.url !== primaryServer.url);
+        const merged = [primaryServer, ...secondaryServers];
 
         const nextConfig = {
           policy: data.policy || prev.policy || 'failover',
@@ -287,7 +287,8 @@ export const AuthProvider = ({ children }) => {
           }
           case 'failover':
           default: {
-            const primaryOnline = activeServers.find(s => s.isPrimary && s.status !== 'offline');
+            const primaryServer = getPrimaryEnvServer();
+            const primaryOnline = activeServers.find(s => s.url === primaryServer.url && s.status !== 'offline');
             if (primaryOnline) {
               selectedUrl = `${primaryOnline.url}/api`;
             } else {
