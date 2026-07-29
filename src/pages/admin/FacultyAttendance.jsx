@@ -3,8 +3,10 @@ import { useOutletContext } from 'react-router-dom';
 import axios from 'axios';
 import { Users, Clock, Search, RefreshCw, ArrowUpDown } from 'lucide-react';
 import Loader from '../../components/Loader';
+import { useAuth } from '../../context/AuthContext';
 
 const FacultyAttendance = () => {
+  const { selectedBatchId, batchesList } = useAuth();
   const [batches, setBatches] = useState([]);
   const [selectedBatch, setSelectedBatch] = useState('');
   const [attendance, setAttendance] = useState([]);
@@ -22,9 +24,10 @@ const FacultyAttendance = () => {
     try {
       const res = await axios.get('/public/batches');
       setBatches(res.data);
-      if (res.data.length > 0 && !selectedBatch) {
-        setSelectedBatch(res.data[0]._id);
-      }
+      const targetBatchId = (selectedBatchId && selectedBatchId !== 'all')
+        ? selectedBatchId
+        : (res.data[0]?._id || '');
+      setSelectedBatch(targetBatchId);
     } catch (err) {
       console.error('Error fetching batches:', err);
     }
@@ -52,7 +55,7 @@ const FacultyAttendance = () => {
 
   useEffect(() => {
     fetchBatches();
-  }, []);
+  }, [selectedBatchId]);
 
   useEffect(() => {
     if (selectedBatch) {
@@ -164,16 +167,10 @@ const FacultyAttendance = () => {
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
-          <select
-            className="flex-1 sm:flex-initial min-w-[130px] px-3 py-2 text-xs sm:text-sm font-bold rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-            value={selectedBatch}
-            onChange={(e) => setSelectedBatch(e.target.value)}
-          >
-            <option value="">Choose Batch...</option>
-            {batches.map(b => (
-              <option key={b._id} value={b._id}>{b.batchName}</option>
-            ))}
-          </select>
+          <div className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 whitespace-nowrap shadow-xs">
+            <span>Scope:</span>
+            <span className="text-slate-800 dark:text-white font-extrabold">{selectedBatchId === 'all' ? 'All Batches' : (batches.find(b => b._id === selectedBatch)?.batchName || 'Active Batch')}</span>
+          </div>
 
           <button
             onClick={fetchAttendance}

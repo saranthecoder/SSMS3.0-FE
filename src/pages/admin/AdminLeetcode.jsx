@@ -192,12 +192,10 @@ const AdminLeetcode = () => {
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">Allocate Problem</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Select Batch</label>
-                <select className="input-field" required value={formData.batchId} onChange={handleBatchChange}>
-                  {batches.map(b => (
-                    <option key={b._id} value={b._id}>{b.batchName}</option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Target Batch</label>
+                <div className="px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-xl font-bold text-sm text-indigo-700 dark:text-indigo-300">
+                  {batches.find(b => b._id === formData.batchId)?.batchName || 'Selected Batch'}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Problem Title</label>

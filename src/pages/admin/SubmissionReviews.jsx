@@ -4,6 +4,7 @@ import Swal from 'sweetalert2';
 import 'react-quill-new/dist/quill.snow.css';
 import { FileText, CheckCircle, ExternalLink, Loader2, Link as LinkIcon, Download, RefreshCw, Zap, X } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
+import { useAuth } from '../../context/AuthContext';
 
 const formatDateTime = (dateString) => {
   if (!dateString) return '';
@@ -21,6 +22,7 @@ const formatDateTime = (dateString) => {
 };
 
 const SubmissionReviews = () => {
+  const { selectedBatchId, batchesList } = useAuth();
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeReview, setActiveReview] = useState(null);
@@ -30,7 +32,6 @@ const SubmissionReviews = () => {
   const [loadingGrade, setLoadingGrade] = useState(false);
   const [savingGrade, setSavingGrade] = useState(false);
   const [batches, setBatches] = useState([]);
-  const [selectedBatch, setSelectedBatch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [evaluating, setEvaluating] = useState(false);
@@ -88,8 +89,9 @@ const SubmissionReviews = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      const queryParam = (selectedBatchId && selectedBatchId !== 'all') ? `?batchId=${selectedBatchId}` : '';
       const [submissionsRes, batchesRes] = await Promise.all([
-        axios.get(`/submissions${selectedBatch ? `?batchId=${selectedBatch}` : ''}`),
+        axios.get(`/submissions${queryParam}`),
         axios.get('/batches')
       ]);
       const data = submissionsRes.data;
@@ -115,7 +117,7 @@ const SubmissionReviews = () => {
     }
   };
 
-  useEffect(() => { fetchData(); }, [selectedBatch]);
+  useEffect(() => { fetchData(); }, [selectedBatchId]);
 
   const openReviewModal = async (sub) => {
     setActiveReview(sub);
@@ -247,16 +249,6 @@ const SubmissionReviews = () => {
             <option value="submitted">Pending Review</option>
             <option value="graded">Graded</option>
             <option value="resubmit">Resubmit Requested</option>
-          </select>
-          <select 
-            className="input-field py-1.5 text-sm w-auto min-w-[130px]"
-            value={selectedBatch}
-            onChange={(e) => setSelectedBatch(e.target.value)}
-          >
-            <option value="">All Batches</option>
-            {batches.map(b => (
-              <option key={b._id} value={b._id}>{b.batchName}</option>
-            ))}
           </select>
         </div>
       </div>

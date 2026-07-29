@@ -4,12 +4,13 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import { BookOpen, Plus, FileText as FileTextIcon, Edit, Trash2, Link as LinkIcon, RefreshCw, Search, RotateCcw, CheckCircle, Clock, Calendar } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
+import { useAuth } from '../../context/AuthContext';
 
 const TaskManagement = () => {
   const navigate = useNavigate();
+  const { selectedBatchId, batchesList } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [batches, setBatches] = useState([]);
-  const [filterBatch, setFilterBatch] = useState('');
   const [loading, setLoading] = useState(true);
   
   // Filter States
@@ -19,8 +20,9 @@ const TaskManagement = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      const queryParam = (selectedBatchId && selectedBatchId !== 'all') ? `?batchId=${selectedBatchId}` : '';
       const [tasksRes, batchesRes] = await Promise.all([
-        axios.get(`/tasks${filterBatch ? `?batchId=${filterBatch}` : ''}`),
+        axios.get(`/tasks${queryParam}`),
         axios.get('/batches')
       ]);
       setTasks(tasksRes.data);
@@ -34,7 +36,7 @@ const TaskManagement = () => {
 
   useEffect(() => { 
     fetchData(); 
-  }, [filterBatch]);
+  }, [selectedBatchId]);
 
   // Tab synchronization: Auto-refresh when localStorage change notification triggers
   useEffect(() => {
@@ -311,17 +313,6 @@ const TaskManagement = () => {
         >
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
-
-        <select 
-          className="input-field py-1.5 text-sm w-full sm:w-auto min-w-[140px]"
-          value={filterBatch}
-          onChange={(e) => setFilterBatch(e.target.value)}
-        >
-          <option value="">All Batches</option>
-          {batches.map(b => (
-            <option key={b._id} value={b._id}>{b.batchName}</option>
-          ))}
-        </select>
 
         <select 
           className="input-field py-1.5 text-sm w-full sm:w-auto min-w-[140px]"
