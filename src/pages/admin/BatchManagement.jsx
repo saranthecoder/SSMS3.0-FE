@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { Users, Plus, Edit, Trash2, Loader2, Calendar, UserMinus, X, Download, Clock, RefreshCw, Search, RotateCcw, CheckCircle, Upload, FileSpreadsheet, UserCheck, AlertTriangle, ShieldCheck, BookOpen, Layers, UserPlus } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, Loader2, Calendar, UserMinus, X, Download, Clock, RefreshCw, Search, RotateCcw, CheckCircle, Upload, FileSpreadsheet, UserCheck, AlertTriangle, ShieldCheck, BookOpen, Layers, UserPlus, Link2 } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import Loader from '../../components/Loader';
 import * as XLSX from 'xlsx';
@@ -38,6 +38,8 @@ const BatchManagement = () => {
   const [singleSaving, setSingleSaving] = useState(false);
   const [parsedStudents, setParsedStudents] = useState([]);
   const [uploadFileName, setUploadFileName] = useState('');
+  const [googleSheetUrl, setGoogleSheetUrl] = useState('');
+  const [fetchingSheet, setFetchingSheet] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [previewFilter, setPreviewFilter] = useState('all'); // all, valid, invalid
 
@@ -270,6 +272,37 @@ const BatchManagement = () => {
     }
   };
 
+  const processRawData = (rawData) => {
+    const seenRegs = new Set();
+    return rawData.map((row, idx) => {
+      const name = (row['Name'] || row['name'] || '').toString().trim();
+      const rollNumber = (row['Register Number'] || row['registerNumber'] || row['Roll Number'] || row['rollNumber'] || '').toString().trim();
+      const password = (row['Password'] || row['password'] || '').toString().trim();
+
+      let status = 'Valid';
+      let message = 'Ready to import';
+
+      if (!name || !rollNumber) {
+        status = 'Invalid';
+        message = 'Missing Name or Register Number';
+      } else if (seenRegs.has(rollNumber)) {
+        status = 'Warning';
+        message = 'Duplicate Register Number in data';
+      } else {
+        seenRegs.add(rollNumber);
+      }
+
+      return {
+        rowId: idx + 1,
+        name,
+        rollNumber,
+        password: password || `${rollNumber}@123`,
+        status,
+        message
+      };
+    });
+  };
+
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -285,37 +318,7 @@ const BatchManagement = () => {
         const ws = wb.Sheets[wsName];
         const rawData = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
-        const seenRegs = new Set();
-        const processed = rawData.map((row, idx) => {
-          const name = (row['Name'] || row['name'] || '').toString().trim();
-          const rollNumber = (row['Register Number'] || row['registerNumber'] || row['Roll Number'] || row['rollNumber'] || '').toString().trim();
-          const password = (row['Password'] || row['password'] || '').toString().trim();
-          const email = (row['Email'] || row['email'] || '').toString().trim();
-
-          let status = 'Valid';
-          let message = 'Ready to import';
-
-          if (!name || !rollNumber) {
-            status = 'Invalid';
-            message = 'Missing Name or Register Number';
-          } else if (seenRegs.has(rollNumber)) {
-            status = 'Warning';
-            message = 'Duplicate Register Number in file';
-          } else {
-            seenRegs.add(rollNumber);
-          }
-
-          return {
-            rowId: idx + 1,
-            name,
-            rollNumber,
-            password: password || `${rollNumber}@123`,
-            email: email || `${rollNumber.toLowerCase().replace(/[^a-z0-9]/g, '')}@student.ssms`,
-            status,
-            message
-          };
-        });
-
+        const processed = processRawData(rawData);
         setParsedStudents(processed);
       } catch (error) {
         console.error('File parse error:', error);
@@ -324,6 +327,37 @@ const BatchManagement = () => {
     };
 
     reader.readAsBinaryString(file);
+  };
+
+  const handleFetchGoogleSheet = async (e) => {
+    e.preventDefault();
+    if (!googleSheetUrl || !googleSheetUrl.trim()) {
+      return Swal.fire('Error', 'Please enter a valid Google Sheet URL', 'error');
+    }
+
+    setFetchingSheet(true);
+    try {
+      const { data } = await axios.post('/batches/fetch-google-sheet', { url: googleSheetUrl.trim() });
+      if (data.data && data.data.length > 0) {
+        const processed = processRawData(data.data);
+        setParsedStudents(processed);
+        setUploadFileName(`Google Sheet (${data.count} rows)`);
+        Swal.fire({
+          title: 'Google Sheet Loaded!',
+          text: `Successfully extracted ${data.count} student records from Google Sheet. Review the preview below.`,
+          icon: 'success',
+          timer: 2000,
+          showConfirmButton: false
+        });
+      } else {
+        Swal.fire('Warning', 'No student records found in the Google Sheet.', 'warning');
+      }
+    } catch (error) {
+      console.error('Google sheet fetch error:', error);
+      Swal.fire('Fetch Failed', error.response?.data?.message || 'Failed to fetch Google Sheet. Make sure sheet is set to "Anyone with the link can view".', 'error');
+    } finally {
+      setFetchingSheet(false);
+    }
   };
 
   const handleConfirmBulkUpload = async () => {
@@ -951,19 +985,6 @@ const BatchManagement = () => {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
-                      Email Address <span className="text-slate-500 font-normal">(Optional)</span>
-                    </label>
-                    <input
-                      type="email"
-                      placeholder="e.g. rahul@student.ssms (Auto-generated if left blank)"
-                      className="w-full px-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:border-emerald-500 outline-none"
-                      value={singleStudent.email}
-                      onChange={e => setSingleStudent({ ...singleStudent, email: e.target.value })}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
                       Initial Password <span className="text-slate-500 font-normal">(Optional)</span>
                     </label>
                     <input
@@ -997,29 +1018,61 @@ const BatchManagement = () => {
             ) : (
               <>
                 <div className="p-6 overflow-y-auto space-y-6 flex-1">
-                  {/* File Select & Template Controls */}
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-800/60 rounded-xl border border-slate-700/50">
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
-                      <label className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm cursor-pointer flex items-center gap-2 shadow-md transition-all">
-                        <Upload size={16} /> Choose Excel File
-                        <input
-                          type="file"
-                          accept=".xlsx, .xls, .csv"
-                          onChange={handleFileChange}
-                          className="hidden"
-                        />
-                      </label>
-                      <span className="text-xs text-slate-300 truncate max-w-[200px]">
-                        {uploadFileName || 'No file chosen'}
-                      </span>
+                  {/* File Select & Template & Google Sheet Link Controls */}
+                  <div className="space-y-4 bg-slate-800/60 p-4 rounded-xl border border-slate-700/50">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-slate-700/50">
+                      <div className="flex items-center gap-3 w-full sm:w-auto">
+                        <label className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-sm cursor-pointer flex items-center gap-2 shadow-md transition-all">
+                          <Upload size={16} /> Choose Excel File
+                          <input
+                            type="file"
+                            accept=".xlsx, .xls, .csv"
+                            onChange={handleFileChange}
+                            className="hidden"
+                          />
+                        </label>
+                        <span className="text-xs text-slate-300 truncate max-w-[200px]">
+                          {uploadFileName || 'No file chosen'}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={handleDownloadTemplate}
+                        className="px-3.5 py-2 bg-slate-800 text-slate-300 hover:text-white text-xs font-medium rounded-xl border border-slate-700 flex items-center gap-1.5 hover:bg-slate-700 transition-colors"
+                      >
+                        <Download size={14} className="text-emerald-400" /> Download Standard Template
+                      </button>
                     </div>
 
-                    <button
-                      onClick={handleDownloadTemplate}
-                      className="px-3.5 py-2 bg-slate-800 text-slate-300 hover:text-white text-xs font-medium rounded-xl border border-slate-700 flex items-center gap-1.5 hover:bg-slate-700 transition-colors"
-                    >
-                      <Download size={14} className="text-emerald-400" /> Download Standard Excel Template
-                    </button>
+                    {/* Google Sheet URL Import */}
+                    <form onSubmit={handleFetchGoogleSheet} className="space-y-2">
+                      <label className="block text-xs font-bold text-slate-300">
+                        Or Import via Google Sheet Link
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <Link2 size={16} />
+                          </div>
+                          <input
+                            type="url"
+                            placeholder="Paste Google Sheet URL (e.g. https://docs.google.com/spreadsheets/d/...)"
+                            value={googleSheetUrl}
+                            onChange={(e) => setGoogleSheetUrl(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:border-emerald-500 outline-none"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={fetchingSheet || !googleSheetUrl.trim()}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-md transition-all cursor-pointer"
+                        >
+                          {fetchingSheet ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                          {fetchingSheet ? 'Fetching...' : 'Fetch & Load Sheet'}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-slate-400">Make sure your Google Sheet link is set to <strong>"Anyone with the link can view"</strong>.</p>
+                    </form>
                   </div>
 
                   {/* Parsed Preview Stats Badges */}
@@ -1087,7 +1140,6 @@ const BatchManagement = () => {
                               <th className="p-3">Name</th>
                               <th className="p-3">Register Number (PK)</th>
                               <th className="p-3">Password</th>
-                              <th className="p-3">Email</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800 bg-slate-900/60">
@@ -1114,7 +1166,6 @@ const BatchManagement = () => {
                                 <td className="p-3 font-medium text-white">{row.name || <span className="text-rose-400 italic">Empty</span>}</td>
                                 <td className="p-3 font-mono text-indigo-400">{row.rollNumber || <span className="text-rose-400 italic">Empty</span>}</td>
                                 <td className="p-3 text-slate-400 font-mono">{row.password}</td>
-                                <td className="p-3 text-slate-400">{row.email}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1124,8 +1175,8 @@ const BatchManagement = () => {
                   ) : (
                     <div className="text-center py-12 border-2 border-dashed border-slate-800 rounded-xl bg-slate-900/40">
                       <Upload className="w-12 h-12 mx-auto text-slate-600 mb-3" />
-                      <p className="text-sm font-semibold text-slate-300">Select an Excel file to see live data preview</p>
-                      <p className="text-xs text-slate-500 mt-1">Columns supported: Name, Register Number (PK), Password, Email</p>
+                      <p className="text-sm font-semibold text-slate-300">Select an Excel file or paste a Google Sheet link</p>
+                      <p className="text-xs text-slate-500 mt-1">Columns supported: Name, Register Number (PK), Password</p>
                     </div>
                   )}
                 </div>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Mail, Lock, AlertCircle, ArrowRight, Sparkles, Code2, Layers, BookOpen } from 'lucide-react';
+import { Mail, User, Lock, AlertCircle, ArrowRight, Sparkles, Code2, Layers, BookOpen } from 'lucide-react';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -98,7 +98,7 @@ const Login = () => {
 
           <div className="text-center lg:text-left mb-10">
             <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2">Welcome back</h2>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">Please enter your details to sign in.</p>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Please enter your credentials to sign in.</p>
           </div>
 
           {error && (
@@ -111,18 +111,18 @@ const Login = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2 group">
               <label className="text-sm font-bold text-slate-700 dark:text-slate-300 block transition-colors group-focus-within:text-indigo-600 dark:group-focus-within:text-indigo-400">
-                Email Address
+                Register Number / Email
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
-                  <Mail size={20} />
+                  <User size={20} />
                 </div>
                 <input
-                  type="email"
+                  type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-11 pr-4 py-3.5 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all font-medium"
-                  placeholder="you@example.com"
+                  placeholder="e.g. 4MH23CB001 or email@example.com"
                   required
                 />
               </div>
