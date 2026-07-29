@@ -141,6 +141,12 @@
   50% { transform: translate(60px, 60px) rotate(180deg); }
 }
 
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-slideUp { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
 .animate-float-slow { animation: float-slow calc(22s * var(--theme-speed-multiplier, 1)) ease-in-out infinite alternate; }
 .animate-float-medium { animation: float-medium calc(18s * var(--theme-speed-multiplier, 1)) ease-in-out infinite alternate; }
 .animate-float-fast { animation: float-fast calc(14s * var(--theme-speed-multiplier, 1)) ease-in-out infinite alternate; }

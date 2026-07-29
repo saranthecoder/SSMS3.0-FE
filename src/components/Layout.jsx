@@ -110,6 +110,7 @@ const Layout = () => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
   // Collapsible sidebar sections state
   const [expandedSections, setExpandedSections] = useState(() => {
@@ -1352,25 +1353,7 @@ const Layout = () => {
     }
   }, [location.pathname, sections]);
 
-  if (user?.role === 'student' && isMobile) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-20 h-20 bg-rose-500/20 rounded-full flex items-center justify-center mb-6">
-          <Monitor size={40} className="text-rose-500" />
-        </div>
-        <h1 className="text-2xl font-bold text-white mb-2">Desktop Access Required</h1>
-        <p className="text-slate-400 max-w-md mx-auto mb-8">
-          The student portal is optimized for laptop and desktop browsers. Please log in from a computer to access your classes, tasks, and materials.
-        </p>
-        <button
-          onClick={logout}
-          className="flex items-center gap-2 bg-slate-800 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-700 transition-colors"
-        >
-          <LogOut size={18} /> Logout
-        </button>
-      </div>
-    );
-  }
+  // Mobile restriction removed - app is now fully mobile-friendly for all roles
 
   return (
     <div className={`transition-colors duration-500 flex bg-transparent relative ${location.pathname.includes('/chat') ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
@@ -1684,18 +1667,12 @@ const Layout = () => {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar (Desktop only - hidden on mobile, use bottom nav instead) */}
       <aside
         style={{ fontFamily: "'ALEXANDER', 'Alexandria', sans-serif" }}
-        className={`fixed z-50 flex flex-col overflow-hidden transition-transform duration-300 ease-in-out ${
-          user?.role === 'admin'
-            ? `${sidebarOpen ? 'translate-y-0' : 'translate-y-full'} bottom-0 left-0 right-0 w-full h-[75vh] rounded-t-[2rem] border-t border-slate-200/10 bg-slate-900/95 dark:bg-slate-950/95 shadow-[0_-10px_30px_rgba(0,0,0,0.3)] backdrop-blur-xl lg:inset-y-4 lg:left-4 lg:w-64 lg:h-auto lg:rounded-2xl lg:border-none lg:translate-y-0 lg:glass-panel lg:shadow-none lg:bg-transparent`
-            : `inset-y-4 left-4 w-64 glass-panel ${sidebarOpen ? 'translate-x-0' : '-translate-x-[120%]'} lg:translate-x-0`
-        }`}
+        className={`fixed z-50 flex-col overflow-hidden transition-transform duration-300 ease-in-out hidden lg:flex inset-y-4 left-4 w-64 glass-panel translate-x-0`}
       >
-        {user?.role === 'admin' && (
-          <div className="lg:hidden w-12 h-1.5 bg-slate-400/20 rounded-full mx-auto mt-3 mb-1 animate-pulse" />
-        )}
+        {/* Drag indicator removed - sidebar is desktop-only now */}
         <div className="h-20 lg:h-24 flex items-center px-4 border-b border-slate-100 dark:border-white/10 bg-slate-50/50 dark:bg-black/10">
           <div className="flex items-center gap-3 group cursor-pointer min-w-0 flex-1">
             <div className="relative shrink-0">
@@ -2144,7 +2121,7 @@ const Layout = () => {
         {(() => {
           const isChatPage = location.pathname.includes('/chat');
           return (
-            <div className={`flex-1 relative min-h-0 ${isChatPage ? 'p-2 lg:p-3 overflow-hidden h-[calc(100vh-4.5rem)]' : 'overflow-auto p-4 lg:p-8 pt-4'} ${user?.role === 'admin' && !isChatPage ? 'pb-24 lg:pb-8' : ''}`}>
+            <div className={`flex-1 relative min-h-0 ${isChatPage ? 'p-2 lg:p-3 overflow-hidden h-[calc(100vh-4.5rem)]' : 'overflow-auto p-4 lg:p-8 pt-4'} ${!isChatPage ? 'pb-24 lg:pb-8' : ''}`}>
               <Outlet context={{ 
                 sessionActive, startSession, endSession, sessionSeconds, formatTime, isCheckingIn, activeLeaveStatus,
                 themeColor, activeTheme: themes.find(t => t.name === themeColor) || themes[0],
@@ -2155,33 +2132,131 @@ const Layout = () => {
         })()}
       </main>
 
-      {/* Mobile Bottom Navigation (Admin only) */}
-      {user?.role === 'admin' && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-slate-900/80 dark:bg-slate-950/85 backdrop-blur-xl border-t border-slate-200/10 px-4 py-2 flex items-center justify-around shadow-[0_-8px_30px_rgba(0,0,0,0.15)] pb-safe">
-          {[
+      {/* Mobile More Menu Overlay */}
+      {mobileMoreOpen && (
+        <div className="fixed inset-0 z-[60] lg:hidden" onClick={() => setMobileMoreOpen(false)}>
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+          <div className="absolute bottom-16 left-0 right-0 max-h-[70vh] overflow-y-auto bg-slate-900/95 dark:bg-slate-950/95 border-t border-slate-200/10 rounded-t-3xl shadow-[0_-10px_30px_rgba(0,0,0,0.4)] backdrop-blur-xl animate-slideUp" onClick={(e) => e.stopPropagation()}>
+            <div className="w-12 h-1.5 bg-slate-400/20 rounded-full mx-auto mt-3 mb-2" />
+            <div className="px-4 pb-6 pt-2">
+              {/* Mobile More Menu Header */}
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-700/50">
+                <div className="flex items-center gap-3">
+                  <div className="relative shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-white shadow-md p-0.5 flex items-center justify-center overflow-hidden">
+                      <img src="/logo.png" alt="SSMS" className="w-full h-full object-contain rounded-lg" />
+                    </div>
+                  </div>
+                  <div>
+                    <span className="font-extrabold text-base text-white">{customPanelName || 'SSMS 3.0'}</span>
+                    <span className="block text-[9px] font-black tracking-wider text-theme-primary uppercase">{customPanelSubheading || 'Students Management'}</span>
+                  </div>
+                </div>
+                <button onClick={() => setMobileMoreOpen(false)} className="p-2 text-slate-400 hover:text-white rounded-xl bg-slate-800/50 border border-slate-700/30 cursor-pointer">
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* All Navigation Links */}
+              <div className="space-y-4">
+                {sections.map((section) => (
+                  <div key={section.label}>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 px-1">{section.label}</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {section.links.map((link) => {
+                        const isActive = location.pathname === link.path || (link.path !== '/' && link.path !== '/student' && location.pathname.startsWith(link.path));
+                        return (
+                          <Link
+                            key={link.path}
+                            to={link.path}
+                            onClick={() => setMobileMoreOpen(false)}
+                            className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl text-center transition-all active:scale-95 ${
+                              isActive
+                                ? 'bg-theme-primary/10 border border-theme-primary/30 text-theme-primary shadow-md'
+                                : 'bg-slate-800/40 border border-slate-700/30 text-slate-300 hover:bg-slate-800/70'
+                            }`}
+                          >
+                            <div className="relative">
+                              {link.icon}
+                              {link.badge && (
+                                <span className="absolute -top-1.5 -right-2 min-w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 shadow-md">
+                                  {link.badge}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] font-bold leading-tight line-clamp-2">{link.name}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Logout Button */}
+              <button
+                onClick={() => { setMobileMoreOpen(false); logout(); }}
+                className="w-full mt-5 flex items-center justify-center gap-2 px-4 py-3 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-2xl font-bold text-sm active:scale-95 transition-all cursor-pointer"
+              >
+                <LogOut size={16} /> Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Universal Mobile Bottom Navigation Bar (all roles) */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-slate-900/80 dark:bg-slate-950/85 backdrop-blur-xl border-t border-slate-200/10 px-2 py-2 flex items-center justify-around shadow-[0_-8px_30px_rgba(0,0,0,0.15)]" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+        {(() => {
+          const role = user?.role;
+          const mobileNavItems = role === 'student' ? [
+            { name: 'Home', path: '/student', icon: <LayoutDashboard size={20} /> },
+            { name: 'Tasks', path: '/student/tasks', icon: <FileText size={20} /> },
+            { name: 'Attendance', path: '/student/attendance', icon: <Clock size={20} /> },
+            { name: 'Chat', path: '/student/chat', icon: <MessageCircle size={20} /> },
+            { name: 'More', isAction: true, action: () => setMobileMoreOpen(true), icon: <Menu size={20} /> }
+          ] : role === 'mentor' ? [
+            { name: 'Home', path: '/', icon: <LayoutDashboard size={20} /> },
+            { name: 'Tasks', path: '/tasks', icon: <FileText size={20} /> },
+            { name: 'Reviews', path: '/reviews', icon: <CheckCircle size={20} /> },
+            { name: 'Chat', path: '/chat', icon: <MessageCircle size={20} /> },
+            { name: 'More', isAction: true, action: () => setMobileMoreOpen(true), icon: <Menu size={20} /> }
+          ] : [
             { name: 'Home', path: '/', icon: <LayoutDashboard size={20} /> },
             { name: 'Attendance', path: '/attendance-logs', icon: <Clock size={20} /> },
             { name: 'Tasks', path: '/tasks', icon: <FileText size={20} /> },
             { name: 'Chat', path: '/chat', icon: <MessageCircle size={20} /> },
-            { name: 'More', isAction: true, action: () => setSidebarOpen(true), icon: <Menu size={20} /> }
-          ].map((item, index) => {
-            const isLinkActive = item.path && (location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path)));
+            { name: 'More', isAction: true, action: () => setMobileMoreOpen(true), icon: <Menu size={20} /> }
+          ];
+
+          return mobileNavItems.map((item, index) => {
+            const isLinkActive = item.path && (
+              location.pathname === item.path || 
+              (item.path !== '/' && item.path !== '/student' && location.pathname.startsWith(item.path))
+            );
             
             return item.isAction ? (
               <button
                 key={index}
                 onClick={item.action}
-                className="flex flex-col items-center justify-center gap-1 text-slate-400 hover:text-slate-200 active:scale-95 transition-all w-16 py-1 cursor-pointer bg-transparent border-none"
+                className={`flex flex-col items-center justify-center gap-1 w-16 py-1 active:scale-95 transition-all cursor-pointer bg-transparent border-none ${
+                  mobileMoreOpen ? 'text-theme-primary' : 'text-slate-400 hover:text-slate-200'
+                }`}
               >
-                <div className="p-1.5 rounded-xl bg-slate-800/30 border border-slate-200/5 transition-colors">
-                  {item.icon}
+                <div className={`p-1.5 rounded-xl transition-all ${
+                  mobileMoreOpen 
+                    ? 'bg-theme-primary/10 border border-theme-primary/30 scale-110' 
+                    : 'bg-slate-800/30 border border-slate-200/5'
+                }`}>
+                  {mobileMoreOpen ? <X size={20} /> : item.icon}
                 </div>
-                <span className="text-[10px] font-bold tracking-wider leading-none mt-0.5">{item.name}</span>
+                <span className="text-[10px] font-bold tracking-wider leading-none mt-0.5">{mobileMoreOpen ? 'Close' : item.name}</span>
               </button>
             ) : (
               <Link
                 key={index}
                 to={item.path}
+                onClick={() => setMobileMoreOpen(false)}
                 className={`flex flex-col items-center justify-center gap-1 w-16 py-1 active:scale-95 transition-all ${
                   isLinkActive 
                     ? 'text-theme-primary font-extrabold' 
@@ -2194,18 +2269,23 @@ const Layout = () => {
                     : 'bg-transparent border border-transparent'
                 }`}>
                   {item.icon}
-                  {item.name === 'Chat' && chatCount > 0 && (
+                  {(item.name === 'Chat') && chatCount > 0 && (
                     <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-md">
                       {chatCount}
+                    </span>
+                  )}
+                  {(item.name === 'Reviews') && pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-md">
+                      {pendingCount}
                     </span>
                   )}
                 </div>
                 <span className="text-[10px] tracking-wider leading-none mt-0.5">{item.name}</span>
               </Link>
             );
-          })}
-        </div>
-      )}
+          });
+        })()}
+      </div>
     </div>
   );
 };
