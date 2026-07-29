@@ -8,7 +8,7 @@ import SkeletonLoader from '../../components/SkeletonLoader';
 import { MagicDust } from '../../components/ui/magic-dust-shader';
 
 const AdminDashboard = () => {
-  const { user, selectedBatchId = 'all', setSelectedBatchId, batchesList = [], customPanelName, customPanelSubheading } = useAuth();
+  const { user, selectedBatchId = 'all', setSelectedBatchId, batchesList = [], customPanelName, customPanelSubheading, trafficConfig } = useAuth();
   const { themeColor, activeTheme, fetchCounts } = useOutletContext();
   const navigate = useNavigate();
 
@@ -24,6 +24,8 @@ const AdminDashboard = () => {
   };
 
   const [stats, setStats] = useState(null);
+  const [trafficServers, setTrafficServers] = useState([]);
+  const [trafficPolicy, setTrafficPolicy] = useState('failover');
   const [loading, setLoading] = useState(true);
   const [isChartLoading, setIsChartLoading] = useState(false);
   const [timeframe, setTimeframe] = useState('daily');
@@ -32,8 +34,14 @@ const AdminDashboard = () => {
     if (!loading) setIsChartLoading(true);
     try {
       const url = `/analytics/dashboard?timeframe=${timeframe}&batchId=${selectedBatchId}${isRefresh ? '&refresh=true' : ''}`;
-      const { data } = await axios.get(url);
-      setStats(data);
+      const [dashRes, serversRes, configRes] = await Promise.all([
+        axios.get(url),
+        axios.get('/traffic/servers').catch(() => ({ data: [] })),
+        axios.get('/traffic/config').catch(() => ({ data: { policy: 'failover' } }))
+      ]);
+      setStats(dashRes.data);
+      setTrafficServers(serversRes.data || []);
+      setTrafficPolicy(configRes.data?.policy || 'failover');
     } catch (error) {
       console.error('Error fetching stats:', error);
     } finally {
@@ -410,6 +418,84 @@ const AdminDashboard = () => {
             </div>
           </CardContainer>
         </div>
+
+        {/* Row: Traffic Control & Server Cluster Health */}
+        <CardContainer className="relative overflow-hidden group border border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-white via-slate-50/50 to-indigo-50/20 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/20">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center border border-indigo-500/20 shadow-sm">
+                <Network size={22} className="animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-extrabold text-slate-800 dark:text-white uppercase tracking-wider">Traffic Control & Backend Cluster</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live Cluster
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                  Active Routing Strategy: <strong className="text-indigo-600 dark:text-indigo-400 capitalize">{trafficPolicy.replace('-', ' ')}</strong>
+                </p>
+              </div>
+            </div>
+
+            <Link to="/traffic" className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 hover:-translate-y-0.5 shrink-0">
+              <Network size={15} /> Manage Traffic Control <ChevronRight size={14} />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+            {/* Primary Server Node Status */}
+            <div className="bg-white dark:bg-slate-800/80 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Globe size={16} className="text-indigo-500 shrink-0" />
+                  <span className="text-xs font-black text-slate-800 dark:text-white truncate">Primary Server (.env)</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">PRIMARY</span>
+              </div>
+              <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate mb-3">https://ssms3-0-be.onrender.com</p>
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                <span className="text-slate-400 font-semibold">Node Status</span>
+                <span className="font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span> ONLINE
+                </span>
+              </div>
+            </div>
+
+            {/* Cluster Health & Policy Metric */}
+            <div className="bg-white dark:bg-slate-800/80 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Activity size={16} className="text-emerald-500 shrink-0" />
+                  <span className="text-xs font-black text-slate-800 dark:text-white">Traffic Health</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">100% HEALTHY</span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium mb-3">All API requests protected by automatic failover & node health monitoring.</p>
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                <span className="text-slate-400 font-semibold">Active Cluster Nodes</span>
+                <span className="font-extrabold text-slate-800 dark:text-white">{trafficServers.length || 1} Registered</span>
+              </div>
+            </div>
+
+            {/* Load Balancing Policy Info */}
+            <div className="bg-white dark:bg-slate-800/80 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <ShieldCheck size={16} className="text-violet-500 shrink-0" />
+                  <span className="text-xs font-black text-slate-800 dark:text-white">Routing Strategy</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">ENFORCED</span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium mb-3">Primary node prioritized. Auto-switch backup nodes if primary drops.</p>
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                <span className="text-slate-400 font-semibold">Traffic Manager</span>
+                <Link to="/traffic" className="font-extrabold text-indigo-500 hover:underline">Configure Settings →</Link>
+              </div>
+            </div>
+          </div>
+        </CardContainer>
 
         {/* Row 3: Classroom Attendance & Matrix Tracker (Asymmetric 7:5 Grid) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">

@@ -383,10 +383,12 @@ const TrafficManagement = () => {
     });
   };
 
-  // Helper stats calculation
-  const onlineCount = servers.filter(s => s.status === 'online').length;
-  const offlineCount = servers.filter(s => s.status === 'offline').length;
-  const activeCount = servers.filter(s => s.isActive).length;
+  // Helper stats calculation (Ignore deactivated/off servers turned off to save resources)
+  const activeServers = servers.filter(s => s.isActive);
+  const activeCount = activeServers.length;
+  const onlineCount = activeServers.filter(s => s.status === 'online').length;
+  const offlineCount = activeServers.filter(s => s.status === 'offline').length;
+  const standbyCount = servers.filter(s => !s.isActive).length;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8 animate-fadeIn">
@@ -406,7 +408,7 @@ const TrafficManagement = () => {
         <div className="flex flex-wrap gap-3">
           <button 
             onClick={handleBrowserPing} 
-            disabled={isTestingBrowserPing || servers.length === 0}
+            disabled={isTestingBrowserPing || activeCount === 0}
             className="flex items-center gap-2 px-4 py-2.5 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500 hover:text-white border border-sky-500/20 rounded-xl transition-all font-semibold disabled:opacity-50 text-sm cursor-pointer"
           >
             <Clock size={16} className={isTestingBrowserPing ? 'animate-spin' : ''} />
@@ -414,7 +416,7 @@ const TrafficManagement = () => {
           </button>
           <button 
             onClick={handleBackendPing} 
-            disabled={isRefreshing || servers.length === 0}
+            disabled={isRefreshing || activeCount === 0}
             className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 rounded-xl transition-all font-semibold disabled:opacity-50 text-sm cursor-pointer"
           >
             <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
@@ -439,7 +441,7 @@ const TrafficManagement = () => {
           <h3 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Total Nodes</h3>
           <div className="flex items-baseline gap-2 mt-2">
             <span className="text-3xl font-black text-slate-800 dark:text-white">{servers.length}</span>
-            <span className="text-slate-500 text-xs">{activeCount} active in rotation</span>
+            <span className="text-slate-500 text-xs">{activeCount} active in rotation {standbyCount > 0 ? `(${standbyCount} standby)` : ''}</span>
           </div>
         </div>
 
@@ -461,7 +463,7 @@ const TrafficManagement = () => {
           <h3 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Offline Nodes</h3>
           <div className="flex items-baseline gap-2 mt-2">
             <span className="text-3xl font-black text-rose-600 dark:text-rose-500">{offlineCount}</span>
-            <span className="text-slate-500 text-xs">failed status scan</span>
+            <span className="text-slate-500 text-xs">{offlineCount > 0 ? 'failed status scan' : 'all active nodes healthy'}</span>
           </div>
         </div>
 
@@ -471,8 +473,8 @@ const TrafficManagement = () => {
           </div>
           <h3 className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">Cluster Health</h3>
           <div className="flex items-baseline gap-2 mt-2">
-            <span className={`text-2xl font-black ${onlineCount === servers.length && servers.length > 0 ? 'text-emerald-600 dark:text-emerald-500' : onlineCount > 0 ? 'text-amber-600 dark:text-amber-500' : 'text-rose-600 dark:text-rose-500'}`}>
-              {onlineCount === servers.length && servers.length > 0 ? 'Optimal' : onlineCount > 0 ? 'Degraded' : 'Critical'}
+            <span className={`text-2xl font-black ${onlineCount === activeCount && activeCount > 0 ? 'text-emerald-600 dark:text-emerald-500' : onlineCount > 0 ? 'text-amber-600 dark:text-amber-500' : 'text-rose-600 dark:text-rose-500'}`}>
+              {onlineCount === activeCount && activeCount > 0 ? 'Optimal' : onlineCount > 0 ? 'Degraded' : 'Critical'}
             </span>
           </div>
         </div>

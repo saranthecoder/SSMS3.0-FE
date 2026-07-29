@@ -1190,6 +1190,7 @@ const Layout = () => {
       label: 'Overview',
       links: [
         { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
+        { name: 'Traffic Control', path: '/traffic', icon: <Network size={20} /> },
       ]
     },
     {
@@ -1222,7 +1223,6 @@ const Layout = () => {
         { name: 'Attendance Tracker', path: '/attendance-tracker', icon: <Clock size={20} /> },
         { name: 'Leave Requests', path: '/leaves', icon: <Calendar size={20} />, badge: getBadge('leaves', leavesCount) },
         { name: 'Batch Chat', path: '/chat', icon: <MessageCircle size={20} /> },
-        { name: 'Traffic Control', path: '/traffic', icon: <Network size={20} /> },
         { name: 'Activity Logs', path: '/activity-logs', icon: <Activity size={20} /> },
       ]
     },
