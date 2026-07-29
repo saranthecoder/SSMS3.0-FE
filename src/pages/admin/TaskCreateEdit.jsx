@@ -6,6 +6,7 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { BookOpen, Loader2, UploadCloud, FileText as FileTextIcon, Link as LinkIcon, Save, X, ArrowLeft } from 'lucide-react';
 import Loader from '../../components/Loader';
+import { useAuth } from '../../context/AuthContext';
 
 const formatLocalISO = (dateStr) => {
   if (!dateStr) return '';
@@ -30,6 +31,7 @@ const TaskCreateEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
+  const { selectedBatchId } = useAuth();
 
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
