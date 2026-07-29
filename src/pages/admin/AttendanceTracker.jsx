@@ -75,11 +75,14 @@ const AttendanceTracker = () => {
       if ((record.isLeave || record.status === 'Leave') && (record.leaveHours || 0) === 0) {
         return 'Leave';
       }
+      const currentBatch = batchesList.find(b => b._id === activeBatchId);
+      const reqHours = currentBatch?.requiredPresentHours !== undefined ? currentBatch.requiredPresentHours : 8;
+      const maxHours = currentBatch?.maxValidHours !== undefined ? currentBatch.maxValidHours : 10;
       const hours = (record.totalSeconds || 0) / 3600;
-      const minRequired = 8 - (record.leaveHours || 0);
-      if (hours >= minRequired && hours <= 10) {
+      const minRequired = reqHours - (record.leaveHours || 0);
+      if (hours >= minRequired && hours <= maxHours) {
         return 'Present';
-      } else if (hours > 10) {
+      } else if (hours > maxHours) {
         return 'Invalid';
       } else if (record.isActive) {
         return 'In Progress';

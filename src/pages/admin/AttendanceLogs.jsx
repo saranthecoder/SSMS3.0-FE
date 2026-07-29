@@ -126,10 +126,12 @@ const AttendanceLogs = () => {
           };
         }
         groupedMap[key].totalSeconds += (log.totalSeconds || 0);
+        const reqHours = log.requiredPresentHours !== undefined ? log.requiredPresentHours : 8;
+        const maxHours = log.maxValidHours !== undefined ? log.maxValidHours : 10;
         const hours = (log.totalSeconds || 0) / 3600;
-        const minRequired = 8 - (log.leaveHours || 0);
-        if (hours >= minRequired && hours <= 10) groupedMap[key].daysPresent += 1;
-        else if (hours > 10) groupedMap[key].daysInvalid += 1;
+        const minRequired = reqHours - (log.leaveHours || 0);
+        if (hours >= minRequired && hours <= maxHours) groupedMap[key].daysPresent += 1;
+        else if (hours > maxHours) groupedMap[key].daysInvalid += 1;
         else groupedMap[key].daysAbsent += 1;
       }
     });
@@ -140,12 +142,14 @@ const AttendanceLogs = () => {
           day.status = 'Leave';
           return;
         }
+        const reqHours = day.requiredPresentHours !== undefined ? day.requiredPresentHours : 8;
+        const maxHours = day.maxValidHours !== undefined ? day.maxValidHours : 10;
         const hours = (day.totalSeconds || 0) / 3600;
-        const minRequired = 8 - (day.leaveHours || 0);
+        const minRequired = reqHours - (day.leaveHours || 0);
         const todayStr = new Date().toISOString().split('T')[0];
         
-        if (hours >= minRequired && hours <= 10) day.status = 'Present';
-        else if (hours > 10) day.status = 'Invalid';
+        if (hours >= minRequired && hours <= maxHours) day.status = 'Present';
+        else if (hours > maxHours) day.status = 'Invalid';
         else if (day.isActive) day.status = 'In Progress';
         else day.status = 'Absent';
       }
