@@ -61,16 +61,24 @@ export const AuthProvider = ({ children }) => {
   // State for traffic manager
   const [trafficConfig, setTrafficConfig] = useState(() => {
     const primaryServer = getPrimaryEnvServer();
+    // Clean legacy storage pointing to deprecated server nodes
+    try {
+      const saved = localStorage.getItem('trafficConfig');
+      if (saved && saved.includes('ssms-be-elp4.onrender.com')) {
+        localStorage.removeItem('trafficConfig');
+      }
+    } catch (e) {}
+
     try {
       const saved = localStorage.getItem('trafficConfig');
       const parsed = saved ? JSON.parse(saved) : null;
       if (parsed && Array.isArray(parsed.servers)) {
         const secondaryServers = parsed.servers
-          .filter(s => s.url !== primaryServer.url)
+          .filter(s => s.url !== primaryServer.url && !s.url.includes('ssms-be-elp4.onrender.com'))
           .map(s => ({ ...s, isPrimary: false }));
         return {
-          policy: parsed.policy || 'failover',
-          manualSelectedServerId: parsed.manualSelectedServerId || null,
+          policy: 'failover',
+          manualSelectedServerId: null,
           servers: [primaryServer, ...secondaryServers]
         };
       }
@@ -129,12 +137,12 @@ export const AuthProvider = ({ children }) => {
           };
         });
 
-        const secondaryServers = dbServers.filter(s => s.url !== primaryServer.url);
+        const secondaryServers = dbServers.filter(s => s.url !== primaryServer.url && !s.url.includes('ssms-be-elp4.onrender.com'));
         const merged = [primaryServer, ...secondaryServers];
 
         const nextConfig = {
-          policy: data.policy || prev.policy || 'failover',
-          manualSelectedServerId: data.manualSelectedServerId || prev.manualSelectedServerId || null,
+          policy: 'failover',
+          manualSelectedServerId: null,
           servers: merged
         };
         
