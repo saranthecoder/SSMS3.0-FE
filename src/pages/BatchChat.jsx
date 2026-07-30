@@ -5,7 +5,7 @@ import Swal from 'sweetalert2';
 import { 
   Send, Hash, Users, Megaphone, UserCheck, Mail, Phone, Bell, Sparkles, Pin, 
   Search, Paperclip, Image as ImageIcon, FileText, CheckCheck, X, Check, MessageSquare, 
-  ChevronRight, Circle, ShieldCheck, User
+  ChevronRight, Circle, ShieldCheck, User, ArrowLeft
 } from 'lucide-react';
 import Loader from '../components/Loader';
 import ImageCropModal from '../components/ImageCropModal';
@@ -456,10 +456,10 @@ const BatchChat = () => {
   const announcementsList = messages.filter(m => m.isAnnouncement);
 
   return (
-    <div className="w-full h-full max-w-7xl mx-auto flex flex-col md:flex-row bg-slate-950 rounded-2xl md:rounded-3xl border border-slate-800 shadow-2xl overflow-hidden text-left">
+    <div className="w-full h-full max-w-7xl mx-auto flex flex-col md:flex-row bg-slate-950 rounded-none sm:rounded-2xl md:rounded-3xl border-0 sm:border border-slate-800 shadow-2xl overflow-hidden text-left min-h-0">
       
       {/* ================= WHATSAPP LEFT SIDEBAR (CONVERSATIONS LIST) ================= */}
-      <div className={`w-full md:w-80 lg:w-96 bg-slate-900 border-r border-slate-800 flex flex-col ${activeChat ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`w-full md:w-80 lg:w-96 bg-slate-900 border-r border-slate-800 flex flex-col min-h-0 ${activeChat ? 'hidden md:flex' : 'flex'}`}>
         
         {/* Sidebar Header */}
         <div className="p-4 bg-slate-950 border-b border-slate-800 space-y-3">
@@ -521,7 +521,7 @@ const BatchChat = () => {
         </div>
 
         {/* Conversation Items List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-800/40">
+        <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-800/40 custom-scrollbar">
           
           {/* GROUPS LIST */}
           {(activeTab === 'all' || activeTab === 'groups') && (
@@ -585,25 +585,19 @@ const BatchChat = () => {
                         name: c.name,
                         subheading: c.role.toUpperCase(),
                         avatar: resolvedAvatar,
-                        role: c.role,
+                        role: c.role.toUpperCase(),
                         isOnline: c.isOnline,
                         lastSeen: c.lastSeen
                       })}
-                      className={`p-3.5 flex items-center gap-3 cursor-pointer transition-all hover:bg-slate-800/60 ${isSelected ? 'bg-slate-800 border-l-4 border-emerald-500' : ''}`}
+                      className={`p-3.5 flex items-center gap-3 cursor-pointer transition-all hover:bg-slate-800/60 ${isSelected ? 'bg-slate-800 border-l-4 border-indigo-500' : ''}`}
                     >
                       <div className="relative shrink-0">
-                        <div className="w-11 h-11 rounded-full bg-slate-800 border border-slate-700 overflow-hidden flex items-center justify-center text-white font-extrabold text-sm">
-                          <img 
-                            src={resolvedAvatar} 
-                            alt="Avatar" 
-                            className="w-full h-full object-cover" 
-                            onError={(e) => { e.target.src = '/logo.png'; }}
-                          />
+                        <div className="w-11 h-11 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden">
+                          <img src={resolvedAvatar} alt={c.name} className="w-full h-full object-cover" />
                         </div>
-                        <span 
-                          className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-slate-900 ${c.isOnline ? 'bg-emerald-500' : 'bg-slate-500'}`} 
-                          title={c.isOnline ? 'Online' : 'Offline'} 
-                        />
+                        {c.isOnline && (
+                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-slate-900" title="Online Now" />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-baseline">
@@ -644,66 +638,65 @@ const BatchChat = () => {
       </div>
 
       {/* ================= WHATSAPP MAIN CHAT WINDOW ================= */}
-      <div className={`flex-1 bg-slate-950 flex flex-col ${!activeChat ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 min-h-0 bg-slate-950 flex flex-col ${!activeChat ? 'hidden md:flex' : 'flex'}`}>
         
         {activeChat ? (
           <>
             {/* WhatsApp Chat Header */}
-            <div className="px-6 py-3.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between shadow-md">
-              <div className="flex items-center gap-3.5">
+            <div className="px-4 sm:px-6 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shadow-md shrink-0">
+              <div className="flex items-center gap-3">
                 <button 
                   onClick={() => setActiveChat(null)} 
-                  className="md:hidden text-slate-400 hover:text-white p-1"
+                  className="md:hidden text-slate-300 hover:text-white p-1.5 rounded-full hover:bg-slate-800 transition-colors flex items-center justify-center shrink-0"
+                  title="Back to Conversations"
                 >
-                  <X size={20} />
+                  <ArrowLeft size={20} />
                 </button>
-                <div className="w-10 h-10 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-white flex items-center justify-center font-bold overflow-hidden shrink-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-indigo-600/20 border border-indigo-500/30 text-white flex items-center justify-center font-bold overflow-hidden shrink-0">
                   {activeChat.avatar ? (
                     <img src={activeChat.avatar.startsWith('/uploads') ? `${import.meta.env.VITE_API_URL || ''}${activeChat.avatar}` : activeChat.avatar} alt="Avatar" className="w-full h-full object-cover" />
                   ) : (
                     activeChat.type === 'group' ? <Hash size={18} className="text-indigo-400" /> : <User size={18} className="text-emerald-400" />
                   )}
                 </div>
-                <div>
-                  <h3 className="text-sm font-black text-white flex items-center gap-2">
-                    {activeChat.name}
-                    <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded-full bg-slate-800 text-indigo-400 border border-slate-700">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 truncate">
+                    <span className="truncate">{activeChat.name}</span>
+                    <span className="text-[8px] sm:text-[9px] uppercase font-black px-1.5 py-0.5 rounded-full bg-slate-800 text-indigo-400 border border-slate-700 shrink-0">
                       {activeChat.role}
                     </span>
                   </h3>
-                  <p className="text-[11px] font-semibold flex items-center gap-1">
+                  <p className="text-[10px] sm:text-[11px] font-semibold flex items-center gap-1">
                     {Object.keys(typingUsers).length > 0 ? (
-                      <span className="text-emerald-400 flex items-center gap-1">
-                        <Circle size={8} className="fill-emerald-400 text-emerald-400 animate-pulse" />
+                      <span className="text-emerald-400 flex items-center gap-1 truncate">
+                        <Circle size={7} className="fill-emerald-400 text-emerald-400 animate-pulse shrink-0" />
                         {`${Object.values(typingUsers).join(', ')} is typing...`}
                       </span>
                     ) : activeChat.type === 'group' ? (
-                      <span className="text-indigo-400 font-medium flex items-center gap-1">
-                        <Circle size={8} className="fill-indigo-400 text-indigo-400" /> Batch Group Channel
+                      <span className="text-indigo-400 font-medium flex items-center gap-1 truncate">
+                        <Circle size={7} className="fill-indigo-400 text-indigo-400 shrink-0" /> Batch Group Channel
                       </span>
                     ) : activeChat.isOnline ? (
-                      <span className="text-emerald-400 font-bold flex items-center gap-1">
-                        <Circle size={8} className="fill-emerald-400 text-emerald-400 animate-pulse" /> Online
+                      <span className="text-emerald-400 font-bold flex items-center gap-1 shrink-0">
+                        <Circle size={7} className="fill-emerald-400 text-emerald-400 animate-pulse shrink-0" /> Online
                       </span>
                     ) : activeChat.lastSeen ? (
-                      <span className="text-slate-400 font-medium flex items-center gap-1">
-                        <Circle size={8} className="fill-slate-500 text-slate-500" /> last seen {formatLastSeen(activeChat.lastSeen)}
+                      <span className="text-slate-400 font-medium flex items-center gap-1 truncate">
+                        <Circle size={7} className="fill-slate-500 text-slate-500 shrink-0" /> last seen {formatLastSeen(activeChat.lastSeen)}
                       </span>
                     ) : (
-                      <span className="text-slate-400 font-medium flex items-center gap-1">
-                        <Circle size={8} className="fill-slate-500 text-slate-500" /> Offline
-                      </span>
+                      <span className="text-slate-400 font-medium truncate">Offline</span>
                     )}
                   </p>
                 </div>
               </div>
 
               {/* Header Actions */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {announcementsList.length > 0 && (
                   <button 
                     onClick={() => setShowAnnouncementsOnly(!showAnnouncementsOnly)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
+                    className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[10px] sm:text-xs font-bold flex items-center gap-1 sm:gap-1.5 transition-all border ${
                       showAnnouncementsOnly 
                         ? 'bg-amber-500 text-black border-amber-400 shadow-md' 
                         : 'bg-slate-800 text-amber-400 border-slate-700 hover:bg-slate-700'
@@ -717,15 +710,15 @@ const BatchChat = () => {
 
             {/* Pinned Broadcast Banner (If Announcements Exist) */}
             {announcementsList.length > 0 && !showAnnouncementsOnly && (
-              <div className="bg-gradient-to-r from-amber-950/80 via-amber-900/40 to-slate-900 px-6 py-2.5 border-b border-amber-500/20 flex items-center justify-between text-xs text-amber-200">
+              <div className="bg-gradient-to-r from-amber-950/80 via-amber-900/40 to-slate-900 px-4 sm:px-6 py-2 border-b border-amber-500/20 flex items-center justify-between text-xs text-amber-200 shrink-0">
                 <div className="flex items-center gap-2 truncate">
-                  <Megaphone size={15} className="text-amber-400 animate-bounce shrink-0" />
-                  <span className="font-extrabold text-amber-400 uppercase text-[10px]">Latest Broadcast:</span>
-                  <span className="truncate font-medium">{announcementsList[announcementsList.length - 1].announcementTitle || announcementsList[announcementsList.length - 1].text}</span>
+                  <Megaphone size={14} className="text-amber-400 animate-bounce shrink-0" />
+                  <span className="font-extrabold text-amber-400 uppercase text-[9px] shrink-0">Broadcast:</span>
+                  <span className="truncate font-medium text-[11px]">{announcementsList[announcementsList.length - 1].announcementTitle || announcementsList[announcementsList.length - 1].text}</span>
                 </div>
                 <button 
                   onClick={() => setShowAnnouncementsOnly(true)} 
-                  className="text-[10px] font-black uppercase text-amber-400 hover:underline shrink-0 ml-2"
+                  className="text-[9px] font-black uppercase text-amber-400 hover:underline shrink-0 ml-2"
                 >
                   View All
                 </button>
@@ -733,7 +726,7 @@ const BatchChat = () => {
             )}
 
             {/* WhatsApp Chat Bubbles Screen Area */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-950 relative">
+            <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-6 space-y-4 bg-slate-950 relative custom-scrollbar touch-pan-y">
               {/* WhatsApp Subtle Pattern Overlay */}
               <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] opacity-25 pointer-events-none" />
 
@@ -888,7 +881,7 @@ const BatchChat = () => {
             )}
 
             {/* WhatsApp Input Bar */}
-            <form onSubmit={handleSendMessage} className="p-4 bg-slate-900 border-t border-slate-800 flex items-center gap-3 relative">
+            <form onSubmit={handleSendMessage} className="p-2 sm:p-4 bg-slate-900 border-t border-slate-800 flex items-center gap-2 sm:gap-3 relative shrink-0 pb-3 md:pb-4">
               
               {/* Attachment Paperclip Button & Menu */}
               <div className="relative">

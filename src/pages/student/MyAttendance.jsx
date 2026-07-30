@@ -165,16 +165,16 @@ const MyAttendance = () => {
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2 drop-shadow-sm">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2 drop-shadow-sm">
             <Calendar className="text-theme-primary drop-shadow-sm" />
             My Attendance Record
           </h1>
-          <p className="text-sm text-slate-300 mt-1 drop-shadow-sm">Excel-format aggregated attendance tracking</p>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mt-1 drop-shadow-sm">Excel-format aggregated attendance tracking</p>
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
           <select 
-            className="input-field py-2 text-sm font-bold text-white bg-slate-800 border-slate-700 w-full sm:w-auto min-w-[140px] focus:ring-theme-primary focus:border-theme-primary shadow-inner rounded-xl"
+            className="input-field py-2 text-sm font-bold text-slate-800 dark:text-white bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 w-full sm:w-auto min-w-[140px] focus:ring-theme-primary focus:border-theme-primary shadow-inner rounded-xl"
             value={viewMode}
             onChange={(e) => setViewMode(e.target.value)}
           >
@@ -190,13 +190,13 @@ const MyAttendance = () => {
       </div>
 
       {/* Info Banner */}
-      <div className="bg-primary-500/10 border border-primary-500/20 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-start md:items-center text-sm shadow-inner relative overflow-hidden">
+      <div className="bg-emerald-500/10 dark:bg-primary-500/10 border border-emerald-500/30 dark:border-primary-500/20 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-start md:items-center text-sm shadow-inner relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-primary-500/10 rounded-full blur-3xl pointer-events-none -mt-10 -mr-10"></div>
-        <div className="flex items-center gap-2 text-theme-primary font-bold bg-primary-500/20 border border-primary-500/30 px-3 py-1.5 rounded-lg shrink-0 shadow-sm relative z-10">
+        <div className="flex items-center gap-2 text-emerald-700 dark:text-theme-primary font-bold bg-emerald-500/20 dark:bg-primary-500/20 border border-emerald-500/30 dark:border-primary-500/30 px-3 py-1.5 rounded-lg shrink-0 shadow-sm relative z-10">
           <CheckCircle size={16} /> Present
         </div>
-        <p className="text-primary-100 relative z-10 drop-shadow-sm">
-          You must log between <strong>{logs[0]?.requiredPresentHours !== undefined ? logs[0].requiredPresentHours : 8} hours</strong> and <strong>{logs[0]?.maxValidHours !== undefined ? logs[0].maxValidHours : 10} hours</strong> of session time in a single day to be marked as Present.
+        <p className="text-slate-800 dark:text-primary-100 relative z-10 font-medium">
+          You must log between <strong className="text-emerald-800 dark:text-emerald-300 font-extrabold">{logs[0]?.requiredPresentHours !== undefined ? logs[0].requiredPresentHours : 8} hours</strong> and <strong className="text-emerald-800 dark:text-emerald-300 font-extrabold">{logs[0]?.maxValidHours !== undefined ? logs[0].maxValidHours : 10} hours</strong> of session time in a single day to be marked as Present.
         </p>
       </div>
 

@@ -112,6 +112,18 @@ const Layout = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
+  // Freeze background scrolling when mobile bottom menu is open
+  useEffect(() => {
+    if (mobileMoreOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMoreOpen]);
+
   // Collapsible sidebar sections state
   const [expandedSections, setExpandedSections] = useState(() => {
     try {
@@ -915,7 +927,8 @@ const Layout = () => {
   // Fetch pending notifications count – extracted to component scope so child pages can call it
   const fetchCounts = useCallback(async () => {
     try {
-      const { data: onlineData } = await axios.get('/attendance/active-count');
+      const batchParam = selectedBatchId ? `?batchId=${selectedBatchId}` : '';
+      const { data: onlineData } = await axios.get(`/attendance/active-count${batchParam}`);
       setOnlineStudentsCount(onlineData.activeCount || 0);
 
       if (user?.role === 'admin') {
@@ -959,7 +972,7 @@ const Layout = () => {
     } catch (e) {
       console.error('Failed to fetch counts');
     }
-  }, [user]);
+  }, [user, selectedBatchId]);
 
   useEffect(() => {
     if (user) {
@@ -1776,24 +1789,17 @@ const Layout = () => {
       {/* Main Content */}
       <main className={`flex-1 flex flex-col min-w-0 lg:ml-[280px] relative ${location.pathname.includes('/chat') ? 'h-screen overflow-hidden' : ''}`}>
         {/* Header */}
-        <header className="h-16 shrink-0 flex items-center justify-between px-4 lg:px-8 mt-2 mx-4 lg:mx-8 z-30 transition-colors duration-300">
-          {user?.role === 'admin' ? (
-            <div className="lg:hidden flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-white/10 p-0.5 shadow-md flex items-center justify-center overflow-hidden">
-                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
-              </div>
-              <span className="font-extrabold text-base tracking-tight dark:text-white">SSMS 3.0 Admin</span>
+        <header className="h-12 lg:h-16 shrink-0 flex items-center justify-between px-2 lg:px-8 mt-1 lg:mt-2 mx-2 lg:mx-8 z-30 transition-colors duration-300">
+          <div className="lg:hidden flex items-center gap-1.5">
+            <div className="w-7 h-7 rounded-lg bg-white/10 p-0.5 shadow-sm flex items-center justify-center overflow-hidden shrink-0">
+              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
-          ) : (
-            <button
-              className="lg:hidden text-slate-500 hover:text-slate-700 dark:text-slate-400 p-2 glass-panel"
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Menu size={20} />
-            </button>
-          )}
+            <span className="font-black text-xs tracking-tight text-slate-800 dark:text-white uppercase truncate max-w-[80px]">
+              {user?.role === 'admin' ? 'Admin' : 'SSMS'}
+            </span>
+          </div>
 
-          <div className="ml-auto flex items-center gap-4 glass-panel px-2 py-1.5 h-14">
+          <div className="ml-auto flex items-center gap-1 sm:gap-3 glass-panel px-1.5 sm:px-3 py-1 h-10 sm:h-14 rounded-2xl max-w-full">
 
              {/* Online Students Count */}
             <div className="hidden sm:flex items-center gap-2 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-full text-sm font-medium border border-slate-200 dark:border-slate-700">
@@ -1811,9 +1817,9 @@ const Layout = () => {
 
             {/* Student Coins Display */}
             {user?.role === 'student' && (
-              <div className="flex items-center gap-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-3 py-1.5 rounded-full text-sm font-extrabold border border-amber-500/20">
-                <span className="text-base">🪙</span>
-                <span>{userCoins} Coins</span>
+              <div className="flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-[11px] sm:text-sm font-extrabold border border-amber-500/20 shrink-0">
+                <span className="text-xs sm:text-base">🪙</span>
+                <span>{userCoins} <span className="hidden sm:inline">Coins</span></span>
               </div>
             )}
 
@@ -1821,22 +1827,22 @@ const Layout = () => {
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
-                className="relative p-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white rounded-xl transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="relative p-1.5 sm:p-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white rounded-xl transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
                 aria-label="Notifications"
               >
-                <Bell size={18} />
+                <Bell size={16} className="sm:w-[18px] sm:h-[18px]" />
                 {notifications.length > 0 && (
-                  <span className="absolute top-1 right-1 w-4 h-4 bg-rose-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center shadow-md animate-in zoom-in">
+                  <span className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-rose-500 rounded-full text-[8px] sm:text-[9px] font-bold text-white flex items-center justify-center shadow-md animate-in zoom-in">
                     {notifications.length}
                   </span>
                 )}
               </button>
 
               {showNotifications && (
-                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50 origin-top-right animate-in fade-in slide-in-from-top-2">
-                  <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                <div className="fixed sm:absolute top-14 sm:top-auto right-3 sm:right-0 left-3 sm:left-auto sm:w-80 max-h-[70vh] flex flex-col bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700/80 overflow-hidden z-50 origin-top-right animate-in fade-in slide-in-from-top-2">
+                  <div className="p-3 sm:p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
                     <div>
-                      <h3 className="font-bold text-slate-800 dark:text-white leading-none">Notifications</h3>
+                      <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-white leading-none">Notifications</h3>
                       <span className="text-[10px] text-slate-500 font-medium">{notifications.length} Unread</span>
                     </div>
                     {notifications.length > 0 && (
@@ -1845,20 +1851,20 @@ const Layout = () => {
                       </button>
                     )}
                   </div>
-                  <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                  <div className="max-h-72 sm:max-h-80 overflow-y-auto custom-scrollbar">
                     {notifications.length > 0 ? (
                       notifications.map(notif => (
-                        <div key={notif.id} className="p-4 border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors relative group">
+                        <div key={notif.id} className="p-3 sm:p-4 border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors relative group">
                           <button
                             onClick={() => clearNotification(notif.id)}
-                            className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 sm:opacity-0 group-hover:opacity-100 transition-opacity p-1"
                             aria-label="Mark as read"
                           >
                             <X size={14} />
                           </button>
-                          <p className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-0.5 pr-6">{notif.title}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 pr-4">{notif.message}</p>
-                          <p className="text-[10px] text-slate-400 mt-2 font-medium">{new Date(notif.time).toLocaleString()}</p>
+                          <p className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 mb-0.5 pr-6">{notif.title}</p>
+                          <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 pr-4 leading-normal">{notif.message}</p>
+                          <p className="text-[9px] sm:text-[10px] text-slate-400 mt-1.5 font-medium">{new Date(notif.time).toLocaleString()}</p>
                         </div>
                       ))
                     ) : (
@@ -1876,14 +1882,14 @@ const Layout = () => {
             <div className="relative" ref={themeMenuRef}>
               <button
                 onClick={() => setShowThemeMenu(!showThemeMenu)}
-                className="p-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white rounded-xl transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                className="p-1.5 sm:p-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white rounded-xl transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                 aria-label="Select theme color"
               >
-                <Palette size={18} />
+                <Palette size={16} className="sm:w-[18px] sm:h-[18px]" />
               </button>
 
               {showThemeMenu && (
-                <div className="absolute right-0 mt-2 w-[280px] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50 origin-top-right">
+                <div className="fixed sm:absolute top-14 sm:top-auto right-3 sm:right-0 left-3 sm:left-auto sm:w-[280px] max-h-[70vh] overflow-y-auto bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50 origin-top-right animate-in fade-in slide-in-from-top-2">
                   <div className="p-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
                     <h3 className="text-xs font-bold text-slate-800 dark:text-white leading-none">Theme Colors</h3>
                     <span className="text-[10px] text-slate-400 font-medium">{themes.length + 1} themes</span>
@@ -2048,12 +2054,12 @@ const Layout = () => {
 
             {/* Global Active Batch Bar for Admin & Mentor */}
             {(user?.role === 'admin' || user?.role === 'mentor') && (
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 px-2.5 py-1.5 rounded-xl shadow-xs">
-                <BookOpen size={14} className="text-indigo-500 shrink-0" />
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl shadow-xs">
+                <BookOpen size={13} className="text-indigo-500 shrink-0" />
                 <select
                   value={selectedBatchId}
                   onChange={(e) => setSelectedBatchId(e.target.value)}
-                  className="bg-transparent text-[11px] font-extrabold text-slate-800 dark:text-white outline-none cursor-pointer pr-1"
+                  className="bg-transparent text-[10px] sm:text-[11px] font-extrabold text-slate-800 dark:text-white outline-none cursor-pointer pr-1 max-w-[90px] sm:max-w-none truncate"
                   title="Global Batch Filter — Scopes the entire portal to this batch"
                 >
                   <option value="all" className="dark:bg-slate-900 text-slate-800 dark:text-white">All Batches (Global View)</option>
@@ -2069,10 +2075,10 @@ const Layout = () => {
             {/* Dark Mode Toggle */}
             <button
               onClick={toggleDarkMode}
-              className="p-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white rounded-xl transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="p-1.5 sm:p-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white rounded-xl transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
               aria-label="Toggle dark mode"
             >
-              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+              {darkMode ? <Sun size={16} className="sm:w-[18px] sm:h-[18px]" /> : <Moon size={16} className="sm:w-[18px] sm:h-[18px]" />}
             </button>
 
             <div className="hidden md:block text-right border-l border-slate-200 dark:border-white/10 pl-4 pr-2">
@@ -2086,12 +2092,12 @@ const Layout = () => {
               </p>
             </div>
             <div className="relative shrink-0">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center relative ${
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center relative ${
                 (gamificationData?.profileBorder || user?.profileBorder)
-                  ? `border-3 p-0.5 ${getBorderPreviewClass(gamificationData?.profileBorder || user?.profileBorder)}` 
+                  ? `border-2 sm:border-3 p-0.5 ${getBorderPreviewClass(gamificationData?.profileBorder || user?.profileBorder)}` 
                   : 'bg-gradient-to-br from-theme-primary to-theme-accent text-white shadow-md'
               } ${getEffectStyles(gamificationData?.equippedEffect || user?.equippedEffect)}`}>
-                <div className="w-full h-full rounded-lg overflow-hidden flex items-center justify-center">
+                <div className="w-full h-full rounded-md sm:rounded-lg overflow-hidden flex items-center justify-center">
                   {(() => {
                     const avatarRaw = gamificationData?.equippedAvatar || user?.equippedAvatar || user?.profileImage;
                     const avatarSrc = (!avatarRaw || avatarRaw === 'default.jpg' || avatarRaw.includes('dicebear') || avatarRaw.includes('bottts'))
@@ -2109,7 +2115,7 @@ const Layout = () => {
                 </div>
               </div>
               {(gamificationData?.equippedPet || user?.equippedPet) && (
-                <div className="absolute -bottom-1 -right-1.5 bg-white dark:bg-slate-850 shadow-md border border-slate-200 dark:border-slate-700/60 rounded-full w-5 h-5 flex items-center justify-center text-xs animate-bounce" style={{ zIndex: 10 }} title={`Pet: ${gamificationData?.equippedPet || user?.equippedPet}`}>
+                <div className="absolute -bottom-1 -right-1 bg-white dark:bg-slate-850 shadow-md border border-slate-200 dark:border-slate-700/60 rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center text-[10px] sm:text-xs animate-bounce" style={{ zIndex: 10 }} title={`Pet: ${gamificationData?.equippedPet || user?.equippedPet}`}>
                   {PET_EMOJIS[gamificationData?.equippedPet || user?.equippedPet] || '🐾'}
                 </div>
               )}
@@ -2121,7 +2127,7 @@ const Layout = () => {
         {(() => {
           const isChatPage = location.pathname.includes('/chat');
           return (
-            <div className={`flex-1 relative min-h-0 ${isChatPage ? 'p-2 lg:p-3 overflow-hidden h-[calc(100vh-4.5rem)]' : 'overflow-auto p-4 lg:p-8 pt-4'} ${!isChatPage ? 'pb-24 lg:pb-8' : ''}`}>
+            <div className={`flex-1 relative min-h-0 ${isChatPage ? 'p-0 sm:p-2 lg:p-3 overflow-hidden h-[calc(100vh-7.5rem)] lg:h-[calc(100vh-4.5rem)] pb-14 lg:pb-0' : 'overflow-auto p-4 lg:p-8 pt-4 pb-20 lg:pb-8'}`}>
               <Outlet context={{ 
                 sessionActive, startSession, endSession, sessionSeconds, formatTime, isCheckingIn, activeLeaveStatus,
                 themeColor, activeTheme: themes.find(t => t.name === themeColor) || themes[0],
@@ -2135,34 +2141,32 @@ const Layout = () => {
       {/* Mobile More Menu Overlay */}
       {mobileMoreOpen && (
         <div className="fixed inset-0 z-[60] lg:hidden" onClick={() => setMobileMoreOpen(false)}>
-          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
-          <div className="absolute bottom-16 left-0 right-0 max-h-[70vh] overflow-y-auto bg-slate-900/95 dark:bg-slate-950/95 border-t border-slate-200/10 rounded-t-3xl shadow-[0_-10px_30px_rgba(0,0,0,0.4)] backdrop-blur-xl animate-slideUp" onClick={(e) => e.stopPropagation()}>
-            <div className="w-12 h-1.5 bg-slate-400/20 rounded-full mx-auto mt-3 mb-2" />
-            <div className="px-4 pb-6 pt-2">
+          <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" />
+          <div className="fixed inset-x-0 bottom-0 z-[65] max-h-[82vh] overflow-y-auto bg-slate-900/98 dark:bg-slate-950/98 border-t border-slate-700/50 rounded-t-3xl shadow-[0_-12px_32px_rgba(0,0,0,0.6)] backdrop-blur-2xl animate-slideUp pb-16" onClick={(e) => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-slate-600/40 rounded-full mx-auto mt-2.5 mb-1" />
+            <div className="px-3.5 pt-1">
               {/* Mobile More Menu Header */}
-              <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-700/50">
-                <div className="flex items-center gap-3">
-                  <div className="relative shrink-0">
-                    <div className="w-10 h-10 rounded-xl bg-white shadow-md p-0.5 flex items-center justify-center overflow-hidden">
-                      <img src="/logo.png" alt="SSMS" className="w-full h-full object-contain rounded-lg" />
-                    </div>
+              <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-700/40">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-white shadow p-0.5 flex items-center justify-center overflow-hidden shrink-0">
+                    <img src="/logo.png" alt="SSMS" className="w-full h-full object-contain rounded" />
                   </div>
                   <div>
-                    <span className="font-extrabold text-base text-white">{customPanelName || 'SSMS 3.0'}</span>
-                    <span className="block text-[9px] font-black tracking-wider text-theme-primary uppercase">{customPanelSubheading || 'Students Management'}</span>
+                    <span className="font-bold text-sm text-white leading-tight">{customPanelName || 'SSMS 3.0'}</span>
+                    <span className="block text-[8px] font-bold tracking-wider text-theme-primary uppercase">{customPanelSubheading || 'Students Management'}</span>
                   </div>
                 </div>
-                <button onClick={() => setMobileMoreOpen(false)} className="p-2 text-slate-400 hover:text-white rounded-xl bg-slate-800/50 border border-slate-700/30 cursor-pointer">
+                <button onClick={() => setMobileMoreOpen(false)} className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-800/60 border border-slate-700/30 cursor-pointer">
                   <X size={18} />
                 </button>
               </div>
 
               {/* All Navigation Links */}
-              <div className="space-y-4">
+              <div className="space-y-3.5">
                 {sections.map((section) => (
                   <div key={section.label}>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 px-1">{section.label}</p>
-                    <div className="grid grid-cols-3 gap-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-1.5 px-0.5">{section.label}</p>
+                    <div className="grid grid-cols-4 gap-2">
                       {section.links.map((link) => {
                         const isActive = location.pathname === link.path || (link.path !== '/' && link.path !== '/student' && location.pathname.startsWith(link.path));
                         return (
@@ -2170,21 +2174,21 @@ const Layout = () => {
                             key={link.path}
                             to={link.path}
                             onClick={() => setMobileMoreOpen(false)}
-                            className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl text-center transition-all active:scale-95 ${
+                            className={`flex flex-col items-center gap-1 py-2 px-1 rounded-xl text-center transition-all active:scale-95 ${
                               isActive
-                                ? 'bg-theme-primary/10 border border-theme-primary/30 text-theme-primary shadow-md'
-                                : 'bg-slate-800/40 border border-slate-700/30 text-slate-300 hover:bg-slate-800/70'
+                                ? 'bg-theme-primary/10 border border-theme-primary/30 text-theme-primary'
+                                : 'bg-slate-800/30 border border-slate-700/20 text-slate-400'
                             }`}
                           >
                             <div className="relative">
                               {link.icon}
                               {link.badge && (
-                                <span className="absolute -top-1.5 -right-2 min-w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 shadow-md">
+                                <span className="absolute -top-1 -right-1.5 min-w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5 shadow">
                                   {link.badge}
                                 </span>
                               )}
                             </div>
-                            <span className="text-[10px] font-bold leading-tight line-clamp-2">{link.name}</span>
+                            <span className="text-[9px] font-semibold leading-tight line-clamp-1">{link.name}</span>
                           </Link>
                         );
                       })}
@@ -2196,9 +2200,9 @@ const Layout = () => {
               {/* Logout Button */}
               <button
                 onClick={() => { setMobileMoreOpen(false); logout(); }}
-                className="w-full mt-5 flex items-center justify-center gap-2 px-4 py-3 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-2xl font-bold text-sm active:scale-95 transition-all cursor-pointer"
+                className="w-full mt-4 flex items-center justify-center gap-2 px-3 py-2.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs active:scale-95 transition-all cursor-pointer"
               >
-                <LogOut size={16} /> Logout
+                <LogOut size={18} /> Logout
               </button>
             </div>
           </div>
@@ -2206,7 +2210,7 @@ const Layout = () => {
       )}
 
       {/* Universal Mobile Bottom Navigation Bar (all roles) */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-slate-900/80 dark:bg-slate-950/85 backdrop-blur-xl border-t border-slate-200/10 px-2 py-2 flex items-center justify-around shadow-[0_-8px_30px_rgba(0,0,0,0.15)]" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
+      <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl border-t border-slate-700/30 px-1 flex items-center justify-around" style={{ paddingBottom: 'max(0.3rem, env(safe-area-inset-bottom))', paddingTop: '0.3rem' }}>
         {(() => {
           const role = user?.role;
           const mobileNavItems = role === 'student' ? [
@@ -2214,19 +2218,19 @@ const Layout = () => {
             { name: 'Tasks', path: '/student/tasks', icon: <FileText size={20} /> },
             { name: 'Attendance', path: '/student/attendance', icon: <Clock size={20} /> },
             { name: 'Chat', path: '/student/chat', icon: <MessageCircle size={20} /> },
-            { name: 'More', isAction: true, action: () => setMobileMoreOpen(true), icon: <Menu size={20} /> }
+            { name: 'More', isAction: true, action: () => setMobileMoreOpen(prev => !prev), icon: <Menu size={20} /> }
           ] : role === 'mentor' ? [
             { name: 'Home', path: '/', icon: <LayoutDashboard size={20} /> },
             { name: 'Tasks', path: '/tasks', icon: <FileText size={20} /> },
             { name: 'Reviews', path: '/reviews', icon: <CheckCircle size={20} /> },
             { name: 'Chat', path: '/chat', icon: <MessageCircle size={20} /> },
-            { name: 'More', isAction: true, action: () => setMobileMoreOpen(true), icon: <Menu size={20} /> }
+            { name: 'More', isAction: true, action: () => setMobileMoreOpen(prev => !prev), icon: <Menu size={20} /> }
           ] : [
             { name: 'Home', path: '/', icon: <LayoutDashboard size={20} /> },
-            { name: 'Attendance', path: '/attendance-logs', icon: <Clock size={20} /> },
+            { name: 'Attend', path: '/attendance-logs', icon: <Clock size={20} /> },
             { name: 'Tasks', path: '/tasks', icon: <FileText size={20} /> },
             { name: 'Chat', path: '/chat', icon: <MessageCircle size={20} /> },
-            { name: 'More', isAction: true, action: () => setMobileMoreOpen(true), icon: <Menu size={20} /> }
+            { name: 'More', isAction: true, action: () => setMobileMoreOpen(prev => !prev), icon: <Menu size={20} /> }
           ];
 
           return mobileNavItems.map((item, index) => {
@@ -2239,48 +2243,40 @@ const Layout = () => {
               <button
                 key={index}
                 onClick={item.action}
-                className={`flex flex-col items-center justify-center gap-1 w-16 py-1 active:scale-95 transition-all cursor-pointer bg-transparent border-none ${
-                  mobileMoreOpen ? 'text-theme-primary' : 'text-slate-400 hover:text-slate-200'
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-1 active:scale-95 transition-all cursor-pointer bg-transparent border-none ${
+                  mobileMoreOpen ? 'text-theme-primary' : 'text-slate-400'
                 }`}
               >
-                <div className={`p-1.5 rounded-xl transition-all ${
-                  mobileMoreOpen 
-                    ? 'bg-theme-primary/10 border border-theme-primary/30 scale-110' 
-                    : 'bg-slate-800/30 border border-slate-200/5'
-                }`}>
+                <div className={`transition-all ${mobileMoreOpen ? 'text-theme-primary' : ''}`}>
                   {mobileMoreOpen ? <X size={20} /> : item.icon}
                 </div>
-                <span className="text-[10px] font-bold tracking-wider leading-none mt-0.5">{mobileMoreOpen ? 'Close' : item.name}</span>
+                <span className="text-[9px] font-semibold leading-none">{mobileMoreOpen ? 'Close' : item.name}</span>
               </button>
             ) : (
               <Link
                 key={index}
                 to={item.path}
                 onClick={() => setMobileMoreOpen(false)}
-                className={`flex flex-col items-center justify-center gap-1 w-16 py-1 active:scale-95 transition-all ${
+                className={`flex flex-col items-center justify-center gap-0.5 flex-1 py-1 active:scale-95 transition-all ${
                   isLinkActive 
-                    ? 'text-theme-primary font-extrabold' 
-                    : 'text-slate-400 font-medium hover:text-slate-200'
+                    ? 'text-theme-primary' 
+                    : 'text-slate-400'
                 }`}
               >
-                <div className={`p-1.5 rounded-xl transition-all relative ${
-                  isLinkActive 
-                    ? 'bg-theme-primary/10 border border-theme-primary/30 text-theme-primary scale-110 shadow-[0_0_15px_rgba(var(--color-theme-primary-rgb),0.15)]' 
-                    : 'bg-transparent border border-transparent'
-                }`}>
+                <div className="relative">
                   {item.icon}
                   {(item.name === 'Chat') && chatCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-md">
+                    <span className="absolute -top-1 -right-2 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shadow">
                       {chatCount}
                     </span>
                   )}
                   {(item.name === 'Reviews') && pendingCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center shadow-md">
+                    <span className="absolute -top-1 -right-2 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shadow">
                       {pendingCount}
                     </span>
                   )}
                 </div>
-                <span className="text-[10px] tracking-wider leading-none mt-0.5">{item.name}</span>
+                <span className={`text-[9px] leading-none ${isLinkActive ? 'font-bold' : 'font-medium'}`}>{item.name}</span>
               </Link>
             );
           });
