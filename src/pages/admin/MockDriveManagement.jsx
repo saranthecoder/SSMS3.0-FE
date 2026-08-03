@@ -21,6 +21,8 @@ const MockDriveManagement = () => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   
   // Upload & Matching State
+  const [importMethod, setImportMethod] = useState('googleSheet'); // 'googleSheet' or 'excel'
+  const [googleSheetUrl, setGoogleSheetUrl] = useState('');
   const [uploadTitle, setUploadTitle] = useState('');
   const [selectedUploadBatch, setSelectedUploadBatch] = useState('');
   const [uploadFile, setUploadFile] = useState(null);
@@ -28,21 +30,6 @@ const MockDriveManagement = () => {
   const [parsedRows, setParsedRows] = useState([]);
   const [unmatchedStudents, setUnmatchedStudents] = useState([]);
   const [parsedMaxMarks, setParsedMaxMarks] = useState(749);
-  
-  // Details Modal State
-  const [activeMockDrive, setActiveMockDrive] = useState(null);
-  const [scoresList, setScoresList] = useState([]);
-  const [detailsLoading, setDetailsLoading] = useState(false);
-
-  // Score Editing State
-  const [editingStudentId, setEditingStudentId] = useState(null);
-  const [editAptitude, setEditAptitude] = useState(0);
-  const [editMcq, setEditMcq] = useState(0);
-  const [editCoding, setEditCoding] = useState(0);
-  const [editTechHr, setEditTechHr] = useState(0);
-  const [editHr, setEditHr] = useState(0);
-  const [editGrade, setEditGrade] = useState('Fail');
-  const [editAttended, setEditAttended] = useState(false);
 
   const fetchBatches = async () => {
     try {
@@ -121,6 +108,28 @@ const MockDriveManagement = () => {
       Swal.fire('Excel Parsed', 'Verify student mappings before saving.', 'success');
     } catch (error) {
       Swal.fire('Error', error.response?.data?.message || 'Failed to parse Excel file', 'error');
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const handleGoogleSheetParse = async (e) => {
+    e.preventDefault();
+    if (!googleSheetUrl.trim()) return Swal.fire('Error', 'Please enter a Google Sheet link', 'error');
+    if (!selectedUploadBatch) return Swal.fire('Error', 'Please select a batch', 'error');
+
+    setParsing(true);
+    try {
+      const { data } = await axios.post('/mock-drives/parse-google-sheet', {
+        googleSheetUrl: googleSheetUrl.trim(),
+        batchId: selectedUploadBatch
+      });
+      setParsedRows(data.rows);
+      setUnmatchedStudents(data.unmatchedStudents);
+      setParsedMaxMarks(data.maxMarks || 749);
+      Swal.fire('Google Sheet Parsed', 'Verify student mappings before saving.', 'success');
+    } catch (error) {
+      Swal.fire('Error', error.response?.data?.message || 'Failed to parse Google Sheet link', 'error');
     } finally {
       setParsing(false);
     }
@@ -374,56 +383,107 @@ const MockDriveManagement = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Method Selector Tabs */}
+              <div className="flex border-b border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setImportMethod('googleSheet')}
+                  className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors ${
+                    importMethod === 'googleSheet'
+                      ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                      : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                  }`}
+                >
+                  🔗 Google Sheet Link
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImportMethod('excel')}
+                  className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors ${
+                    importMethod === 'excel'
+                      ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
+                      : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                  }`}
+                >
+                  📁 Upload Excel / CSV File
+                </button>
+              </div>
+
               {/* Form Input Section */}
-              <form onSubmit={handleExcelParse} className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 dark:bg-slate-800/30 p-6 rounded-2xl border border-slate-100 dark:border-white/5">
-                <div>
-                  <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">Mock Drive Title</label>
-                  <input 
-                    required 
-                    type="text" 
-                    placeholder="e.g. Mock Test 1"
-                    className="w-full px-4 py-3 bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all dark:text-white text-sm"
-                    value={uploadTitle}
-                    onChange={e => setUploadTitle(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">Target Batch</label>
-                  <select 
-                    className="w-full px-4 py-3 bg-slate-100 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all dark:text-white text-sm"
-                    value={selectedUploadBatch}
-                    onChange={e => setSelectedUploadBatch(e.target.value)}
-                  >
-                    {batches.map(b => (
-                      <option key={b._id} value={b._id}>{b.batchName}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-end">
-                  <div className="flex items-center gap-3 w-full">
+              <form onSubmit={importMethod === 'googleSheet' ? handleGoogleSheetParse : handleExcelParse} className="space-y-4 bg-slate-50 dark:bg-slate-800/30 p-6 rounded-2xl border border-slate-100 dark:border-white/5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">Mock Drive Title</label>
                     <input 
-                      required
+                      required 
+                      type="text" 
+                      placeholder="e.g. Placement Mock Drive 1"
+                      className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all dark:text-white text-sm"
+                      value={uploadTitle}
+                      onChange={e => setUploadTitle(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 ml-1">Target Batch</label>
+                    <select 
+                      className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all dark:text-white text-sm"
+                      value={selectedUploadBatch}
+                      onChange={e => setSelectedUploadBatch(e.target.value)}
+                    >
+                      {batches.map(b => (
+                        <option key={b._id} value={b._id}>{b.batchName}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {importMethod === 'googleSheet' ? (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 ml-1">
+                      Google Sheet Link (Public or "Anyone with the link can view")
+                    </label>
+                    <div className="flex gap-3">
+                      <input 
+                        required
+                        type="url"
+                        placeholder="https://docs.google.com/spreadsheets/d/1ABC.../edit?usp=sharing"
+                        className="flex-1 px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all dark:text-white text-sm"
+                        value={googleSheetUrl}
+                        onChange={e => setGoogleSheetUrl(e.target.value)}
+                      />
+                      <button 
+                        type="submit" 
+                        disabled={parsing}
+                        className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm transition-colors flex items-center gap-2 shrink-0 shadow-lg shadow-emerald-500/20"
+                      >
+                        {parsing ? <Loader2 size={16} className="animate-spin" /> : 'Fetch & Parse Sheet'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <input 
                       type="file" 
-                      accept=".xlsx,.xls"
+                      accept=".xlsx,.xls,.csv"
                       onChange={e => setUploadFile(e.target.files[0])}
                       className="hidden" 
                       id="upload-mock-file"
                     />
                     <label 
                       htmlFor="upload-mock-file"
-                      className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-black/20 dark:hover:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl text-center text-sm font-semibold text-slate-600 dark:text-slate-300 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap"
+                      className="flex-1 px-4 py-3 bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-white/10 rounded-xl text-center text-sm font-semibold text-slate-600 dark:text-slate-300 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap"
                     >
-                      {uploadFile ? uploadFile.name : 'Choose Excel File'}
+                      {uploadFile ? uploadFile.name : 'Choose Excel / CSV File'}
                     </label>
                     <button 
                       type="submit" 
                       disabled={parsing}
                       className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl text-sm transition-colors flex items-center gap-2"
                     >
-                      {parsing ? <Loader2 size={16} className="animate-spin" /> : 'Parse'}
+                      {parsing ? <Loader2 size={16} className="animate-spin" /> : 'Parse File'}
                     </button>
                   </div>
-                </div>
+                )}
               </form>
 
               {/* Parsing Results Review */}
@@ -442,30 +502,47 @@ const MockDriveManagement = () => {
 
                   {/* Student Matching List */}
                   <div className="space-y-4">
-                    <h3 className="text-lg font-extrabold text-slate-800 dark:text-white">Verify Student Mappings</h3>
+                    <h3 className="text-lg font-extrabold text-slate-800 dark:text-white">Verify Student Mappings & Dynamic Round Headings</h3>
                     <div className="border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-                      <div className="max-h-[350px] overflow-y-auto custom-scrollbar">
+                      <div className="max-h-[380px] overflow-y-auto custom-scrollbar">
                         <table className="w-full text-sm text-left">
                           <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-black uppercase tracking-wider sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
                             <tr>
-                              <th className="px-6 py-4">Sheet Email</th>
-                              <th className="px-6 py-4">Sheet Name</th>
-                              <th className="px-6 py-4 text-center">Marks (Apt/Tech/Coding/TechHR/HR/Total)</th>
-                              <th className="px-6 py-4">Match Status</th>
+                              <th className="px-4 py-4">Sheet Roll No</th>
+                              <th className="px-4 py-4">Sheet Student Name</th>
+                              <th className="px-6 py-4 text-center">Dynamic Round Breakdown</th>
+                              <th className="px-4 py-4">Match Status</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                             {parsedRows.map((row) => (
                               <tr key={row.id} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/10 transition-colors duration-200">
-                                <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{row.rowData.studentEmail}</td>
-                                <td className="px-6 py-4 text-slate-600 dark:text-slate-300 font-medium">{row.rowData.studentName}</td>
-                                <td className="px-6 py-4 text-center font-bold text-emerald-500">
-                                  {formatScore(row.rowData.aptitude)} / {formatScore(row.rowData.mcq)} / {formatScore(row.rowData.coding)} / {formatScore(row.rowData.techHr)} / {formatScore(row.rowData.hr)} = <span className="text-indigo-500 dark:text-indigo-400">{formatScore(row.rowData.totalMarks)}</span>
+                                <td className="px-4 py-4 font-mono font-bold text-indigo-600 dark:text-indigo-400">{row.rowData.rollNumber || 'N/A'}</td>
+                                <td className="px-4 py-4 text-slate-700 dark:text-slate-200 font-medium">
+                                  {row.rowData.studentName || row.rowData.studentEmail || 'N/A'}
                                 </td>
-                                <td className="px-6 py-4">
+                                <td className="px-6 py-4 text-center">
+                                  {row.rowData.roundScores && row.rowData.roundScores.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1.5 justify-center">
+                                      {row.rowData.roundScores.map((r, idx) => (
+                                        <span key={idx} className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-[11px] font-semibold rounded-lg border border-slate-200 dark:border-slate-700">
+                                          {r.name}: <strong className="text-emerald-500">{formatScore(r.score)}</strong>{r.maxMarks ? `/${r.maxMarks}` : ''}
+                                        </span>
+                                      ))}
+                                      <span className="px-2.5 py-1 bg-indigo-500/10 text-indigo-500 font-extrabold rounded-lg text-[11px] border border-indigo-500/20">
+                                        Total: {formatScore(row.rowData.totalMarks)}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-emerald-500 font-bold">
+                                      Total: {formatScore(row.rowData.totalMarks)} | Grade: {row.rowData.grade}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-4">
                                   {row.matchedStudent ? (
                                     <div className="flex items-center gap-2 text-emerald-500 font-bold bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 max-w-max">
-                                      <Check size={14} /> Linked to {row.matchedStudent.name} ({row.matchedStudent.rollNumber})
+                                      <Check size={14} /> {row.matchedStudent.name} ({row.matchedStudent.rollNumber})
                                     </div>
                                   ) : (
                                     <div className="flex items-center gap-3">
@@ -473,7 +550,6 @@ const MockDriveManagement = () => {
                                         <AlertCircle size={14} /> Unmatched
                                       </div>
                                       
-                                      {/* Dropdown to link manually */}
                                       <select 
                                         className="px-3 py-1 bg-slate-100 border border-slate-200 dark:bg-slate-800 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 focus:outline-none"
                                         onChange={(e) => handleManualStudentLink(row.id, e.target.value)}

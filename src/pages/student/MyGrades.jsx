@@ -142,18 +142,31 @@ const MyGrades = () => {
                   
                   <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 text-left border border-slate-100 dark:border-slate-700/50 flex-1 space-y-3">
                     <p className="text-xs font-black uppercase tracking-widest text-slate-500 border-b border-slate-200 dark:border-slate-700 pb-1">Marks Breakdown</p>
-                    <div className="grid grid-cols-2 gap-2 text-sm">
-                      <div className="text-slate-500 dark:text-slate-400 font-medium">MCQ - Aptitude:</div>
-                      <div className="font-bold text-right text-slate-800 dark:text-slate-200">{formatScore(score.aptitude)}</div>
-                      <div className="text-slate-500 dark:text-slate-400 font-medium">MCQ - Tech:</div>
-                      <div className="font-bold text-right text-slate-800 dark:text-slate-200">{formatScore(score.mcq)}</div>
-                      <div className="text-slate-500 dark:text-slate-400 font-medium">Coding Round:</div>
-                      <div className="font-bold text-right text-slate-800 dark:text-slate-200">{formatScore(score.coding)}</div>
-                      <div className="text-slate-500 dark:text-slate-400 font-medium">Tech HR Marks:</div>
-                      <div className="font-bold text-right text-slate-800 dark:text-slate-200">{formatScore(score.techHr)}</div>
-                      <div className="text-slate-500 dark:text-slate-400 font-medium">HR Marks:</div>
-                      <div className="font-bold text-right text-slate-800 dark:text-slate-200">{formatScore(score.hr)}</div>
-                    </div>
+                    {score.roundScores && score.roundScores.length > 0 ? (
+                      <div className="space-y-2 text-sm">
+                        {score.roundScores.map((r, idx) => (
+                          <div key={idx} className="flex justify-between items-center gap-2">
+                            <span className="text-slate-500 dark:text-slate-400 font-medium truncate max-w-[170px]" title={r.name}>{r.name}:</span>
+                            <span className="font-bold text-right text-slate-800 dark:text-slate-200 shrink-0">
+                              {formatScore(r.score)} {r.maxMarks ? <span className="text-xs text-slate-400 font-normal">/ {r.maxMarks}</span> : ''}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="text-slate-500 dark:text-slate-400 font-medium">MCQ - Aptitude:</div>
+                        <div className="font-bold text-right text-slate-800 dark:text-slate-200">{formatScore(score.aptitude)}</div>
+                        <div className="text-slate-500 dark:text-slate-400 font-medium">MCQ - Tech:</div>
+                        <div className="font-bold text-right text-slate-800 dark:text-slate-200">{formatScore(score.mcq)}</div>
+                        <div className="text-slate-500 dark:text-slate-400 font-medium">Coding Round:</div>
+                        <div className="font-bold text-right text-slate-800 dark:text-slate-200">{formatScore(score.coding)}</div>
+                        <div className="text-slate-500 dark:text-slate-400 font-medium">Tech HR Marks:</div>
+                        <div className="font-bold text-right text-slate-800 dark:text-slate-200">{formatScore(score.techHr)}</div>
+                        <div className="text-slate-500 dark:text-slate-400 font-medium">HR Marks:</div>
+                        <div className="font-bold text-right text-slate-800 dark:text-slate-200">{formatScore(score.hr)}</div>
+                      </div>
+                    )}
                     <div className="border-t border-slate-200 dark:border-slate-700 pt-2 flex justify-between items-center text-sm">
                       <span className="text-slate-500 dark:text-slate-400 font-bold">Percentage:</span>
                       <span className="font-black text-theme-primary">{formatScore(score.percentage)}%</span>
