@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import axios from 'axios';
-import { Loader2, ShieldCheck, Search, CheckCircle2, XCircle, Users, RefreshCw, Clock, Calendar } from 'lucide-react';
+import { 
+  Loader2, ShieldCheck, Search, CheckCircle2, XCircle, Users, 
+  RefreshCw, Clock, Calendar, Building2, Home, Layers, Save,
+  Sliders, AlertCircle
+} from 'lucide-react';
 import Swal from 'sweetalert2';
 import Loader from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
@@ -13,11 +17,22 @@ const CheckInPermissions = () => {
   const [allStudents, setAllStudents] = useState([]);
   const [accessGrants, setAccessGrants] = useState([]);
   const [todayLeaves, setTodayLeaves] = useState([]);
+  const [todayAttendances, setTodayAttendances] = useState([]);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [grantingAccess, setGrantingAccess] = useState(false);
-  const [minHours, setMinHours] = useState(4);
-  const [maxHours, setMaxHours] = useState(10);
+  const [savingWorkload, setSavingWorkload] = useState(false);
+
+  // Daily Workload Record State
+  const [dailyWorkload, setDailyWorkload] = useState({
+    onsiteAllocated: true,
+    onsiteMinHours: 2,
+    onsiteMaxHours: 10,
+    wfhAllocated: true,
+    wfhMinHours: 3,
+    wfhMaxHours: 10,
+    notes: ''
+  });
 
   // Filters and Sorting
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,10 +68,26 @@ const CheckInPermissions = () => {
       ]);
       const grants = Array.isArray(accessRes.data) ? accessRes.data : (accessRes.data?.grants || []);
       const leaves = Array.isArray(accessRes.data?.leaves) ? accessRes.data.leaves : [];
+      const dw = accessRes.data?.dailyWorkload;
+      const atts = accessRes.data?.attendances || [];
+
       setAllStudents(studentsRes.data);
       setAccessGrants(grants);
       setTodayLeaves(leaves);
+      setTodayAttendances(atts);
       setSelectedStudents([]);
+
+      if (dw) {
+        setDailyWorkload({
+          onsiteAllocated: dw.onsiteAllocated ?? true,
+          onsiteMinHours: dw.onsiteMinHours ?? 2,
+          onsiteMaxHours: dw.onsiteMaxHours ?? 10,
+          wfhAllocated: dw.wfhAllocated ?? true,
+          wfhMinHours: dw.wfhMinHours ?? 3,
+          wfhMaxHours: dw.wfhMaxHours ?? 10,
+          notes: dw.notes || ''
+        });
+      }
     } catch (error) {
       console.error('Error fetching students and access grants:', error);
     } finally {
@@ -81,6 +112,116 @@ const CheckInPermissions = () => {
     });
   };
 
+  const getStudentAccess = (studentId) => {
+    return accessGrants.find(g => {
+      const sId = typeof g.studentId === 'object' && g.studentId !== null ? g.studentId._id : g.studentId;
+      return sId === studentId;
+    });
+  };
+
+  const getStudentAttendance = (studentId) => {
+    return todayAttendances.find(a => {
+      const sId = typeof a.studentId === 'object' && a.studentId !== null ? a.studentId._id : a.studentId;
+      return sId === studentId;
+    });
+  };
+
+  const formatDuration = (seconds = 0) => {
+    const totalMins = Math.floor(seconds / 60);
+    const hrs = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    return `${hrs}hr ${mins}min`;
+  };
+
+  const handleSaveDailyWorkload = async () => {
+    if (!effectiveBatchId) return;
+    setSavingWorkload(true);
+    try {
+      await axios.post('/checkin-access/workload', {
+        batchId: effectiveBatchId,
+        onsiteAllocated: dailyWorkload.onsiteAllocated,
+        onsiteMinHours: Number(dailyWorkload.onsiteMinHours) || 2,
+        onsiteMaxHours: Number(dailyWorkload.onsiteMaxHours) || 10,
+        wfhAllocated: dailyWorkload.wfhAllocated,
+        wfhMinHours: Number(dailyWorkload.wfhMinHours) || 3,
+        wfhMaxHours: Number(dailyWorkload.wfhMaxHours) || 10,
+        notes: dailyWorkload.notes
+      });
+      Swal.fire({
+        title: 'Daily Workload Saved',
+        text: 'Workload limits updated successfully. Students will see these exact targets in their panel.',
+        icon: 'success',
+        timer: 1600,
+        showConfirmButton: false
+      });
+      refreshAccessGrants();
+    } catch (err) {
+      console.error('Failed to save daily workload:', err);
+      Swal.fire('Error', err.response?.data?.message || 'Failed to save daily workload', 'error');
+    } finally {
+      setSavingWorkload(false);
+    }
+  };
+
+  const handleApplyWorkloadToAll = async () => {
+    if (allStudents.length === 0) {
+      Swal.fire('No Students', 'No students enrolled in this batch.', 'warning');
+      return;
+    }
+
+    setGrantingAccess(true);
+    try {
+      // Save workload first
+      await axios.post('/checkin-access/workload', {
+        batchId: effectiveBatchId,
+        onsiteAllocated: dailyWorkload.onsiteAllocated,
+        onsiteMinHours: Number(dailyWorkload.onsiteMinHours) || 2,
+        onsiteMaxHours: Number(dailyWorkload.onsiteMaxHours) || 10,
+        wfhAllocated: dailyWorkload.wfhAllocated,
+        wfhMinHours: Number(dailyWorkload.wfhMinHours) || 3,
+        wfhMaxHours: Number(dailyWorkload.wfhMaxHours) || 10,
+        notes: dailyWorkload.notes
+      });
+
+      // Grant access for all students with both On-Site & WFH workloads
+      const allStudentIds = allStudents.map(s => s._id);
+      
+      // Grant primary mode based on current time or WFH preference
+      const primaryMode = dailyWorkload.wfhAllocated ? 'wfh' : 'on-site';
+      const primaryMin = primaryMode === 'wfh' ? dailyWorkload.wfhMinHours : dailyWorkload.onsiteMinHours;
+      const primaryMax = primaryMode === 'wfh' ? dailyWorkload.wfhMaxHours : dailyWorkload.onsiteMaxHours;
+
+      await axios.post('/checkin-access/grant', {
+        studentIds: allStudentIds,
+        accessType: primaryMode,
+        batchId: effectiveBatchId,
+        workHours: primaryMin,
+        minHours: primaryMin,
+        maxHours: primaryMax,
+        onsiteMinHours: dailyWorkload.onsiteMinHours,
+        onsiteMaxHours: dailyWorkload.onsiteMaxHours,
+        wfhMinHours: dailyWorkload.wfhMinHours,
+        wfhMaxHours: dailyWorkload.wfhMaxHours,
+        onsiteAllocated: dailyWorkload.onsiteAllocated,
+        wfhAllocated: dailyWorkload.wfhAllocated
+      });
+
+      Swal.fire({
+        title: 'Workload Applied to All',
+        text: `Applied daily workload (On-Site: ${dailyWorkload.onsiteMinHours}h • WFH: ${dailyWorkload.wfhMinHours}h) to all ${allStudents.length} students.`,
+        icon: 'success',
+        timer: 1800,
+        showConfirmButton: false
+      });
+      refreshAccessGrants();
+    } catch (err) {
+      console.error('Failed to apply workload to all:', err);
+      Swal.fire('Error', err.response?.data?.message || 'Failed to apply daily workload.', 'error');
+    } finally {
+      setGrantingAccess(false);
+    }
+  };
+
   const handleGrantAccess = async (accessType) => {
     if (selectedStudents.length === 0) {
       Swal.fire('No Selection', 'Please select at least one student first.', 'warning');
@@ -98,8 +239,8 @@ const CheckInPermissions = () => {
     }
 
     setGrantingAccess(true);
-    const effMin = Number(minHours) || 4;
-    const effMax = Number(maxHours) || 10;
+    const effMin = accessType === 'wfh' ? Number(dailyWorkload.wfhMinHours) : Number(dailyWorkload.onsiteMinHours);
+    const effMax = accessType === 'wfh' ? Number(dailyWorkload.wfhMaxHours) : Number(dailyWorkload.onsiteMaxHours);
     try {
       await axios.post('/checkin-access/grant', {
         studentIds: selectedStudents,
@@ -107,7 +248,13 @@ const CheckInPermissions = () => {
         batchId: effectiveBatchId,
         workHours: effMin,
         minHours: effMin,
-        maxHours: effMax
+        maxHours: effMax,
+        onsiteMinHours: dailyWorkload.onsiteMinHours,
+        onsiteMaxHours: dailyWorkload.onsiteMaxHours,
+        wfhMinHours: dailyWorkload.wfhMinHours,
+        wfhMaxHours: dailyWorkload.wfhMaxHours,
+        onsiteAllocated: dailyWorkload.onsiteAllocated,
+        wfhAllocated: dailyWorkload.wfhAllocated
       });
       Swal.fire({
         title: 'Access Granted',
@@ -127,8 +274,8 @@ const CheckInPermissions = () => {
   };
 
   const handleAllocateLeaveWFH = async (studentId, studentName) => {
-    const effMin = Number(minHours) || 4;
-    const effMax = Number(maxHours) || 10;
+    const effMin = Number(dailyWorkload.wfhMinHours) || 3;
+    const effMax = Number(dailyWorkload.wfhMaxHours) || 10;
     setGrantingAccess(true);
     try {
       await axios.post('/checkin-access/grant', {
@@ -137,7 +284,13 @@ const CheckInPermissions = () => {
         batchId: effectiveBatchId,
         workHours: effMin,
         minHours: effMin,
-        maxHours: effMax
+        maxHours: effMax,
+        onsiteMinHours: dailyWorkload.onsiteMinHours,
+        onsiteMaxHours: dailyWorkload.onsiteMaxHours,
+        wfhMinHours: dailyWorkload.wfhMinHours,
+        wfhMaxHours: dailyWorkload.wfhMaxHours,
+        onsiteAllocated: false,
+        wfhAllocated: true
       });
       Swal.fire({
         title: 'WFH Access Allocated',
@@ -200,8 +353,8 @@ const CheckInPermissions = () => {
     }
     
     setGrantingAccess(true);
-    const effMin = Number(minHours) || 4;
-    const effMax = Number(maxHours) || 10;
+    const effMin = accessType === 'wfh' ? Number(dailyWorkload.wfhMinHours) : Number(dailyWorkload.onsiteMinHours);
+    const effMax = accessType === 'wfh' ? Number(dailyWorkload.wfhMaxHours) : Number(dailyWorkload.onsiteMaxHours);
     try {
       await axios.post('/checkin-access/grant', {
         studentIds: targetStudents,
@@ -209,7 +362,13 @@ const CheckInPermissions = () => {
         batchId: effectiveBatchId,
         workHours: effMin,
         minHours: effMin,
-        maxHours: effMax
+        maxHours: effMax,
+        onsiteMinHours: dailyWorkload.onsiteMinHours,
+        onsiteMaxHours: dailyWorkload.onsiteMaxHours,
+        wfhMinHours: dailyWorkload.wfhMinHours,
+        wfhMaxHours: dailyWorkload.wfhMaxHours,
+        onsiteAllocated: dailyWorkload.onsiteAllocated,
+        wfhAllocated: dailyWorkload.wfhAllocated
       });
       Swal.fire({
         title: 'Bulk Access Granted',
@@ -234,18 +393,25 @@ const CheckInPermissions = () => {
       const accessRes = await axios.get(`/checkin-access/today?batchId=${effectiveBatchId}`).catch(() => ({ data: [] }));
       const grants = Array.isArray(accessRes.data) ? accessRes.data : (accessRes.data?.grants || []);
       const leaves = Array.isArray(accessRes.data?.leaves) ? accessRes.data.leaves : [];
+      const dw = accessRes.data?.dailyWorkload;
+      const atts = accessRes.data?.attendances || [];
       setAccessGrants(grants);
       setTodayLeaves(leaves);
+      setTodayAttendances(atts);
+      if (dw) {
+        setDailyWorkload({
+          onsiteAllocated: dw.onsiteAllocated ?? true,
+          onsiteMinHours: dw.onsiteMinHours ?? 2,
+          onsiteMaxHours: dw.onsiteMaxHours ?? 10,
+          wfhAllocated: dw.wfhAllocated ?? true,
+          wfhMinHours: dw.wfhMinHours ?? 3,
+          wfhMaxHours: dw.wfhMaxHours ?? 10,
+          notes: dw.notes || ''
+        });
+      }
     } catch (err) {
       console.error('Error refreshing access grants:', err);
     }
-  };
-
-  const getStudentAccess = (studentId) => {
-    return accessGrants.find(g => {
-      const sId = typeof g.studentId === 'object' && g.studentId !== null ? g.studentId._id : g.studentId;
-      return sId === studentId;
-    });
   };
 
   const handleToggleSelectStudent = (studentId) => {
@@ -273,8 +439,8 @@ const CheckInPermissions = () => {
     
     const access = getStudentAccess(student._id);
     const leave = getStudentLeave(student._id);
-    const type = access ? access.accessType : 'none'; // 'on-site', 'wfh', 'none'
-    
+    const type = access ? access.accessType : 'none';
+
     let matchesAccess = true;
     if (accessFilter === 'on-site') matchesAccess = type === 'on-site';
     else if (accessFilter === 'wfh') matchesAccess = type === 'wfh';
@@ -308,15 +474,170 @@ const CheckInPermissions = () => {
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <ShieldCheck className="text-emerald-500" size={28} />
-            Check-In Permissions Manager
+            Check-In Permissions & Daily Workload Manager
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Configure, search, and authorize daily check-in access modes for students
+            Maintain daily workload targets (On-Site & WFH) and cross-verify with student attendance hours
           </p>
+        </div>
+        <button
+          onClick={refreshAccessGrants}
+          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all self-start md:self-auto cursor-pointer"
+        >
+          <RefreshCw size={14} /> Refresh
+        </button>
+      </div>
+
+      {/* DAILY WORKLOAD RECORD CONTROL PANEL */}
+      <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 border border-slate-750/70 shadow-xl text-white space-y-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <Layers size={22} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-black tracking-tight text-white">Daily Workload Record</h2>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Today's Benchmark
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Set minimum and maximum hours allocated today. Stored in student dashboard for exact workload cross-verification.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSaveDailyWorkload}
+              disabled={savingWorkload}
+              className="px-4 py-2 text-xs font-black bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-md shadow-emerald-500/20 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {savingWorkload ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+              Save Daily Workload
+            </button>
+            <button
+              onClick={handleApplyWorkloadToAll}
+              disabled={grantingAccess || allStudents.length === 0}
+              className="px-4 py-2 text-xs font-black bg-sky-500 hover:bg-sky-600 text-white rounded-xl shadow-md shadow-sky-500/20 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {grantingAccess ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />}
+              Apply to All Students ({allStudents.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Workload Inputs: On-Site and WFH Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* On-Site Workload Card */}
+          <div className={`p-4 rounded-2xl border transition-all ${
+            dailyWorkload.onsiteAllocated
+              ? 'bg-emerald-500/10 border-emerald-500/30 shadow-inner'
+              : 'bg-white/5 border-white/10 opacity-70'
+          }`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Building2 size={18} className="text-emerald-400" />
+                <h3 className="font-extrabold text-sm text-white">On-Site Workload</h3>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-emerald-300">
+                <input
+                  type="checkbox"
+                  checked={dailyWorkload.onsiteAllocated}
+                  onChange={(e) => setDailyWorkload({ ...dailyWorkload, onsiteAllocated: e.target.checked })}
+                  className="rounded border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer h-4 w-4"
+                />
+                Allocated Today
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-black/30 rounded-xl p-2.5 border border-white/10">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Minimum Required</span>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={dailyWorkload.onsiteMinHours}
+                    onChange={(e) => setDailyWorkload({ ...dailyWorkload, onsiteMinHours: Number(e.target.value) })}
+                    className="w-14 px-2 py-1 text-sm font-black text-center bg-white/10 border border-white/15 rounded-lg text-emerald-400 outline-none focus:border-emerald-500"
+                  />
+                  <span className="font-bold text-white/80">Hours</span>
+                </div>
+              </div>
+              <div className="bg-black/30 rounded-xl p-2.5 border border-white/10">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Maximum Allowed</span>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={dailyWorkload.onsiteMaxHours}
+                    onChange={(e) => setDailyWorkload({ ...dailyWorkload, onsiteMaxHours: Number(e.target.value) })}
+                    className="w-14 px-2 py-1 text-sm font-black text-center bg-white/10 border border-white/15 rounded-lg text-emerald-400 outline-none focus:border-emerald-500"
+                  />
+                  <span className="font-bold text-white/80">Hours</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* WFH Workload Card */}
+          <div className={`p-4 rounded-2xl border transition-all ${
+            dailyWorkload.wfhAllocated
+              ? 'bg-sky-500/10 border-sky-500/30 shadow-inner'
+              : 'bg-white/5 border-white/10 opacity-70'
+          }`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Home size={18} className="text-sky-400" />
+                <h3 className="font-extrabold text-sm text-white">Work From Home (WFH) Workload</h3>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-sky-300">
+                <input
+                  type="checkbox"
+                  checked={dailyWorkload.wfhAllocated}
+                  onChange={(e) => setDailyWorkload({ ...dailyWorkload, wfhAllocated: e.target.checked })}
+                  className="rounded border-slate-700 text-sky-500 focus:ring-sky-500 cursor-pointer h-4 w-4"
+                />
+                Allocated Today
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-black/30 rounded-xl p-2.5 border border-white/10">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Minimum Required</span>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={dailyWorkload.wfhMinHours}
+                    onChange={(e) => setDailyWorkload({ ...dailyWorkload, wfhMinHours: Number(e.target.value) })}
+                    className="w-14 px-2 py-1 text-sm font-black text-center bg-white/10 border border-white/15 rounded-lg text-sky-400 outline-none focus:border-sky-500"
+                  />
+                  <span className="font-bold text-white/80">Hours</span>
+                </div>
+              </div>
+              <div className="bg-black/30 rounded-xl p-2.5 border border-white/10">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Maximum Allowed</span>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={dailyWorkload.wfhMaxHours}
+                    onChange={(e) => setDailyWorkload({ ...dailyWorkload, wfhMaxHours: Number(e.target.value) })}
+                    className="w-14 px-2 py-1 text-sm font-black text-center bg-white/10 border border-white/15 rounded-lg text-sky-400 outline-none focus:border-sky-500"
+                  />
+                  <span className="font-bold text-white/80">Hours</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Permission Grid Pattern */}
+      {/* Permission Grid Panel */}
       <div className="glass-panel p-6 border border-slate-100 dark:border-slate-700/50 shadow-sm space-y-6">
         
         {/* Search & Filter Bar */}
@@ -366,7 +687,7 @@ const CheckInPermissions = () => {
           </div>
         </div>
 
-        {/* Selection Status & Bulk Action Options */}
+        {/* Selection Status & Bulk Action Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/30 p-4 rounded-2xl border border-slate-100 dark:border-slate-800/50">
           <div className="flex items-center gap-2">
             <span className="text-sm font-extrabold text-slate-700 dark:text-slate-300">
@@ -375,7 +696,7 @@ const CheckInPermissions = () => {
             {selectedStudents.length > 0 && (
               <button 
                 onClick={() => setSelectedStudents([])}
-                className="text-xs text-slate-400 hover:text-rose-500 hover:underline font-bold"
+                className="text-xs text-slate-400 hover:text-rose-500 hover:underline font-bold cursor-pointer"
               >
                 Clear Selection
               </button>
@@ -383,35 +704,6 @@ const CheckInPermissions = () => {
           </div>
           
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2.5 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
-              <Clock size={15} className="text-emerald-500 shrink-0" />
-              <div className="flex items-center gap-1">
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Min:</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="24"
-                  value={minHours}
-                  onChange={e => setMinHours(e.target.value)}
-                  className="w-11 px-1 py-0.5 text-xs font-black text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500 text-emerald-600 dark:text-emerald-400"
-                />
-                <span className="text-xs font-semibold text-slate-400">h</span>
-              </div>
-              <div className="h-3.5 w-px bg-slate-200 dark:bg-slate-700" />
-              <div className="flex items-center gap-1">
-                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Max:</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="24"
-                  value={maxHours}
-                  onChange={e => setMaxHours(e.target.value)}
-                  className="w-11 px-1 py-0.5 text-xs font-black text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500 text-emerald-600 dark:text-emerald-400"
-                />
-                <span className="text-xs font-semibold text-slate-400">h</span>
-              </div>
-            </div>
-
             {selectedStudents.length === 0 ? (
               <>
                 <button
@@ -420,7 +712,7 @@ const CheckInPermissions = () => {
                   className="px-4 py-2 text-xs font-black bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {grantingAccess && <Loader2 size={12} className="animate-spin" />}
-                  Grant All On-Site
+                  <Building2 size={13} /> Grant All On-Site ({dailyWorkload.onsiteMinHours}h)
                 </button>
                 <button
                   onClick={() => handleGrantAll('wfh')}
@@ -428,7 +720,7 @@ const CheckInPermissions = () => {
                   className="px-4 py-2 text-xs font-black bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 border border-sky-500/20 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {grantingAccess && <Loader2 size={12} className="animate-spin" />}
-                  Grant All WFH
+                  <Home size={13} /> Grant All WFH ({dailyWorkload.wfhMinHours}h)
                 </button>
               </>
             ) : (
@@ -439,7 +731,7 @@ const CheckInPermissions = () => {
                   className="px-4 py-2 text-xs font-black bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-md shadow-emerald-500/10 transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   {grantingAccess && <Loader2 size={12} className="animate-spin" />}
-                  Grant On-Site ({selectedStudents.length})
+                  <Building2 size={13} /> Grant On-Site ({selectedStudents.length})
                 </button>
                 <button
                   onClick={() => handleGrantAccess('wfh')}
@@ -447,7 +739,7 @@ const CheckInPermissions = () => {
                   className="px-4 py-2 text-xs font-black bg-sky-500 hover:bg-sky-600 text-white rounded-xl shadow-md shadow-sky-500/10 transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   {grantingAccess && <Loader2 size={12} className="animate-spin" />}
-                  Grant WFH ({selectedStudents.length})
+                  <Home size={13} /> Grant WFH ({selectedStudents.length})
                 </button>
                 <button
                   onClick={handleRevokeAccess}
@@ -455,14 +747,14 @@ const CheckInPermissions = () => {
                   className="px-4 py-2 text-xs font-black bg-rose-500 hover:bg-rose-600 text-white rounded-xl shadow-md shadow-rose-500/10 transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   {grantingAccess && <Loader2 size={12} className="animate-spin" />}
-                  Revoke Access ({selectedStudents.length})
+                  <XCircle size={13} /> Revoke Access ({selectedStudents.length})
                 </button>
               </>
             )}
           </div>
         </div>
 
-        {/* Student Grid list mimicking manual check list */}
+        {/* Student Grid list with Workload Verification */}
         {filteredStudents.length === 0 ? (
           <div className="text-center py-12 bg-slate-50 dark:bg-slate-900/10 rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
             <Users className="w-10 h-10 text-slate-400 mx-auto mb-3" />
@@ -485,7 +777,7 @@ const CheckInPermissions = () => {
                   Select All Filtered ({filteredStudents.length})
                 </label>
               </div>
-              <span>Access Status</span>
+              <span>Assigned Workload & Logged Time</span>
             </div>
 
             {/* Grid list of individual students */}
@@ -493,13 +785,18 @@ const CheckInPermissions = () => {
               {filteredStudents.map(student => {
                 const access = getStudentAccess(student._id);
                 const leave = getStudentLeave(student._id);
+                const att = getStudentAttendance(student._id);
                 const isSelected = selectedStudents.includes(student._id);
-                
+
+                const onsiteSec = att?.onsiteDurationSeconds || 0;
+                const wfhSec = att?.wfhDurationSeconds || 0;
+                const totalSec = att?.sessionDurationSeconds || (onsiteSec + wfhSec);
+
                 return (
                   <div
                     key={student._id}
                     onClick={() => handleToggleSelectStudent(student._id)}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between group select-none ${
+                    className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-3 group select-none ${
                       isSelected
                         ? 'bg-emerald-500/10 border-emerald-500 shadow-sm shadow-emerald-500/5'
                         : leave
@@ -507,64 +804,119 @@ const CheckInPermissions = () => {
                         : 'bg-white dark:bg-slate-800/40 border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-800/80 shadow-sm'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => {}} // Controlled by outer div click
-                        className="rounded border-slate-300 dark:border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer h-4 w-4"
-                      />
-                      <div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">{student.name}</h4>
-                          {leave && (
-                            <span 
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
-                              title={leave.reason || 'On approved leave today'}
-                            >
-                              <Calendar size={10} className="shrink-0" /> Leave
+                    {/* Top Row: Checkbox, Name, Roll, and Status Badge */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => {}}
+                          className="mt-1 rounded border-slate-300 dark:border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer h-4 w-4"
+                        />
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-tight">{student.name}</h4>
+                            {leave && (
+                              <span 
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                                title={leave.reason || 'On approved leave today'}
+                              >
+                                <Calendar size={10} className="shrink-0" /> Leave
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{student.rollNumber || 'N/A'}</p>
+                        </div>
+                      </div>
+
+                      {/* Attendance Status Badge */}
+                      {att ? (
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          {att.status === 'Present' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                              <CheckCircle2 size={11} /> Present
+                            </span>
+                          ) : att.isActive ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                              <Clock size={11} className="animate-spin" /> In Progress
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                              <XCircle size={11} /> {att.status || 'Absent'}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{student.rollNumber || 'N/A'}</p>
+                      ) : access ? (
+                        <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700">
+                          Pending
+                        </span>
+                      ) : (
+                        <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700">
+                          No Access
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Middle Section: Assigned Workload vs Logged Time Cross-Verification */}
+                    <div className="bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 text-[11px] space-y-1.5">
+                      {/* Mentor Assigned Workload Row */}
+                      <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                        <span className="font-semibold flex items-center gap-1">
+                          <Sliders size={11} /> Assigned:
+                        </span>
+                        <div className="flex items-center gap-2 font-mono font-bold text-slate-700 dark:text-slate-300">
+                          {dailyWorkload.onsiteAllocated && (
+                            <span className="text-emerald-600 dark:text-emerald-400">On-Site: {dailyWorkload.onsiteMinHours}h</span>
+                          )}
+                          {dailyWorkload.onsiteAllocated && dailyWorkload.wfhAllocated && <span>•</span>}
+                          {dailyWorkload.wfhAllocated && (
+                            <span className="text-sky-600 dark:text-sky-400">WFH: {dailyWorkload.wfhMinHours}h</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Actual Logged Time Row */}
+                      <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                        <span className="font-semibold flex items-center gap-1">
+                          <Clock size={11} /> Logged:
+                        </span>
+                        <div className="flex items-center gap-2 font-mono font-bold">
+                          <span className={onsiteSec >= (dailyWorkload.onsiteMinHours * 3600) ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}>
+                            On-Site: {formatDuration(onsiteSec)}
+                          </span>
+                          <span>•</span>
+                          <span className={wfhSec >= (dailyWorkload.wfhMinHours * 3600) ? 'text-sky-600 dark:text-sky-400' : 'text-slate-700 dark:text-slate-300'}>
+                            WFH: {formatDuration(wfhSec)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Total Time & Evaluation Badge */}
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-200/50 dark:border-slate-800 text-[10px]">
+                        <span className="text-slate-400 font-medium">Total: {formatDuration(totalSec)}</span>
+                        {dailyWorkload.onsiteAllocated && dailyWorkload.wfhAllocated && (
+                          <span className="font-bold text-slate-500">
+                            Dual Mode Target: {dailyWorkload.onsiteMinHours + dailyWorkload.wfhMinHours}h total
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Status Badge & Action */}
-                    <div className="flex flex-col items-end gap-1.5">
-                      {access ? (
-                        <div className="flex flex-col items-end gap-1">
-                          <span className={`text-[10px] uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full border ${
-                            access.accessType === 'wfh'
-                              ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20'
-                              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                          }`}>
-                            {access.accessType === 'wfh' ? 'WFH' : 'ON-SITE'}
-                          </span>
-                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                            Min: {access.minHours || access.workHours || 4}h • Max: {access.maxHours || 10}h
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-[10px] uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700">
-                          NO ACCESS
-                        </span>
-                      )}
-
-                      {leave && (!access || access.accessType !== 'wfh') && (
+                    {/* Bottom Action Row (for Leave student or quick actions) */}
+                    {leave && (!access || access.accessType !== 'wfh') && (
+                      <div className="flex justify-end pt-1">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             handleAllocateLeaveWFH(student._id, student.name);
                           }}
                           disabled={grantingAccess}
-                          className="px-2 py-0.5 text-[10px] font-bold bg-amber-500 text-white hover:bg-amber-600 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
-                          title="Allocate specific WFH work hours for student on leave"
+                          className="px-2.5 py-1 text-[10px] font-bold bg-amber-500 text-white hover:bg-amber-600 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-1"
                         >
-                          Allocate WFH
+                          <Home size={11} /> Allocate WFH for Leave
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}

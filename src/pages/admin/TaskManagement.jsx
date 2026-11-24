@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { BookOpen, Plus, FileText as FileTextIcon, Edit, Trash2, Link as LinkIcon, RefreshCw, Search, RotateCcw, CheckCircle, Clock, Calendar, Award, Tag, X, ExternalLink, Download, Eye } from 'lucide-react';
+import { BookOpen, Plus, FileText as FileTextIcon, Edit, Trash2, Link as LinkIcon, RefreshCw, Search, RotateCcw, CheckCircle, Clock, Calendar, Award, Tag, X, ExternalLink, Download, Eye, Coins } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { useAuth } from '../../context/AuthContext';
 import { useGlobalBatch } from '../../context/GlobalBatchContext';
+import { sanitizeTaskHtml } from '../../utils/taskFormatter';
 
 // Live real-time Countdown Timer for Modal & Cards
 const TaskCountdownTimer = ({ dueDate }) => {
@@ -490,14 +491,15 @@ const TaskManagement = () => {
                 </div>
                 <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block" />
                 <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-lg border border-amber-500/20 dark:border-amber-500/30">
-                  <span>🪙 Student Reward: <strong className="font-mono text-amber-500 dark:text-amber-300">+{(Number(selectedTaskForView.maxMarks) || 0) * 10} Coins</strong></span>
+                  <Coins size={14} className="text-amber-500" />
+                  <span>Student Reward: <strong className="font-mono text-amber-500 dark:text-amber-300">+{(Number(selectedTaskForView.maxMarks) || 0) * 10} Coins</strong></span>
                 </div>
               </div>
               <TaskCountdownTimer dueDate={selectedTaskForView.dueDate} />
             </div>
 
             {/* Scrollable Content Body */}
-            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 bg-white dark:bg-slate-900">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-6 sm:p-8 space-y-6 bg-white dark:bg-slate-900">
               
               {/* Attached External Links / Files if any */}
               {selectedTaskForView.taskType === 'file' && selectedTaskForView.fileUrl && (
@@ -545,14 +547,14 @@ const TaskManagement = () => {
               )}
 
               {/* Task Instructions */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  Task Instructions & Details
+              <div className="space-y-3 min-w-0 w-full">
+                <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                  <FileTextIcon size={14} /> Task Instructions & Details
                 </h4>
-                <div className="bg-slate-50/90 dark:bg-slate-800/50 p-6 sm:p-7 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+                <div className="bg-slate-50/90 dark:bg-slate-950/80 p-6 sm:p-8 rounded-2xl border border-slate-200 dark:border-slate-800/80 shadow-inner min-w-0 w-full overflow-hidden">
                   <div 
-                    className="prose dark:prose-invert max-w-none text-slate-800 dark:text-slate-100 text-sm sm:text-base leading-relaxed ql-editor !p-0"
-                    dangerouslySetInnerHTML={{ __html: selectedTaskForView.description || '<p class="text-slate-400 italic">No instructions provided.</p>' }}
+                    className="prose dark:prose-invert max-w-none text-slate-900 dark:text-slate-100 font-medium text-sm sm:text-base leading-relaxed ql-editor !p-0 task-content-viewer min-w-0 w-full break-words"
+                    dangerouslySetInnerHTML={{ __html: sanitizeTaskHtml(selectedTaskForView.description) || '<p class="text-slate-400 italic">No instructions provided.</p>' }}
                   />
                 </div>
               </div>

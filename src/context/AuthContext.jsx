@@ -474,8 +474,8 @@ export const AuthProvider = ({ children }) => {
   const customPanelSubheading = user?.role === 'admin' 
     ? 'SR Admin Console & Maintenance System' 
     : user?.role === 'mentor'
-    ? 'Saran Students Management System'
-    : (activeBatch?.panelSubheading?.trim() || '');
+    ? "Saran Student's Management System"
+    : (activeBatch?.panelSubheading?.trim() || "Saran Student's Management System");
 
   const logout = async () => {
     try {

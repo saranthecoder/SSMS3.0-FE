@@ -128,32 +128,57 @@ const AttendanceLogs = () => {
           };
         }
         groupedMap[key].totalSeconds += (log.totalSeconds || 0);
-        const reqHours = log.requiredPresentHours !== undefined ? log.requiredPresentHours : 8;
-        const maxHours = log.maxValidHours !== undefined ? log.maxValidHours : 10;
-        const hours = (log.totalSeconds || 0) / 3600;
-        const minRequired = reqHours - (log.leaveHours || 0);
-        if (hours >= minRequired && hours <= maxHours) groupedMap[key].daysPresent += 1;
-        else if (hours > maxHours) groupedMap[key].daysInvalid += 1;
+        if (log.status === 'Present') groupedMap[key].daysPresent += 1;
+        else if (log.status === 'Invalid') groupedMap[key].daysInvalid += 1;
         else groupedMap[key].daysAbsent += 1;
       }
     });
 
     Object.values(groupedMap).forEach(day => {
       if (viewMode === 'Day') {
+        // Authoritative backend status preservation (e.g. Present from dual-mode evaluation)
+        if (day.status && day.status !== 'In Progress') {
+          return;
+        }
+
+        if (day.isActive) {
+          day.status = 'In Progress';
+          return;
+        }
+
         if ((day.status === 'Leave' || day.isLeave) && (day.leaveHours || 0) === 0) {
           day.status = 'Leave';
           return;
         }
-        const reqHours = day.requiredPresentHours !== undefined ? day.requiredPresentHours : 8;
-        const maxHours = day.maxValidHours !== undefined ? day.maxValidHours : 10;
+
+        const onsiteHrs = (day.onsiteSeconds || 0) / 3600;
+        const wfhHrs = (day.wfhSeconds || 0) / 3600;
+        const onsiteMin = day.onsiteMinHours !== undefined ? Number(day.onsiteMinHours) : 2;
+        const wfhMin = day.wfhMinHours !== undefined ? Number(day.wfhMinHours) : 3;
+        const maxHours = day.maxValidHours !== undefined ? Number(day.maxValidHours) : 10;
         const hours = (day.totalSeconds || 0) / 3600;
-        const minRequired = reqHours - (day.leaveHours || 0);
-        const todayStr = new Date().toISOString().split('T')[0];
-        
-        if (hours >= minRequired && hours <= maxHours) day.status = 'Present';
-        else if (hours > maxHours) day.status = 'Invalid';
-        else if (day.isActive) day.status = 'In Progress';
-        else day.status = 'Absent';
+
+        if (hours > maxHours || onsiteHrs > maxHours || wfhHrs > maxHours) {
+          day.status = 'Invalid';
+          return;
+        }
+
+        const hasOnsite = Boolean(day.onsiteAllocated || (day.onsiteSeconds || 0) > 0);
+        const hasWfh = Boolean(day.wfhAllocated || (day.wfhSeconds || 0) > 0);
+
+        if (hasOnsite && hasWfh) {
+          if (onsiteHrs >= onsiteMin && wfhHrs >= wfhMin) {
+            day.status = 'Present';
+          } else {
+            day.status = day.isLeave ? 'Leave' : 'Absent';
+          }
+        } else if (hasWfh && !hasOnsite) {
+          if (wfhHrs >= wfhMin) day.status = 'Present';
+          else day.status = day.isLeave ? 'Leave' : 'Absent';
+        } else {
+          if (onsiteHrs >= onsiteMin) day.status = 'Present';
+          else day.status = day.isLeave ? 'Leave' : 'Absent';
+        }
       }
     });
 

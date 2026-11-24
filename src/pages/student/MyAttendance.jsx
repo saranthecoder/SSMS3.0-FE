@@ -275,7 +275,11 @@ const MyAttendance = () => {
                           {renderStatusBadge(log.status)}
                           {log.accessType && (
                             <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white/10 text-slate-300">
-                              {log.accessType === 'wfh' ? 'WFH' : 'On-Site'} ({log.minHours || log.onsiteMinHours || log.wfhMinHours || 4}h - {log.maxHours || log.onsiteMaxHours || log.wfhMaxHours || 10}h)
+                              {log.onsiteAllocated && log.wfhAllocated ? (
+                                `Dual: On-Site (${log.onsiteMinHours || 2}h) + WFH (${log.wfhMinHours || 3}h)`
+                              ) : (
+                                `${log.accessType === 'wfh' ? 'WFH' : 'On-Site'} (${log.minHours || (log.accessType === 'wfh' ? log.wfhMinHours : log.onsiteMinHours) || (log.accessType === 'wfh' ? 3 : 2)}h - ${log.maxHours || (log.accessType === 'wfh' ? log.wfhMaxHours : log.onsiteMaxHours) || 10}h)`
+                              )}
                             </span>
                           )}
                         </div>

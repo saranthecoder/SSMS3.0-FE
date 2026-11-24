@@ -5,6 +5,21 @@ import { Code, Flame, CheckCircle, Clock, ExternalLink, Lock, ChevronDown, Chevr
 import SkeletonLoader from '../../components/SkeletonLoader';
 import Swal from 'sweetalert2';
 
+const format12HourDateTime = (dateString) => {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  return `${dd}/${mm}/${yyyy}, ${String(hours).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`;
+};
+
 const StudentLeetcode = () => {
   const { user, updateUser } = useAuth();
   const [history, setHistory] = useState([]);
@@ -145,13 +160,13 @@ const StudentLeetcode = () => {
                       </div>
                       <div>
                         <span className="text-xs font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-900/50 uppercase tracking-wide">Next LeetCode Challenge</span>
-                        <h3 className="text-base font-extrabold text-slate-800 dark:text-white leading-tight mt-0.5">🔒 Scheduled Challenge</h3>
+                        <h3 className="text-base font-extrabold text-slate-800 dark:text-white leading-tight mt-0.5">Scheduled Challenge</h3>
                       </div>
                     </div>
                     
                     <div className="flex items-center text-xs font-semibold text-slate-500 dark:text-slate-400">
                       <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5">
-                        <Lock size={12} /> Unlocks: {new Date(nextLockedProblem.scheduledAt).toLocaleString()}
+                        <Lock size={12} /> Unlocks: {format12HourDateTime(nextLockedProblem.scheduledAt)}
                       </span>
                     </div>
                   </div>

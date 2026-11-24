@@ -290,3 +290,128 @@ body.swal2-toast-shown .swal2-container.swal2-top-right {
   transform: translateY(-1px) scale(1.03) !important;
   box-shadow: 0 6px 22px rgba(99, 102, 241, 0.6) !important;
 }
+
+/* High-contrast, clean readability for Task Instructions across all themes */
+.task-content-viewer {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  line-height: 1.75 !important;
+  letter-spacing: 0.01em !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  white-space: normal !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.task-content-viewer * {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+}
+
+.task-content-viewer p,
+.task-content-viewer div,
+.task-content-viewer span {
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  white-space: normal !important;
+}
+
+/* Ensure list bullets and numbers are properly visible with appropriate padding */
+.task-content-viewer ul {
+  list-style-type: disc !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.5rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.task-content-viewer ol {
+  list-style-type: decimal !important;
+  padding-left: 1.5rem !important;
+  margin-top: 0.5rem !important;
+  margin-bottom: 0.5rem !important;
+}
+
+.task-content-viewer li {
+  list-style-type: inherit !important;
+  margin-top: 0.25rem !important;
+  margin-bottom: 0.25rem !important;
+  padding-left: 0.25rem !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  white-space: normal !important;
+}
+
+/* Light mode crisp readability */
+:not(.dark) .task-content-viewer {
+  color: #0f172a !important;
+}
+
+/* Dark mode crystal-clear readability */
+.dark .task-content-viewer {
+  color: #f8fafc !important;
+}
+
+.dark .task-content-viewer p,
+.dark .task-content-viewer div,
+.dark .task-content-viewer li,
+.dark .task-content-viewer strong,
+.dark .task-content-viewer b,
+.dark .task-content-viewer em,
+.dark .task-content-viewer h1,
+.dark .task-content-viewer h2,
+.dark .task-content-viewer h3,
+.dark .task-content-viewer h4 {
+  color: #f8fafc !important;
+}
+
+/* Override any dark / near-black inline colors pasted into Quill editor */
+.dark .task-content-viewer [style*="color: rgb(0, 0, 0)"],
+.dark .task-content-viewer [style*="color: rgb(17, 24, 39)"],
+.dark .task-content-viewer [style*="color: rgb(31, 41, 55)"],
+.dark .task-content-viewer [style*="color: rgb(34, 34, 34)"],
+.dark .task-content-viewer [style*="color: rgb(51, 51, 51)"],
+.dark .task-content-viewer [style*="color: rgb(55, 65, 81)"],
+.dark .task-content-viewer [style*="color: rgb(68, 68, 68)"],
+.dark .task-content-viewer [style*="color: rgb(75, 85, 99)"],
+.dark .task-content-viewer [style*="color: #000"],
+.dark .task-content-viewer [style*="color:#000"],
+.dark .task-content-viewer [style*="color: black"],
+.dark .task-content-viewer [style*="color:black"],
+.dark .task-content-viewer [style*="color: #111"],
+.dark .task-content-viewer [style*="color:#111"],
+.dark .task-content-viewer [style*="color: #222"],
+.dark .task-content-viewer [style*="color:#222"],
+.dark .task-content-viewer [style*="color: #333"],
+.dark .task-content-viewer [style*="color:#333"],
+.dark .task-content-viewer [style*="color: #444"],
+.dark .task-content-viewer [style*="color:#444"],
+.dark .task-content-viewer [style*="color: #1f2937"],
+.dark .task-content-viewer [style*="color: #111827"] {
+  color: #f8fafc !important;
+}
+
+/* Lighten dark greens so highlighted keywords/classes shine clearly on dark backgrounds */
+.dark .task-content-viewer [style*="color: rgb(0, 128, 0)"],
+.dark .task-content-viewer [style*="color: rgb(22, 101, 52)"],
+.dark .task-content-viewer [style*="color: rgb(21, 128, 61)"],
+.dark .task-content-viewer [style*="color: rgb(24, 128, 56)"],
+.dark .task-content-viewer [style*="color: rgb(39, 174, 96)"],
+.dark .task-content-viewer [style*="color: rgb(46, 125, 50)"],
+.dark .task-content-viewer [style*="color: #008000"],
+.dark .task-content-viewer [style*="color: #166534"],
+.dark .task-content-viewer [style*="color: #15803d"],
+.dark .task-content-viewer [style*="color: #2e7d32"],
+.dark .task-content-viewer [style*="color: #27ae60"],
+.dark .task-content-viewer [style*="color: green"] {
+  color: #34d399 !important;
+  font-weight: 600 !important;
+}
+
+/* Remove dark-mode breaking white background highlights */
+.dark .task-content-viewer [style*="background-color: rgb(255, 255, 255)"],
+.dark .task-content-viewer [style*="background-color: #fff"],
+.dark .task-content-viewer [style*="background-color: white"] {
+  background-color: transparent !important;
+}

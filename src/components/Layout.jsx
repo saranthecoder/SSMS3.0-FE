@@ -131,8 +131,8 @@ const Layout = () => {
   const customPanelSubheading = user?.role === 'admin' 
     ? 'SR Admin Console & Maintenance System' 
     : user?.role === 'mentor'
-    ? 'Saran Students Management System'
-    : (authPanelSubheading || activeBatch?.panelSubheading?.trim() || '');
+    ? "Saran Student's Management System"
+    : (authPanelSubheading || activeBatch?.panelSubheading?.trim() || "Saran Student's Management System");
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -2327,8 +2327,8 @@ const Layout = () => {
               <span className="font-extrabold text-[19px] leading-tight tracking-tight text-slate-800 dark:text-white transition-all group-hover:text-theme-primary truncate" title={user?.role === 'mentor' ? 'SSMS - Saran Students Management System' : (customPanelName || 'SSMS 2.0')}>
                 {user?.role === 'mentor' ? 'SSMS' : (customPanelName || 'SSMS 2.0')}
               </span>
-              <span className="text-[9px] font-black tracking-wider text-theme-primary uppercase leading-[1.2] line-clamp-2" title={user?.role === 'mentor' ? 'Saran Students Management System' : (customPanelSubheading || 'Saran Students Management')}>
-                {user?.role === 'mentor' ? 'Saran Students Management System' : (customPanelSubheading || (customPanelName ? (activeBatch?.batchName || 'STUDENTS MANAGEMENT') : 'Saran Students Management'))}
+              <span className="text-[9px] font-black tracking-wider text-theme-primary uppercase leading-[1.2] line-clamp-2" title={customPanelSubheading || "Saran Student's Management System"}>
+                {customPanelSubheading || "Saran Student's Management System"}
               </span>
             </div>
           </div>
@@ -2855,7 +2855,7 @@ const Layout = () => {
                   </div>
                   <div>
                     <span className="font-bold text-sm text-white leading-tight">{customPanelName || 'SSMS 2.0'}</span>
-                    <span className="block text-[8px] font-bold tracking-wider text-theme-primary uppercase">{customPanelSubheading || 'Students Management'}</span>
+                    <span className="block text-[8px] font-bold tracking-wider text-theme-primary uppercase">{customPanelSubheading || "Saran Student's Management System"}</span>
                   </div>
                 </div>
                 <button onClick={() => setMobileMoreOpen(false)} className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-800/60 border border-slate-700/30 cursor-pointer">

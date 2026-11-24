@@ -4,9 +4,10 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { Loader2, Upload, ExternalLink, Lock, Calendar, FileText as FileTextIcon, UploadCloud, Link as LinkIcon, AlignLeft, Download, CheckCircle, ChevronDown, ChevronUp, Clock, AlertTriangle, X, Award, Eye } from 'lucide-react';
+import { Loader2, Upload, ExternalLink, Lock, Calendar, FileText as FileTextIcon, UploadCloud, Link as LinkIcon, AlignLeft, Download, CheckCircle, ChevronDown, ChevronUp, Clock, AlertTriangle, X, Award, Eye, Coins } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { soundManager } from '../../utils/soundManager';
+import { sanitizeTaskHtml } from '../../utils/taskFormatter';
 
 const formatDateTime = (dateString) => {
   if (!dateString) return '';
@@ -21,6 +22,21 @@ const formatDateTime = (dateString) => {
   hours = hours ? hours : 12; 
   const timeStr = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
   return `${dd}/${mm}/${yy} - ${timeStr}`;
+};
+
+const format12HourDateTime = (dateString) => {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  return `${dd}/${mm}/${yyyy}, ${String(hours).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`;
 };
 
 // Live real-time Countdown Timer with seconds for Task Deadlines
@@ -362,7 +378,7 @@ const MyTasks = () => {
               </div>
               <div>
                 <span className="text-xs font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-900/50 uppercase tracking-wide">Next Scheduled Work</span>
-                <h3 className="text-base font-extrabold text-slate-800 dark:text-white leading-tight mt-0.5">🔒 Scheduled Task ({nextLockedTask.batchId?.batchName})</h3>
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-white leading-tight mt-0.5">Scheduled Task ({nextLockedTask.batchId?.batchName})</h3>
               </div>
             </div>
             
@@ -370,7 +386,7 @@ const MyTasks = () => {
               <span className="flex items-center gap-1.5"><Calendar size={13} className="text-slate-400" /> Due: {formatDateTime(nextLockedTask.dueDate)}</span>
               {nextLockedTask.maxMarks !== undefined && <span>Marks: {nextLockedTask.maxMarks}</span>}
               <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5">
-                <Lock size={12} /> Unlocks: {new Date(nextLockedTask.scheduledAt).toLocaleString()}
+                <Lock size={12} /> Unlocks: {format12HourDateTime(nextLockedTask.scheduledAt)}
               </span>
             </div>
           </div>
@@ -658,7 +674,8 @@ const MyTasks = () => {
                 </div>
                 <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block" />
                 <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-lg border border-amber-500/20 dark:border-amber-500/30">
-                  <span>🪙 Reward: <strong className="font-mono text-amber-500 dark:text-amber-300">+{(Number(selectedTaskForDetails.maxMarks) || 0) * 10} Coins</strong></span>
+                  <Coins size={14} className="text-amber-500" />
+                  <span>Reward: <strong className="font-mono text-amber-500 dark:text-amber-300">+{(Number(selectedTaskForDetails.maxMarks) || 0) * 10} Coins</strong></span>
                 </div>
               </div>
               <TaskCountdownTimer 
@@ -669,7 +686,7 @@ const MyTasks = () => {
             </div>
 
             {/* Scrollable Content Body */}
-            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 bg-white dark:bg-slate-900">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden min-w-0 p-6 sm:p-8 space-y-6 bg-white dark:bg-slate-900">
               
               {/* Attached External Links / Files if any */}
               {selectedTaskForDetails.taskType === 'file' && selectedTaskForDetails.fileUrl && (
@@ -717,14 +734,14 @@ const MyTasks = () => {
               )}
 
               {/* Task Instructions */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  Task Instructions & Details
+              <div className="space-y-3 min-w-0 w-full">
+                <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                  <FileTextIcon size={14} /> Task Instructions & Details
                 </h4>
-                <div className="bg-slate-50/90 dark:bg-slate-800/50 p-6 sm:p-7 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+                <div className="bg-slate-50/90 dark:bg-slate-950/80 p-6 sm:p-8 rounded-2xl border border-slate-200 dark:border-slate-800/80 shadow-inner min-w-0 w-full overflow-hidden">
                   <div 
-                    className="prose dark:prose-invert max-w-none text-slate-800 dark:text-slate-100 text-sm sm:text-base leading-relaxed ql-editor !p-0"
-                    dangerouslySetInnerHTML={{ __html: selectedTaskForDetails.description || '<p class="text-slate-400 italic">No instructions provided.</p>' }}
+                    className="prose dark:prose-invert max-w-none text-slate-900 dark:text-slate-100 font-medium text-sm sm:text-base leading-relaxed ql-editor !p-0 task-content-viewer min-w-0 w-full break-words"
+                    dangerouslySetInnerHTML={{ __html: sanitizeTaskHtml(selectedTaskForDetails.description) || '<p class="text-slate-400 italic">No instructions provided.</p>' }}
                   />
                 </div>
               </div>

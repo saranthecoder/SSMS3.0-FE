@@ -78,6 +78,21 @@ const getNamecolorClass = (value) => {
   return classes[value] || value || '';
 };
 
+const format12HourDateTime = (dateString) => {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const seconds = String(d.getSeconds()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  return `${dd}/${mm}/${yyyy}, ${String(hours).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`;
+};
+
 const StudentDashboard = () => {
   const { user, customPanelName, customPanelSubheading } = useAuth();
   const { 
@@ -506,16 +521,38 @@ const StudentDashboard = () => {
                 </p>
                 <h3 className="font-bold text-lg leading-none flex items-center gap-2">
                   SSMS Base
-                  {checkInAccess.hasAccess && (
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                      checkInAccess.accessType === 'wfh' 
-                        ? 'bg-sky-400 text-slate-950 border border-sky-300' 
-                        : 'bg-emerald-400 text-slate-950 border border-emerald-300'
-                    }`}>
-                      {checkInAccess.accessType === 'wfh' ? <Home size={11} className="shrink-0" /> : <Building2 size={11} className="shrink-0" />}
-                      {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'} ({checkInAccess.minHours || checkInAccess.workHours || 3}h)
-                    </span>
-                  )}
+                  {checkInAccess.hasAccess && (() => {
+                    const dw = checkInAccess.dailyWorkload || {};
+                    const isDualMode = Boolean(
+                      (dw.onsiteAllocated && dw.wfhAllocated) ||
+                      (onsiteSeconds > 0 && wfhSeconds > 0) ||
+                      (checkInAccess.accessType === 'wfh' && onsiteSeconds > 0) ||
+                      (checkInAccess.accessType === 'on-site' && wfhSeconds > 0)
+                    );
+                    const onsiteMin = Number(dw.onsiteMinHours || checkInAccess.onsiteMinHours || 2);
+                    const wfhMin = Number(dw.wfhMinHours || checkInAccess.wfhMinHours || 3);
+
+                    if (isDualMode) {
+                      return (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-400 text-slate-950 border border-emerald-300">
+                          <Building2 size={11} className="shrink-0" />
+                          <Home size={11} className="shrink-0" />
+                          Dual: On-Site ({onsiteMin}h) + WFH ({wfhMin}h)
+                        </span>
+                      );
+                    }
+
+                    return (
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                        checkInAccess.accessType === 'wfh' 
+                          ? 'bg-sky-400 text-slate-950 border border-sky-300' 
+                          : 'bg-emerald-400 text-slate-950 border border-emerald-300'
+                      }`}>
+                        {checkInAccess.accessType === 'wfh' ? <Home size={11} className="shrink-0" /> : <Building2 size={11} className="shrink-0" />}
+                        {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'} ({checkInAccess.minHours || checkInAccess.workHours || 3}h)
+                      </span>
+                    );
+                  })()}
                 </h3>
               </Link>
               <Link to="/student/profile" className="hover:opacity-80 transition-opacity p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10" title="My Profile">
@@ -554,80 +591,204 @@ const StudentDashboard = () => {
             <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full -ml-8 -mb-8 blur-xl"></div>
 
             {/* Attendance Requirements Card (Matching User Specification) */}
-            {checkInAccess.hasAccess ? (
-              <div className="relative z-10 bg-black/25 backdrop-blur-md rounded-2xl p-3 mb-3 border border-white/15 text-white">
-                {/* Card Header */}
-                <div className="flex items-center justify-between text-xs mb-2 flex-wrap gap-1">
-                  <span className="font-extrabold uppercase tracking-wider text-[11px] flex items-center gap-1.5 text-white">
-                    <Clock size={14} className="text-amber-300" /> Attendance Requirements (Present Criteria)
-                  </span>
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 border border-white/20 text-white flex items-center gap-1">
-                    {checkInAccess.accessType === 'wfh' ? <Home size={10} /> : <Building2 size={10} />}
-                    {checkInAccess.accessType === 'wfh' ? 'WFH Mode' : 'On-Site Mode'}
-                  </span>
-                </div>
+            {checkInAccess.hasAccess ? (() => {
+              const dw = checkInAccess.dailyWorkload || {};
+              const isDualMode = Boolean(
+                (dw.onsiteAllocated && dw.wfhAllocated) ||
+                (onsiteSeconds > 0 && wfhSeconds > 0) ||
+                (checkInAccess.accessType === 'wfh' && onsiteSeconds > 0) ||
+                (checkInAccess.accessType === 'on-site' && wfhSeconds > 0)
+              );
+              const onsiteMin = Number(dw.onsiteMinHours || checkInAccess.onsiteMinHours || 2);
+              const onsiteMax = Number(dw.onsiteMaxHours || checkInAccess.onsiteMaxHours || 10);
+              const wfhMin = Number(dw.wfhMinHours || checkInAccess.wfhMinHours || 3);
+              const wfhMax = Number(dw.wfhMaxHours || checkInAccess.wfhMaxHours || 10);
 
-                {/* Two Criteria Boxes: Minimum Hours & Maximum Valid Hours */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
-                    <p className="text-[10px] uppercase font-bold text-emerald-200">Minimum Hours (Present)</p>
-                    <div className="flex items-baseline gap-1 mt-0.5">
-                      <span className="font-black text-lg text-white">
-                        {checkInAccess.minHours || checkInAccess.workHours || 3}h
-                      </span>
-                      <span className="text-[11px] text-white/80">min required</span>
-                    </div>
-                    <p className="text-[10px] text-emerald-100/70 mt-1">Must maintain at least {checkInAccess.minHours || checkInAccess.workHours || 3} hours to get Present</p>
+              const onsiteSecsReq = onsiteMin * 3600;
+              const wfhSecsReq = wfhMin * 3600;
+              const onsiteSatisfied = onsiteSeconds >= onsiteSecsReq;
+              const wfhSatisfied = wfhSeconds >= wfhSecsReq;
+
+              return (
+                <div className="relative z-10 bg-black/25 backdrop-blur-md rounded-2xl p-3 mb-3 border border-white/15 text-white">
+                  {/* Card Header */}
+                  <div className="flex items-center justify-between text-xs mb-2 flex-wrap gap-1">
+                    <span className="font-extrabold uppercase tracking-wider text-[11px] flex items-center gap-1.5 text-white">
+                      <Clock size={14} className="text-amber-300" /> Attendance Requirements (Present Criteria)
+                    </span>
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 border border-white/20 text-white flex items-center gap-1">
+                      {isDualMode ? (
+                        <>
+                          <Building2 size={10} />
+                          <Home size={10} />
+                          Dual Mode ({onsiteMin}h + {wfhMin}h)
+                        </>
+                      ) : checkInAccess.accessType === 'wfh' ? (
+                        <>
+                          <Home size={10} />
+                          WFH Mode
+                        </>
+                      ) : (
+                        <>
+                          <Building2 size={10} />
+                          On-Site Mode
+                        </>
+                      )}
+                    </span>
                   </div>
 
-                  <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
-                    <p className="text-[10px] uppercase font-bold text-amber-200">Maximum Valid Hours</p>
-                    <div className="flex items-baseline gap-1 mt-0.5">
-                      <span className="font-black text-lg text-white">
-                        {checkInAccess.maxHours || 10}h
-                      </span>
-                      <span className="text-[11px] text-white/80">max allowed</span>
+                  {/* Two Criteria Boxes: Dual Mode vs Single Mode */}
+                  {isDualMode ? (
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {/* Box 1: On-Site Requirement */}
+                      <div className={`rounded-xl p-2.5 border transition-all ${
+                        onsiteSatisfied ? 'bg-emerald-500/20 border-emerald-400/40' : 'bg-white/10 border-white/10'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] uppercase font-bold text-emerald-200 flex items-center gap-1">
+                            <Building2 size={10} /> On-Site Workload
+                          </p>
+                          {onsiteSatisfied && (
+                            <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-emerald-400/30 text-emerald-200">
+                              Met
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="font-black text-lg text-white">{onsiteMin}h</span>
+                          <span className="text-[11px] text-white/80">min required</span>
+                        </div>
+                        <p className="text-[10px] text-emerald-100/70 mt-1">
+                          Logged: <strong className="text-white font-mono">{formatTime(onsiteSeconds)}</strong>
+                          {!onsiteSatisfied && ` • ${Math.ceil((onsiteSecsReq - onsiteSeconds) / 60)}m left`}
+                        </p>
+                      </div>
+
+                      {/* Box 2: WFH Requirement */}
+                      <div className={`rounded-xl p-2.5 border transition-all ${
+                        wfhSatisfied ? 'bg-sky-500/20 border-sky-400/40' : 'bg-white/10 border-white/10'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] uppercase font-bold text-sky-200 flex items-center gap-1">
+                            <Home size={10} /> WFH Workload
+                          </p>
+                          {wfhSatisfied && (
+                            <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-sky-400/30 text-sky-200">
+                              Met
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="font-black text-lg text-white">{wfhMin}h</span>
+                          <span className="text-[11px] text-white/80">min required</span>
+                        </div>
+                        <p className="text-[10px] text-sky-100/70 mt-1">
+                          Logged: <strong className="text-white font-mono">{formatTime(wfhSeconds)}</strong>
+                          {!wfhSatisfied && ` • ${Math.ceil((wfhSecsReq - wfhSeconds) / 60)}m left`}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-[10px] text-amber-100/70 mt-1">Hours above {checkInAccess.maxHours || 10}h are marked as Invalid</p>
-                  </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
+                        <p className="text-[10px] uppercase font-bold text-emerald-200">Minimum Hours (Present)</p>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="font-black text-lg text-white">
+                            {checkInAccess.minHours || checkInAccess.workHours || 3}h
+                          </span>
+                          <span className="text-[11px] text-white/80">min required</span>
+                        </div>
+                        <p className="text-[10px] text-emerald-100/70 mt-1">Must maintain at least {checkInAccess.minHours || checkInAccess.workHours || 3} hours to get Present</p>
+                      </div>
+
+                      <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
+                        <p className="text-[10px] uppercase font-bold text-amber-200">Maximum Valid Hours</p>
+                        <div className="flex items-baseline gap-1 mt-0.5">
+                          <span className="font-black text-lg text-white">
+                            {checkInAccess.maxHours || 10}h
+                          </span>
+                          <span className="text-[11px] text-white/80">max allowed</span>
+                        </div>
+                        <p className="text-[10px] text-amber-100/70 mt-1">Hours above {checkInAccess.maxHours || 10}h are marked as Invalid</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Live Session Progress Feedback Banner */}
+                  {(() => {
+                    if (isDualMode) {
+                      if (onsiteSatisfied && wfhSatisfied) {
+                        return (
+                          <div className="mt-2.5 p-2 rounded-xl bg-emerald-500/30 border border-emerald-300/40 text-xs font-bold text-emerald-100 flex items-center gap-2">
+                            <CheckCircle2 size={15} className="text-emerald-300 shrink-0" />
+                            <span>Present Criteria Met! Both On-Site ({onsiteMin}h) and WFH ({wfhMin}h) requirements satisfied.</span>
+                          </div>
+                        );
+                      }
+                      if (onsiteSatisfied && !wfhSatisfied) {
+                        const remM = Math.ceil((wfhSecsReq - wfhSeconds) / 60);
+                        const remH = Math.floor(remM / 60);
+                        const remMins = remM % 60;
+                        return (
+                          <div className="mt-2.5 p-2 rounded-xl bg-amber-500/25 border border-amber-300/40 text-xs font-bold text-amber-100 flex items-center gap-2">
+                            <Clock size={15} className="text-amber-200 shrink-0" />
+                            <span>On-Site satisfied! Complete {remH > 0 ? `${remH}h ` : ''}{remMins}m more in WFH mode to qualify as Present.</span>
+                          </div>
+                        );
+                      }
+                      if (!onsiteSatisfied && wfhSatisfied) {
+                        const remM = Math.ceil((onsiteSecsReq - onsiteSeconds) / 60);
+                        const remH = Math.floor(remM / 60);
+                        const remMins = remM % 60;
+                        return (
+                          <div className="mt-2.5 p-2 rounded-xl bg-amber-500/25 border border-amber-300/40 text-xs font-bold text-amber-100 flex items-center gap-2">
+                            <Clock size={15} className="text-amber-200 shrink-0" />
+                            <span>WFH satisfied! Complete {remH > 0 ? `${remH}h ` : ''}{remMins}m more in On-Site mode to qualify as Present.</span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="mt-2.5 p-2 rounded-xl bg-amber-500/25 border border-amber-300/40 text-xs font-bold text-amber-100 flex items-center gap-2">
+                          <Clock size={15} className="text-amber-200 shrink-0" />
+                          <span>Dual Workload Active: Complete both On-Site (Min {onsiteMin}h) and WFH (Min {wfhMin}h) to qualify as Present.</span>
+                        </div>
+                      );
+                    }
+
+                    const reqHours = Number(checkInAccess.minHours || checkInAccess.workHours || 3);
+                    const maxHours = Number(checkInAccess.maxHours || 10);
+                    const minSecs = reqHours * 3600;
+                    const maxSecs = maxHours * 3600;
+
+                    if (sessionSeconds > maxSecs) {
+                      return (
+                        <div className="mt-2.5 p-2 rounded-xl bg-rose-500/30 border border-rose-300/40 text-xs font-bold text-rose-100 flex items-center gap-2">
+                          <AlertTriangle size={15} className="text-rose-300 shrink-0" />
+                          <span>Session exceeded {maxHours}h max limit! Marked as Invalid overtime. Check out now.</span>
+                        </div>
+                      );
+                    }
+                    if (sessionSeconds >= minSecs) {
+                      return (
+                        <div className="mt-2.5 p-2 rounded-xl bg-emerald-500/30 border border-emerald-300/40 text-xs font-bold text-emerald-100 flex items-center gap-2">
+                          <CheckCircle2 size={15} className="text-emerald-300 shrink-0" />
+                          <span>Present Criteria Met for {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'}! You have logged {Math.floor(sessionSeconds / 3600)}h {Math.floor((sessionSeconds % 3600) / 60)}m.</span>
+                        </div>
+                      );
+                    }
+                    const remSecs = Math.max(0, minSecs - sessionSeconds);
+                    const remH = Math.floor(remSecs / 3600);
+                    const remM = Math.ceil((remSecs % 3600) / 60);
+                    return (
+                      <div className="mt-2.5 p-2 rounded-xl bg-amber-500/25 border border-amber-300/40 text-xs font-bold text-amber-100 flex items-center gap-2">
+                        <Clock size={15} className="text-amber-200 shrink-0" />
+                        <span>{remH > 0 ? `${remH}h ` : ''}{remM}m more needed to qualify as Present in {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'} mode (Min {reqHours}h required).</span>
+                      </div>
+                    );
+                  })()}
                 </div>
-
-
-                {/* Live Session Progress Feedback Banner */}
-                {(() => {
-                  const reqHours = Number(checkInAccess.minHours || checkInAccess.workHours || 3);
-                  const maxHours = Number(checkInAccess.maxHours || 10);
-                  const minSecs = reqHours * 3600;
-                  const maxSecs = maxHours * 3600;
-
-                  if (sessionSeconds > maxSecs) {
-                    return (
-                      <div className="mt-2.5 p-2 rounded-xl bg-rose-500/30 border border-rose-300/40 text-xs font-bold text-rose-100 flex items-center gap-2">
-                        <AlertTriangle size={15} className="text-rose-300 shrink-0" />
-                        <span>Session exceeded {maxHours}h max limit! Marked as Invalid overtime. Check out now.</span>
-                      </div>
-                    );
-                  }
-                  if (sessionSeconds >= minSecs) {
-                    return (
-                      <div className="mt-2.5 p-2 rounded-xl bg-emerald-500/30 border border-emerald-300/40 text-xs font-bold text-emerald-100 flex items-center gap-2">
-                        <CheckCircle2 size={15} className="text-emerald-300 shrink-0" />
-                        <span>Present Criteria Met for {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'}! You have logged {Math.floor(sessionSeconds / 3600)}h {Math.floor((sessionSeconds % 3600) / 60)}m.</span>
-                      </div>
-                    );
-                  }
-                  const remSecs = Math.max(0, minSecs - sessionSeconds);
-                  const remH = Math.floor(remSecs / 3600);
-                  const remM = Math.ceil((remSecs % 3600) / 60);
-                  return (
-                    <div className="mt-2.5 p-2 rounded-xl bg-amber-500/25 border border-amber-300/40 text-xs font-bold text-amber-100 flex items-center gap-2">
-                      <Clock size={15} className="text-amber-200 shrink-0" />
-                      <span>{remH > 0 ? `${remH}h ` : ''}{remM}m more needed to qualify as Present in {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'} mode (Min {reqHours}h required).</span>
-                    </div>
-                  );
-                })()}
-              </div>
-            ) : (
+              );
+            })() : (
               <div className="relative z-10 bg-black/20 backdrop-blur-md rounded-2xl p-3 mb-3 border border-white/15 text-white flex items-center justify-between gap-3 shadow-inner">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-white/80 shrink-0">
@@ -1037,7 +1198,7 @@ const StudentDashboard = () => {
                     
                     <div className="bg-black/20 border border-white/10 shadow-inner rounded-xl p-3 flex items-center gap-3 text-slate-300 font-bold text-sm">
                       <Lock size={16} className="text-slate-400" />
-                      Unlocks: {new Date(problem.scheduledAt).toLocaleString()}
+                      Unlocks: {format12HourDateTime(problem.scheduledAt)}
                     </div>
                   </div>
                 </div>

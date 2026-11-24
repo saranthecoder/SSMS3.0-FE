@@ -363,6 +363,34 @@ const Verification = () => {
     syllabusTracks = []
   } = data || {};
 
+  // When only one batch is allocated for monitoring, lock active scope to that batch automatically
+  const isSingleBatch = batches.length === 1;
+  const singleBatchId = isSingleBatch ? (batches[0]._id?._id || batches[0]._id)?.toString() : null;
+  const effectiveBatchFilter = (isSingleBatch && singleBatchId) ? singleBatchId : batchFilter;
+  const effectiveMockBatchFilter = (isSingleBatch && singleBatchId) ? singleBatchId : mockBatchFilter;
+  const effectiveSyllabusBatchFilter = (isSingleBatch && singleBatchId) ? singleBatchId : syllabusBatchFilter;
+
+  useEffect(() => {
+    if (batches && batches.length === 1) {
+      const singleId = (batches[0]._id?._id || batches[0]._id)?.toString();
+      if (singleId) {
+        if (batchFilter !== singleId) {
+          setBatchFilter(singleId);
+          try {
+            localStorage.setItem('selectedBatchId', singleId);
+            localStorage.setItem('selectedBatchName', batches[0].batchName);
+          } catch (e) {}
+        }
+        if (mockBatchFilter !== singleId) {
+          setMockBatchFilter(singleId);
+        }
+        if (syllabusBatchFilter !== singleId) {
+          setSyllabusBatchFilter(singleId);
+        }
+      }
+    }
+  }, [batches]);
+
   const uniqueMockDrives = useMemo(() => {
     if (!mockDriveScores) return [];
     const map = new Map();
@@ -386,11 +414,11 @@ const Verification = () => {
       );
     }
 
-    if (mockBatchFilter) {
+    if (effectiveMockBatchFilter) {
       list = list.filter(score => {
         const bId = score.studentId?.batchId;
         const bIdStr = bId && bId._id ? bId._id.toString() : bId?.toString();
-        return bIdStr === mockBatchFilter;
+        return bIdStr === effectiveMockBatchFilter;
       });
     }
 
@@ -407,7 +435,7 @@ const Verification = () => {
 
     list.sort((a, b) => (b.percentage || 0) - (a.percentage || 0));
     return list;
-  }, [mockDriveScores, searchTerm, mockBatchFilter, mockDriveFilter, mockStatusFilter]);
+  }, [mockDriveScores, searchTerm, effectiveMockBatchFilter, mockDriveFilter, mockStatusFilter]);
 
   const rankedScores = useMemo(() => {
     let currentRank = 1;
@@ -426,22 +454,22 @@ const Verification = () => {
 
   // Batch Scoped Data & Dynamic Dashboard Calculations (Hooks must run unconditionally)
   const currentBatchObj = useMemo(() => {
-    if (!batchFilter) return null;
-    return batches.find(b => (b._id?._id || b._id)?.toString() === batchFilter.toString()) || null;
-  }, [batches, batchFilter]);
+    if (!effectiveBatchFilter) return null;
+    return batches.find(b => (b._id?._id || b._id)?.toString() === effectiveBatchFilter.toString()) || null;
+  }, [batches, effectiveBatchFilter]);
 
   const scopedStudents = useMemo(() => {
-    if (!batchFilter) return students;
-    return students.filter(s => (s.batchId?._id || s.batchId)?.toString() === batchFilter.toString());
-  }, [students, batchFilter]);
+    if (!effectiveBatchFilter) return students;
+    return students.filter(s => (s.batchId?._id || s.batchId)?.toString() === effectiveBatchFilter.toString());
+  }, [students, effectiveBatchFilter]);
 
   const scopedTasks = useMemo(() => {
-    if (!batchFilter) return tasks;
-    return tasks.filter(t => (t.batchId?._id || t.batchId)?.toString() === batchFilter.toString());
-  }, [tasks, batchFilter]);
+    if (!effectiveBatchFilter) return tasks;
+    return tasks.filter(t => (t.batchId?._id || t.batchId)?.toString() === effectiveBatchFilter.toString());
+  }, [tasks, effectiveBatchFilter]);
 
   const scopedSubmissions = useMemo(() => {
-    if (!batchFilter) return submissions;
+    if (!effectiveBatchFilter) return submissions;
     const sIdSet = new Set(scopedStudents.map(s => s._id?.toString()).filter(Boolean));
     const tIdSet = new Set(scopedTasks.map(t => t._id?.toString()).filter(Boolean));
     return submissions.filter(s => {
@@ -449,34 +477,34 @@ const Verification = () => {
       const tId = (s.taskId?._id || s.taskId)?.toString();
       return (sId && sIdSet.has(sId)) || (tId && tIdSet.has(tId));
     });
-  }, [submissions, batchFilter, scopedStudents, scopedTasks]);
+  }, [submissions, effectiveBatchFilter, scopedStudents, scopedTasks]);
 
   const scopedActiveStudents = useMemo(() => {
-    if (!batchFilter) return activeStudents;
+    if (!effectiveBatchFilter) return activeStudents;
     const sIdSet = new Set(scopedStudents.map(s => s._id?.toString()).filter(Boolean));
     return activeStudents.filter(a => {
       const sId = (a.studentId?._id || a.studentId)?.toString();
       return sId && sIdSet.has(sId);
     });
-  }, [activeStudents, batchFilter, scopedStudents]);
+  }, [activeStudents, effectiveBatchFilter, scopedStudents]);
 
   const scopedMockScores = useMemo(() => {
-    if (!batchFilter) return mockDriveScores;
+    if (!effectiveBatchFilter) return mockDriveScores;
     const sIdSet = new Set(scopedStudents.map(s => s._id?.toString()).filter(Boolean));
     return mockDriveScores.filter(m => {
       const sId = (m.studentId?._id || m.studentId)?.toString();
       return sId && sIdSet.has(sId);
     });
-  }, [mockDriveScores, batchFilter, scopedStudents]);
+  }, [mockDriveScores, effectiveBatchFilter, scopedStudents]);
 
   const scopedTimeline = useMemo(() => {
-    if (!batchFilter) return activityTimeline;
+    if (!effectiveBatchFilter) return activityTimeline;
     const sRollSet = new Set(scopedStudents.map(s => s.rollNumber).filter(Boolean));
     return activityTimeline.filter(e => !e.rollNumber || sRollSet.has(e.rollNumber));
-  }, [activityTimeline, batchFilter, scopedStudents]);
+  }, [activityTimeline, effectiveBatchFilter, scopedStudents]);
 
   const dashboardStats = useMemo(() => {
-    if (!batchFilter) {
+    if (!effectiveBatchFilter) {
       return {
         totalStudents: stats.totalStudents || students.length,
         activeStudents: activeStudents.length,
@@ -535,18 +563,18 @@ const Verification = () => {
       topLeetcodeStreak: topStreak,
       totalLeetcodeSolved: totalLc,
     };
-  }, [batchFilter, stats, students, activeStudents, tasks, submissions, scopedStudents, scopedActiveStudents, scopedTasks, scopedSubmissions, scopedMockScores, currentBatchObj]);
+  }, [effectiveBatchFilter, stats, students, activeStudents, tasks, submissions, scopedStudents, scopedActiveStudents, scopedTasks, scopedSubmissions, scopedMockScores, currentBatchObj]);
 
   // Filtered data helpers
   const filteredStudents = useMemo(() => {
     return students.filter(s => {
       const matchSearch = !searchTerm || (s.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (s.rollNumber || '').toLowerCase().includes(searchTerm.toLowerCase());
       const sBatchId = (s.batchId?._id || s.batchId)?.toString();
-      const matchBatch = !batchFilter || sBatchId === batchFilter;
+      const matchBatch = !effectiveBatchFilter || sBatchId === effectiveBatchFilter;
       const matchStatus = !statusFilter || (statusFilter === 'active' ? s.isActive : !s.isActive);
       return matchSearch && matchBatch && matchStatus;
     });
-  }, [students, searchTerm, batchFilter, statusFilter]);
+  }, [students, searchTerm, effectiveBatchFilter, statusFilter]);
 
   const filteredSubmissions = useMemo(() => {
     return scopedSubmissions.filter(s => {
@@ -768,8 +796,8 @@ const Verification = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
               <input type="text" placeholder="Search student or reason..." className="w-full bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 pl-9 pr-3 focus:outline-none focus:border-indigo-500" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
-            <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)}>
-              <option value="">All Batches</option>
+            <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={effectiveBatchFilter} onChange={(e) => setBatchFilter(e.target.value)}>
+              {batches.length > 1 && <option value="">All Batches</option>}
               {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
             </select>
             <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -885,8 +913,8 @@ const Verification = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
               <input type="text" placeholder="Search student name..." className="w-full bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 pl-9 pr-3 focus:outline-none focus:border-indigo-500" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
-            <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)}>
-              <option value="">All Batches</option>
+            <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={effectiveBatchFilter} onChange={(e) => setBatchFilter(e.target.value)}>
+              {batches.length > 1 && <option value="">All Batches</option>}
               {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
             </select>
             <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -1034,8 +1062,8 @@ const Verification = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
               <input type="text" placeholder="Search student..." className="w-full bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 pl-9 pr-3 focus:outline-none focus:border-indigo-500" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
-            <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={mockBatchFilter} onChange={(e) => setMockBatchFilter(e.target.value)}>
-              <option value="">All Batches</option>
+            <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={effectiveMockBatchFilter} onChange={(e) => setMockBatchFilter(e.target.value)}>
+              {batches.length > 1 && <option value="">All Batches</option>}
               {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
             </select>
             <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={mockDriveFilter} onChange={(e) => setMockDriveFilter(e.target.value)}>
@@ -1218,7 +1246,7 @@ const Verification = () => {
             </div>
             <select 
               className="bg-slate-900 border border-slate-700 text-sm text-white rounded-xl py-2 px-3 focus:outline-none focus:border-indigo-500 shadow-xs cursor-pointer" 
-              value={batchFilter} 
+              value={effectiveBatchFilter} 
               onChange={(e) => {
                 const val = e.target.value;
                 setBatchFilter(val);
@@ -1234,7 +1262,7 @@ const Verification = () => {
                 } catch (err) {}
               }}
             >
-              <option value="">All Batches</option>
+              {batches.length > 1 && <option value="">All Batches</option>}
               {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
             </select>
             <select 
@@ -1439,10 +1467,10 @@ const Verification = () => {
             </div>
             <select 
               className="bg-slate-900 border border-slate-700 text-sm text-white rounded-xl py-2 px-3 focus:outline-none focus:border-indigo-500 shadow-xs cursor-pointer" 
-              value={syllabusBatchFilter} 
+              value={effectiveSyllabusBatchFilter} 
               onChange={(e) => setSyllabusBatchFilter(e.target.value)}
             >
-              <option value="">All Batches</option>
+              {batches.length > 1 && <option value="">All Batches</option>}
               {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
             </select>
             <select 
@@ -1779,8 +1807,8 @@ const Verification = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
                 <input type="text" placeholder="Search..." className="w-full bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 pl-9 pr-3 focus:outline-none focus:border-indigo-500" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
               </div>
-              <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)}>
-                <option value="">All Batches</option>
+              <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={effectiveBatchFilter} onChange={(e) => setBatchFilter(e.target.value)}>
+                {batches.length > 1 && <option value="">All Batches</option>}
                 {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
               </select>
               <select className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -1906,8 +1934,9 @@ const Verification = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {activeStudents.length === 0 ? <p className="col-span-full text-center text-slate-500 py-12">No students currently active.</p> :
               activeStudents.map(log => {
-                const student = students.find(s => log.studentId && s._id === log.studentId._id.toString());
-                const lastSub = submissions.find(s => student && s.studentId && s.studentId._id.toString() === student._id);
+                const logStudentIdStr = (log.studentId?._id || log.studentId)?.toString();
+                const student = students.find(s => s._id?.toString() === logStudentIdStr);
+                const lastSub = submissions.find(s => student && (s.studentId?._id || s.studentId)?.toString() === student._id?.toString());
                 return (
                   <div key={log._id} className="bg-slate-800 border border-emerald-500/30 rounded-2xl p-5 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-bl-[100px]"></div>
@@ -1969,29 +1998,41 @@ const Verification = () => {
       );
 
       // ═══ TASKS ═══════════════════════════════════════════
-      case 'tasks': return (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white">Task Monitoring ({tasks.length})</h2>
-            <select 
-              className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500 font-medium" 
-              value={batchFilter} 
-              onChange={(e) => setBatchFilter(e.target.value)}
-            >
-              <option value="">All Batches</option>
-              {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
-            </select>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {tasks
-              .filter(task => !batchFilter || (task.batchId && (task.batchId._id || task.batchId).toString() === batchFilter))
-              .map(task => {
+      case 'tasks': {
+        const filteredTasks = tasks.filter(task => !effectiveBatchFilter || (task.batchId && (task.batchId._id || task.batchId).toString() === effectiveBatchFilter.toString()));
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">Task Monitoring ({filteredTasks.length})</h2>
+              <select 
+                className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500 font-medium" 
+                value={effectiveBatchFilter} 
+                onChange={(e) => setBatchFilter(e.target.value)}
+              >
+                {batches.length > 1 && <option value="">All Batches</option>}
+                {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
+              </select>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredTasks.map(task => {
+                const taskIdStr = (task._id?._id || task._id)?.toString();
                 const isScheduled = task.scheduledAt && new Date(task.scheduledAt) > new Date();
-                const taskSubs = submissions.filter(s => s.taskId && s.taskId._id === task._id);
+                const taskSubs = submissions.filter(s => {
+                  const sTaskId = (s.taskId?._id || s.taskId)?.toString();
+                  return sTaskId === taskIdStr;
+                });
                 const gradedSubs = taskSubs.filter(s => s.status === 'graded');
-                const batchStudents = students.filter(s => s.batchId && task.batchId && s.batchId.toString() === (task.batchId._id || task.batchId).toString());
-                const completionPct = batchStudents.length > 0 ? Math.round((taskSubs.length / batchStudents.length) * 100) : 0;
+
+                const submissionCount = task.submissionCount !== undefined ? task.submissionCount : taskSubs.length;
+                const gradedCount = task.gradedCount !== undefined ? task.gradedCount : gradedSubs.length;
+
+                const taskBatchId = (task.batchId?._id || task.batchId)?.toString();
+                const batchStudents = students.filter(s => {
+                  const sBatchId = (s.batchId?._id || s.batchId)?.toString();
+                  return sBatchId && taskBatchId && sBatchId === taskBatchId;
+                });
+                const completionPct = batchStudents.length > 0 ? Math.round((submissionCount / batchStudents.length) * 100) : 0;
                 
                 return (
                   <div key={task._id} className={`border rounded-2xl p-5 flex flex-col justify-between min-h-[190px] ${isScheduled ? 'border-amber-500/50 bg-amber-950/5' : 'bg-slate-800 border-slate-700'}`}>
@@ -2010,8 +2051,8 @@ const Verification = () => {
                       </div>
 
                       <div className="grid grid-cols-3 gap-2 mb-3">
-                        <div className="bg-slate-900 p-2 rounded text-center"><p className="text-sm font-black text-white">{taskSubs.length}</p><p className="text-[9px] text-slate-500">Submitted</p></div>
-                        <div className="bg-slate-900 p-2 rounded text-center"><p className="text-sm font-black text-emerald-400">{gradedSubs.length}</p><p className="text-[9px] text-slate-500">Graded</p></div>
+                        <div className="bg-slate-900 p-2 rounded text-center"><p className="text-sm font-black text-white">{submissionCount}</p><p className="text-[9px] text-slate-500">Submitted</p></div>
+                        <div className="bg-slate-900 p-2 rounded text-center"><p className="text-sm font-black text-emerald-400">{gradedCount}</p><p className="text-[9px] text-slate-500">Graded</p></div>
                         <div className="bg-slate-900 p-2 rounded text-center"><p className="text-sm font-black text-amber-400">{completionPct}%</p><p className="text-[9px] text-slate-500">Complete</p></div>
                       </div>
                     </div>
@@ -2028,9 +2069,10 @@ const Verification = () => {
                   </div>
                 );
               })}
+            </div>
           </div>
-        </div>
-      );
+        );
+      }
 
       // ═══ LEETCODE ════════════════════════════════════════
       case 'leetcode': return (
@@ -2039,10 +2081,10 @@ const Verification = () => {
             <h2 className="text-lg font-bold text-white">LeetCode Challenges Monitoring ({leetcodeProblems ? leetcodeProblems.length : 0})</h2>
             <select 
               className="bg-slate-800 border border-slate-700 text-sm text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500 font-medium" 
-              value={batchFilter} 
+              value={effectiveBatchFilter} 
               onChange={(e) => setBatchFilter(e.target.value)}
             >
-              <option value="">All Batches</option>
+              {batches.length > 1 && <option value="">All Batches</option>}
               {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
             </select>
           </div>
@@ -2384,7 +2426,7 @@ const Verification = () => {
           <div className="flex items-center gap-2">
             {/* Global Batch Scope Switcher */}
             <select
-              value={batchFilter}
+              value={effectiveBatchFilter}
               onChange={(e) => {
                 const val = e.target.value;
                 setBatchFilter(val);
@@ -2402,7 +2444,7 @@ const Verification = () => {
               className="bg-slate-800 border border-slate-700 text-xs font-bold text-white rounded-xl py-1.5 px-2.5 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-xs max-w-[140px] sm:max-w-[200px] truncate"
               title="Active Batch Scope"
             >
-              <option value="">Scope: All Batches</option>
+              {batches.length > 1 && <option value="">Scope: All Batches</option>}
               {batches.map(b => (
                 <option key={b._id} value={b._id}>Scope: {b.batchName}</option>
               ))}
