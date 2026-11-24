@@ -3,18 +3,28 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import { 
   FileText, Plus, Edit, Trash2, Search, RefreshCw, X, ExternalLink, Link2, 
-  Layers, User, Calendar, BookOpen, UploadCloud, File, Folder, Tag, CheckCircle2
+  Layers, User, Calendar, BookOpen, UploadCloud, File, Folder, Tag, CheckCircle2, Copy, Check
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
 
 const NotesManagement = () => {
-  const { user, selectedBatchId, batchesList } = useAuth();
+  const { user } = useAuth();
+  const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
   const [notes, setNotes] = useState([]);
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   
+  const [copiedId, setCopiedId] = useState(null);
+  const handleCopy = (note) => {
+    if (!note.url) return;
+    navigator.clipboard.writeText(note.url);
+    setCopiedId(note._id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
   // Modal states
   const [modalOpen, setModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
@@ -35,8 +45,9 @@ const NotesManagement = () => {
   const fetchNotesAndBatches = async () => {
     try {
       setLoading(true);
+      const queryParam = (selectedBatchId && selectedBatchId !== 'all') ? `?batchId=${selectedBatchId}` : '';
       const [notesRes, batchesRes] = await Promise.all([
-        axios.get('/notes'),
+        axios.get(`/notes${queryParam}`),
         axios.get('/batches')
       ]);
       setNotes(notesRes.data);
@@ -50,7 +61,7 @@ const NotesManagement = () => {
 
   useEffect(() => {
     fetchNotesAndBatches();
-  }, []);
+  }, [selectedBatchId]);
 
   // Filter notes based on global selectedBatchId & search & category
   const filteredNotes = notes.filter(note => {
@@ -296,68 +307,78 @@ const NotesManagement = () => {
           {filteredNotes.map(note => {
             const resType = getResourceType(note.url);
 
+            const isCopied = copiedId === note._id;
+
             return (
               <div 
                 key={note._id} 
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between shadow-xl transition-all duration-300 hover:border-emerald-500/40 group"
+                className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 p-6 rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden text-left"
               >
                 <div>
                   {/* Top Badges */}
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-lg flex items-center gap-1">
+                  <div className="flex justify-between items-center gap-2 mb-4">
+                    <span className="text-[10px] font-black uppercase px-2.5 py-1 bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl flex items-center gap-1.5 shrink-0">
                       <Layers size={11} className="text-emerald-500" /> {note.batchId ? (note.batchId.batchName || note.batchId.name) : '🌐 Global Notes'}
                     </span>
-                    <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border ${resType.color}`}>
+                    <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-xl border ${resType.color} shrink-0`}>
                       {resType.name}
                     </span>
                   </div>
 
                   {/* Main Content Area */}
                   <div className="flex items-start gap-3.5 mb-4">
-                    <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
-                      <FileText size={22} />
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 shadow-xs">
+                      <FileText size={24} className="stroke-[2.2]" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="font-bold text-slate-800 dark:text-white text-base leading-snug group-hover:text-emerald-500 transition-colors truncate">
+                      <h3 className="font-black text-slate-900 dark:text-white text-base leading-snug group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-2">
                         {note.title}
                       </h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed line-clamp-2 min-h-[2.5rem]">
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed line-clamp-2 min-h-[2.4rem] font-medium">
                         {note.description || 'No description or details provided.'}
                       </p>
                     </div>
                   </div>
 
                   {/* Details Footer */}
-                  <div className="space-y-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <div className="space-y-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 pt-3 border-t border-slate-100 dark:border-slate-800/80">
                     <div className="flex justify-between items-center">
-                      <span className="flex items-center gap-1"><User size={12} className="text-slate-400" /> By: <strong className="text-slate-700 dark:text-slate-300">{note.uploadedBy?.name || 'Admin'}</strong></span>
-                      <span className="flex items-center gap-1"><Calendar size={12} className="text-slate-400" /> {formatDate(note.createdAt)}</span>
+                      <span className="flex items-center gap-1.5"><User size={13} className="text-slate-400" /> By: <strong className="text-slate-800 dark:text-slate-200">{note.uploadedBy?.name || 'Admin'}</strong></span>
+                      <span className="flex items-center gap-1 text-[10px] text-slate-400"><Calendar size={12} /> {formatDate(note.createdAt)}</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="flex items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-800 mt-4">
+                <div className="flex items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-800/80 mt-5">
                   <a 
                     href={note.url} 
                     target="_blank" 
                     rel="noopener noreferrer" 
-                    className="px-3.5 py-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="flex-1 py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-600/20 active:scale-95"
                   >
-                    <ExternalLink size={13} /> View Material
+                    <ExternalLink size={13} /> Open
                   </a>
                   <button 
-                    onClick={() => openEditModal(note)}
-                    className="flex-1 py-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-600 hover:text-white border border-indigo-500/20 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                    onClick={() => handleCopy(note)}
+                    className="p-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    title={isCopied ? "Copied!" : "Copy Link"}
                   >
-                    <Edit size={13} /> Edit
+                    {isCopied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                  </button>
+                  <button 
+                    onClick={() => openEditModal(note)}
+                    className="p-2.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-600 hover:text-white border border-indigo-500/20 rounded-xl text-xs font-bold transition-all flex items-center justify-center cursor-pointer"
+                    title="Edit Note"
+                  >
+                    <Edit size={14} />
                   </button>
                   <button 
                     onClick={() => handleDelete(note)}
-                    className="p-2 bg-rose-500/10 text-rose-500 hover:bg-rose-600 hover:text-white border border-rose-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                    className="p-2.5 bg-rose-500/10 text-rose-500 hover:bg-rose-600 hover:text-white border border-rose-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer"
                     title="Delete Note"
                   >
-                    <Trash2 size={13} />
+                    <Trash2 size={14} />
                   </button>
                 </div>
               </div>

@@ -4,11 +4,15 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import { UserCheck, Plus, Search, Edit2, Trash2, Mail, Phone, BookOpen, Shield, MessageSquare, X, Eye } from 'lucide-react';
 
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
+
 export default function MentorManagement() {
   const navigate = useNavigate();
+  const { selectedBatchId, selectedBatchName } = useGlobalBatch();
   const [mentors, setMentors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterBatchOnly, setFilterBatchOnly] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingMentor, setEditingMentor] = useState(null);
   const [viewingMentor, setViewingMentor] = useState(null);
@@ -23,7 +27,8 @@ export default function MentorManagement() {
   const fetchMentors = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.get('/mentors');
+      const queryParam = (filterBatchOnly && selectedBatchId && selectedBatchId !== 'all') ? `?batchId=${selectedBatchId}` : '';
+      const { data } = await axios.get(`/mentors${queryParam}`);
       setMentors(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching mentors:', error);
@@ -35,7 +40,7 @@ export default function MentorManagement() {
 
   useEffect(() => {
     fetchMentors();
-  }, []);
+  }, [selectedBatchId, filterBatchOnly]);
 
   const handleOpenModal = (mentor = null) => {
     if (mentor) {
@@ -119,26 +124,45 @@ export default function MentorManagement() {
             <p className="text-slate-600 dark:text-slate-400 text-xs font-medium mt-0.5">Create, inspect profiles, and assign mentor accounts for batch access control</p>
           </div>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:to-pink-600 text-white font-extrabold rounded-2xl shadow-lg shadow-indigo-500/25 transition-all transform hover:scale-105 cursor-pointer text-xs uppercase tracking-wider"
-        >
-          <Plus size={18} />
-          Add New Mentor
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="px-3.5 py-2 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 whitespace-nowrap shadow-xs">
+            <span>Scope:</span>
+            <span className="text-slate-800 dark:text-white font-extrabold">{selectedBatchName || 'Active Batch'}</span>
+          </div>
+
+          <button
+            onClick={() => handleOpenModal()}
+            className="flex items-center justify-center gap-2 px-5 py-3 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:to-pink-600 text-white font-extrabold rounded-2xl shadow-lg shadow-indigo-500/25 transition-all transform hover:scale-105 cursor-pointer text-xs uppercase tracking-wider"
+          >
+            <Plus size={18} />
+            Add New Mentor
+          </button>
+        </div>
       </div>
 
       {/* Search & Stats */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="relative w-full sm:w-80">
-          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search mentors by name or email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-medium shadow-sm"
-          />
+        <div className="flex items-center gap-3 w-full sm:w-auto flex-1">
+          <div className="relative w-full sm:w-80">
+            <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search mentors by name or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-medium shadow-sm"
+            />
+          </div>
+          <button
+            onClick={() => setFilterBatchOnly(!filterBatchOnly)}
+            className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer border whitespace-nowrap ${
+              filterBatchOnly
+                ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:border-indigo-400'
+            }`}
+          >
+            {filterBatchOnly ? `Active Scope (${selectedBatchName || 'Batch'})` : 'Show All Mentors'}
+          </button>
         </div>
         <div className="text-xs font-bold text-slate-600 dark:text-slate-400 bg-white/80 dark:bg-slate-900/80 px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
           Total Mentors: <span className="font-black text-indigo-600 dark:text-indigo-400">{mentors.length}</span>

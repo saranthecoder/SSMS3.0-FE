@@ -5,7 +5,8 @@ import Swal from 'sweetalert2';
 import { useAuth } from '../../context/AuthContext';
 import Loader from '../../components/Loader';
 import { 
-  User as UserIcon, Mail, Phone, GitBranch, Briefcase, Globe, Save, Loader2, Code, Terminal, Eye, EyeOff, Camera 
+  User as UserIcon, Mail, Phone, GitBranch, Briefcase, Globe, Save, Loader2, Code, Terminal, Eye, EyeOff, Camera,
+  ShieldCheck, ShieldAlert, Clock, Ban, AlertTriangle, CheckCircle2
 } from 'lucide-react';
 
 import ImageCropModal from '../../components/ImageCropModal';
@@ -39,6 +40,7 @@ const UserProfile = () => {
   const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [gamificationData, setGamificationData] = useState(null);
+  const [accessLogs, setAccessLogs] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState(null);
 
@@ -58,9 +60,10 @@ const UserProfile = () => {
   useEffect(() => {
     const fetchProfileAndStatus = async () => {
       try {
-        const [profileRes, gamificationRes] = await Promise.all([
+        const [profileRes, gamificationRes, accessLogsRes] = await Promise.all([
           axios.get('/auth/profile'),
-          axios.get('/gamification/status')
+          axios.get('/gamification/status'),
+          axios.get('/auth/student-access-logs').catch(() => ({ data: [] }))
         ]);
         const data = profileRes.data;
         setFormData({
@@ -76,6 +79,7 @@ const UserProfile = () => {
           confirmPassword: '',
         });
         setGamificationData(gamificationRes.data);
+        setAccessLogs(Array.isArray(accessLogsRes.data) ? accessLogsRes.data : []);
       } catch (error) {
         console.error('Error fetching profile or status:', error);
         Swal.fire('Error', 'Failed to load profile data', 'error');
@@ -512,6 +516,107 @@ const UserProfile = () => {
         </div>
 
       </form>
+
+      {/* Disciplinary & Account Standing Records Section */}
+      <div className="glass-panel p-6 md:p-8 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 dark:border-white/10 pb-4">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <ShieldCheck className="text-emerald-500" size={22} />
+              Account Standing & Disciplinary Records
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Official institutional record of account privileges, suspensions, and access restorations
+            </p>
+          </div>
+          <span className="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+            {accessLogs.length === 0 ? 'Clear Record' : `${accessLogs.length} Event${accessLogs.length > 1 ? 's' : ''} Logged`}
+          </span>
+        </div>
+
+        {accessLogs.length === 0 ? (
+          <div className="py-8 px-4 text-center rounded-2xl bg-emerald-500/5 border border-emerald-500/10 flex flex-col items-center justify-center space-y-2">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <CheckCircle2 size={26} />
+            </div>
+            <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
+              Good Standing — No Disciplinary Restrictions
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md">
+              Your student profile has zero access penalties, holds, or suspensions on record. You maintain full panel access across all assigned modules.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-100/60 dark:bg-white/5 text-slate-600 dark:text-slate-400 text-xs uppercase font-semibold">
+                <tr>
+                  <th className="py-3 px-4 rounded-l-xl">Date & Time</th>
+                  <th className="py-3 px-4">Action</th>
+                  <th className="py-3 px-4">Reason / Notes</th>
+                  <th className="py-3 px-4">Duration / Expiry</th>
+                  <th className="py-3 px-4">Issued By</th>
+                  <th className="py-3 px-4 rounded-r-xl">Batch</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                {accessLogs.map((log) => {
+                  const isBlock = log.action === 'block';
+                  const isSuspend = log.action === 'suspend';
+                  const isRestore = log.action === 'restore';
+
+                  return (
+                    <tr key={log._id} className="hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition-colors">
+                      <td className="py-3.5 px-4 font-mono text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {new Date(log.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {isBlock && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30">
+                            <Ban size={12} /> Blocked
+                          </span>
+                        )}
+                        {isSuspend && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                            <Clock size={12} /> Suspended
+                          </span>
+                        )}
+                        {isRestore && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                            <CheckCircle2 size={12} /> Restored
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 max-w-xs truncate">
+                        {log.reason || 'No specific reason stated'}
+                      </td>
+                      <td className="py-3.5 px-4 text-xs text-slate-600 dark:text-slate-400">
+                        {isSuspend ? (
+                          log.suspendedUntil ? (
+                            <span>Until {new Date(log.suspendedUntil).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} ({log.durationHours || '?'}h)</span>
+                          ) : (
+                            <span>{log.durationHours ? `${log.durationHours} hours` : 'Temporary'}</span>
+                          )
+                        ) : isBlock ? (
+                          <span className="text-red-500 dark:text-red-400 font-semibold">Permanent Hold</span>
+                        ) : (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Access Active</span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-xs font-medium text-slate-700 dark:text-slate-300">
+                        {log.performedByName} <span className="text-[10px] uppercase font-bold text-slate-400">({log.performedByRole})</span>
+                      </td>
+                      <td className="py-3.5 px-4 text-xs text-slate-500 dark:text-slate-400">
+                        {log.batchName || 'General'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {cropImageSrc && (
         <ImageCropModal 

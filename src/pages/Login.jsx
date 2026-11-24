@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Swal from 'sweetalert2';
 import { Mail, User, Lock, AlertCircle, ArrowRight, Sparkles, Code2, Layers, BookOpen } from 'lucide-react';
 
 const Login = () => {
@@ -18,14 +19,53 @@ const Login = () => {
 
     try {
       const user = await login(email, password);
-      if (user.role === 'admin') {
-        navigate('/'); // Admin dashboard
+      if (user.role === 'admin' || user.role === 'mentor') {
+        navigate('/'); // Admin or Mentor dashboard
       } else {
         navigate('/student'); // Student dashboard
       }
     } catch (err) {
       console.error("Login Error Details:", err);
-      setError(err.response?.data?.message || err.message || 'Failed to login');
+      const data = err.response?.data;
+      if (data?.isBlocked) {
+        Swal.fire({
+          icon: 'error',
+          title: '⛔ Panel Access Blocked',
+          html: `
+            <div class="text-left text-sm space-y-2.5">
+              <p class="text-slate-700 dark:text-slate-300">Your access to the student panel has been <strong>blocked</strong> by a mentor or administrator.</p>
+              ${data.blockReason ? `
+                <div class="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-600 dark:text-red-400 font-medium">
+                  <strong>Reason:</strong> ${data.blockReason}
+                </div>
+              ` : ''}
+              <p class="text-xs text-slate-500">Please contact your assigned batch mentor to appeal or resolve this restriction.</p>
+            </div>
+          `,
+          confirmButtonColor: '#ef4444',
+          confirmButtonText: 'Understood'
+        });
+      } else if (data?.isSuspended && data.suspendedUntil) {
+        const untilStr = new Date(data.suspendedUntil).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+        Swal.fire({
+          icon: 'warning',
+          title: '⏳ Account Temporarily Suspended',
+          html: `
+            <div class="text-left text-sm space-y-2.5">
+              <p class="text-slate-700 dark:text-slate-300">You are temporarily suspended from accessing the student panel.</p>
+              <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1">
+                <p class="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Suspension Lifts At:</p>
+                <p class="text-xs font-mono font-black text-amber-900 dark:text-amber-200">${untilStr}</p>
+                ${data.suspensionReason ? `<p class="text-xs text-slate-600 dark:text-slate-300 pt-1"><strong>Reason:</strong> ${data.suspensionReason}</p>` : ''}
+              </div>
+              <p class="text-xs text-slate-500">Your access will automatically be restored when this suspension period ends.</p>
+            </div>
+          `,
+          confirmButtonColor: '#f59e0b',
+          confirmButtonText: 'I Understand'
+        });
+      }
+      setError(data?.message || err.message || 'Failed to login');
     } finally {
       setLoading(false);
     }

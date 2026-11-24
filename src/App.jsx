@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { GlobalBatchProvider } from './context/GlobalBatchContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Loader from './components/Loader';
 
@@ -34,6 +35,9 @@ const ActivityLogs = lazy(() => import('./pages/admin/ActivityLogs'));
 const GamificationManagement = lazy(() => import('./pages/admin/GamificationManagement'));
 const NotesManagement = lazy(() => import('./pages/admin/NotesManagement'));
 const MentorManagement = lazy(() => import('./pages/admin/MentorManagement'));
+const PortalDirectory = lazy(() => import('./pages/admin/PortalDirectory'));
+const AccessDisciplinaryRecords = lazy(() => import('./pages/admin/AccessDisciplinaryRecords'));
+const SyllabusTracker = lazy(() => import('./pages/SyllabusTracker'));
 
 // Student Pages
 const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'));
@@ -49,12 +53,14 @@ const StudentLeetcode = lazy(() => import('./pages/student/StudentLeetcode'));
 const LeaveApplication = lazy(() => import('./pages/student/LeaveApplication'));
 const GamificationShop = lazy(() => import('./pages/student/GamificationShop'));
 const StudentNotes = lazy(() => import('./pages/student/StudentNotes'));
+const StudentConnections = lazy(() => import('./pages/student/StudentConnections'));
 
 function App() {
   return (
     <Router>
       <AuthProvider>
-        <Suspense fallback={<Loader />}>
+        <GlobalBatchProvider>
+          <Suspense fallback={<Loader />}>
           <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Login />} />
@@ -65,6 +71,9 @@ function App() {
             {/* Admin & Mentor Routes */}
             <Route index element={
               <ProtectedRoute allowedRoles={['admin', 'mentor']}><AdminDashboard /></ProtectedRoute>
+            } />
+            <Route path="portals" element={
+              <ProtectedRoute allowedRoles={['admin']}><PortalDirectory /></ProtectedRoute>
             } />
             <Route path="mentors" element={
               <ProtectedRoute allowedRoles={['admin']}><MentorManagement /></ProtectedRoute>
@@ -124,6 +133,12 @@ function App() {
             <Route path="activity-logs" element={
               <ProtectedRoute allowedRoles={['admin', 'mentor']}><ActivityLogs /></ProtectedRoute>
             } />
+            <Route path="access-logs" element={
+              <ProtectedRoute allowedRoles={['admin', 'mentor']}><AccessDisciplinaryRecords /></ProtectedRoute>
+            } />
+            <Route path="syllabus-tracker" element={
+              <ProtectedRoute allowedRoles={['admin', 'mentor']}><SyllabusTracker /></ProtectedRoute>
+            } />
             <Route path="admin/gamification" element={
               <ProtectedRoute allowedRoles={['admin']}><GamificationManagement /></ProtectedRoute>
             } />
@@ -150,6 +165,9 @@ function App() {
             <Route path="student/chat" element={
               <ProtectedRoute allowedRoles={['student', 'admin', 'mentor']}><BatchChat /></ProtectedRoute>
             } />
+            <Route path="student/connections" element={
+              <ProtectedRoute allowedRoles={['student']}><StudentConnections /></ProtectedRoute>
+            } />
             <Route path="student/grades" element={
               <ProtectedRoute allowedRoles={['student']}><MyGrades /></ProtectedRoute>
             } />
@@ -175,12 +193,19 @@ function App() {
             <Route path="student/notes" element={
               <ProtectedRoute allowedRoles={['student']}><StudentNotes /></ProtectedRoute>
             } />
+            <Route path="student/syllabus" element={
+              <ProtectedRoute allowedRoles={['student', 'admin', 'mentor']}><SyllabusTracker /></ProtectedRoute>
+            } />
+            <Route path="student/disciplinary" element={
+              <ProtectedRoute allowedRoles={['student', 'admin', 'mentor']}><AccessDisciplinaryRecords /></ProtectedRoute>
+            } />
             <Route path="*" element={<div className="p-8"><h1 className="text-2xl">Page Under Construction</h1></div>} />
           </Route>
           
           <Route path="/student/attenence" element={<FacultyAttendance />} />
         </Routes>
         </Suspense>
+        </GlobalBatchProvider>
       </AuthProvider>
     </Router>
   );

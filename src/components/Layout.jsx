@@ -5,12 +5,16 @@ import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard, Users, BookOpen, FileText, CheckCircle,
   LogOut, Menu, X, User as UserIcon, Sun, Moon, Clock, Gamepad2, MessageCircle, Bell, Code, Trophy, Calendar, Monitor,
-  Briefcase, ChevronDown, ChevronRight, Palette, Network, ShieldCheck, Activity, Sparkles, Lock, UserCheck
+  Briefcase, ChevronDown, ChevronRight, Palette, Network, ShieldCheck, ShieldAlert, Activity, Sparkles, Lock, UserCheck, ArrowLeftRight,
+  AlertTriangle, Share2, Building2
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import Swal from 'sweetalert2';
 import { soundManager } from '../utils/soundManager';
 import Loader from './Loader';
+import { useGlobalBatch } from '../context/GlobalBatchContext';
+import BatchSelectionModal from './BatchSelectionModal';
+import StudentMobileBlocker from './StudentMobileBlocker';
 
 const getBorderPreviewClass = (value) => {
   const map = {
@@ -102,10 +106,22 @@ const getNamecolorClass = (value) => {
 };
 
 const Layout = () => {
-  const { user, logout, socket, selectedBatchId, setSelectedBatchId, batchesList, customPanelName: authPanelName, customPanelSubheading: authPanelSubheading } = useAuth();
-  const activeBatch = batchesList.find(b => b._id === selectedBatchId) || batchesList[0];
-  const customPanelName = user?.role === 'admin' ? 'SRAC 3.0' : (authPanelName || activeBatch?.panelName?.trim() || '');
-  const customPanelSubheading = user?.role === 'admin' ? 'SR Admin Console & Maintainance System' : (authPanelSubheading || activeBatch?.panelSubheading?.trim() || '');
+  const { user, logout, socket, customPanelName: authPanelName, customPanelSubheading: authPanelSubheading } = useAuth();
+  const { selectedBatchId, selectedBatchName, selectedBatch, batchesList, openBatchModal, isBatchClosed: contextIsBatchClosed } = useGlobalBatch();
+  const activeBatch = selectedBatch || batchesList.find(b => b._id === selectedBatchId) || batchesList[0];
+  const isBatchClosed = contextIsBatchClosed || (activeBatch 
+    ? ((activeBatch.status || '').toLowerCase() === 'completed' || (activeBatch.endDate && new Date(activeBatch.endDate) <= new Date()))
+    : false);
+  const customPanelName = user?.role === 'admin' 
+    ? 'SRAC 2.0' 
+    : user?.role === 'mentor'
+    ? 'SSMS - Saran Students Management System'
+    : (authPanelName || activeBatch?.panelName?.trim() || 'SSMS 2.0');
+  const customPanelSubheading = user?.role === 'admin' 
+    ? 'SR Admin Console & Maintenance System' 
+    : user?.role === 'mentor'
+    ? 'Saran Students Management System'
+    : (authPanelSubheading || activeBatch?.panelSubheading?.trim() || '');
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -631,6 +647,10 @@ const Layout = () => {
   }, [gamificationData?.currentTheme, user?.currentTheme]);
 
   useEffect(() => {
+    if (user?.role === 'mentor') {
+      document.title = 'SSMS - Saran Students Management System';
+      return;
+    }
     if (customPanelName && customPanelSubheading) {
       document.title = `${customPanelName} (${customPanelSubheading})`;
     } else if (customPanelName) {
@@ -638,7 +658,7 @@ const Layout = () => {
     } else {
       document.title = 'SSMS (Saran Students Management System)';
     }
-  }, [customPanelName, customPanelSubheading]);
+  }, [user?.role, customPanelName, customPanelSubheading]);
 
   useEffect(() => {
     localStorage.setItem('sessionActive', sessionActive ? 'true' : 'false');
@@ -657,6 +677,7 @@ const Layout = () => {
   // Notification count state
   const [pendingCount, setPendingCount] = useState(0);
   const [chatCount, setChatCount] = useState(0);
+  const [friendRequestsCount, setFriendRequestsCount] = useState(0);
   const [leavesCount, setLeavesCount] = useState(0);
   const [joinsCount, setJoinsCount] = useState(0);
   const [onlineStudentsCount, setOnlineStudentsCount] = useState(0);
@@ -668,10 +689,36 @@ const Layout = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef(null);
 
+  // User-scoped storage key for notifications
+  const getClearedNotifsKey = useCallback(() => {
+    return user?._id ? `clearedNotifs_${user._id}` : 'clearedNotifs_guest';
+  }, [user?._id]);
+
+  const getPersistedClearedNotifs = useCallback(() => {
+    try {
+      const key = user?._id ? `clearedNotifs_${user._id}` : 'clearedNotifs_guest';
+      return JSON.parse(localStorage.getItem(key)) || [];
+    } catch {
+      return [];
+    }
+  }, [user?._id]);
+
   // Persisted cleared notifications
   const [clearedNotifs, setClearedNotifs] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('clearedNotifs')) || []; } catch { return []; }
+    try {
+      const key = typeof window !== 'undefined' && localStorage.getItem('user') 
+        ? `clearedNotifs_${JSON.parse(localStorage.getItem('user'))?._id}` 
+        : 'clearedNotifs_guest';
+      return JSON.parse(localStorage.getItem(key)) || [];
+    } catch {
+      return [];
+    }
   });
+
+  // Sync state when user changes
+  useEffect(() => {
+    setClearedNotifs(getPersistedClearedNotifs());
+  }, [getPersistedClearedNotifs]);
 
   // Track seen badge counts to hide red dots permanently until new updates arrive
   const [seenCounts, setSeenCounts] = useState(() => {
@@ -695,7 +742,8 @@ const Layout = () => {
       }
     };
     if (location.pathname.startsWith('/student/tasks')) updateSeen('tasks', pendingCount);
-    if (location.pathname.startsWith('/student/chat')) updateSeen('chats', chatCount);
+    if (location.pathname.startsWith('/student/chat') || location.pathname.startsWith('/chat')) updateSeen('chats', chatCount);
+    if (location.pathname.startsWith('/student/connections')) updateSeen('connections', friendRequestsCount);
     if (location.pathname.startsWith('/reviews')) updateSeen('reviews', pendingCount);
     if (location.pathname.startsWith('/enrollments')) updateSeen('joins', joinsCount);
     if (location.pathname.startsWith('/leaves')) updateSeen('leaves', leavesCount);
@@ -931,7 +979,9 @@ const Layout = () => {
       const { data: onlineData } = await axios.get(`/attendance/active-count${batchParam}`);
       setOnlineStudentsCount(onlineData.activeCount || 0);
 
-      if (user?.role === 'admin') {
+      const currentCleared = getPersistedClearedNotifs();
+
+      if (user?.role === 'admin' || user?.role === 'mentor') {
         const [dashboardRes, gamificationRes] = await Promise.all([
           axios.get('/analytics/dashboard'),
           axios.get('/gamification/status').catch(e => ({ data: {} }))
@@ -942,8 +992,15 @@ const Layout = () => {
         setPendingCount(data.pendingReviews || 0);
         setLeavesCount(data.pendingLeavesCount || 0);
         setJoinsCount(data.joinRequestsCount || 0);
+        setChatCount(data.recentChats || 0);
 
-        const newNotifs = (data.notifications || []).filter(n => !clearedNotifs.includes(n.id));
+        const seenIds = new Set();
+        const newNotifs = (data.notifications || []).filter(n => {
+          if (!n || !n.id || seenIds.has(n.id) || currentCleared.includes(n.id)) return false;
+          seenIds.add(n.id);
+          return true;
+        });
+
         if (newNotifs.length > notifLengthRef.current && notifLengthRef.current > 0) {
           soundManager.playNotification();
         }
@@ -951,19 +1008,28 @@ const Layout = () => {
         setUserCoins(gamification.coins || 0);
         setGamificationData(gamification);
       } else if (user?.role === 'student') {
-        const [analyticsRes, gamificationRes] = await Promise.all([
+        const [analyticsRes, gamificationRes, friendsRes] = await Promise.all([
           axios.get(`/analytics/student/${user._id}?mini=true`),
-          axios.get('/gamification/status')
+          axios.get('/gamification/status'),
+          axios.get('/gamification/friends').catch(() => ({ data: { pendingIncoming: [] } }))
         ]);
         const data = analyticsRes.data;
         const gamification = gamificationRes.data;
+        const friendsData = friendsRes.data;
         
         setPendingCount(data.pendingTasks || 0);
         setChatCount(data.recentChats || 0);
+        setFriendRequestsCount(friendsData?.pendingIncoming?.length || 0);
         setUserCoins(gamification.coins || 0);
         setGamificationData(gamification);
 
-        const newNotifs = (data.notifications || []).filter(n => !clearedNotifs.includes(n.id));
+        const seenIds = new Set();
+        const newNotifs = (data.notifications || []).filter(n => {
+          if (!n || !n.id || seenIds.has(n.id) || currentCleared.includes(n.id)) return false;
+          seenIds.add(n.id);
+          return true;
+        });
+
         if (newNotifs.length > notifLengthRef.current && notifLengthRef.current > 0) {
           soundManager.playNotification();
         }
@@ -972,7 +1038,7 @@ const Layout = () => {
     } catch (e) {
       console.error('Failed to fetch counts');
     }
-  }, [user, selectedBatchId]);
+  }, [user, selectedBatchId, getPersistedClearedNotifs]);
 
   useEffect(() => {
     if (user) {
@@ -1008,7 +1074,7 @@ const Layout = () => {
     }
   }, [user, fetchCounts, syncAttendanceSession]); // Re-fetch or clear if user changes
 
-  // Listen for real-time administrator force-checkout events
+  // Listen for real-time administrator force-checkout and access restriction events
   useEffect(() => {
     if (socket && user?.role === 'student') {
       const handleForceCheckout = (data) => {
@@ -1024,46 +1090,168 @@ const Layout = () => {
         Swal.fire({
           icon: 'warning',
           title: 'Session Checked Out',
-          text: 'Your active attendance session has been ended by the administrator.',
+          text: data?.reason ? `Your session was ended: ${data.reason}` : 'Your active attendance session has been ended by the mentor/administrator.',
           confirmButtonColor: '#f97316'
         });
       };
 
+      const handleAccessRestricted = (data) => {
+        setSessionActive(false);
+        setAttendanceId(null);
+        attendanceIdRef.current = null;
+        localStorage.removeItem('sessionActive');
+        if (timerIntervalRef.current) {
+          clearInterval(timerIntervalRef.current);
+          timerIntervalRef.current = null;
+        }
+
+        const isSuspension = data.action === 'suspend';
+        const untilStr = data.suspendedUntil ? new Date(data.suspendedUntil).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+
+        Swal.fire({
+          icon: isSuspension ? 'warning' : 'error',
+          title: isSuspension ? '⏳ Panel Access Suspended' : '⛔ Panel Access Blocked',
+          html: `
+            <div class="text-left text-sm space-y-2.5">
+              <p class="text-slate-700 dark:text-slate-300">Your access to the student management panel has been <strong>${isSuspension ? 'temporarily suspended' : 'blocked'}</strong> by your ${data.by || 'mentor'}.</p>
+              ${isSuspension && untilStr ? `
+                <div class="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-1">
+                  <p class="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400">Suspension Lifts At:</p>
+                  <p class="text-xs font-mono font-black text-amber-900 dark:text-amber-200">${untilStr}</p>
+                </div>
+              ` : ''}
+              ${data.reason ? `
+                <div class="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-600 dark:text-red-400 font-medium">
+                  <strong>Reason:</strong> ${data.reason}
+                </div>
+              ` : ''}
+              <p class="text-xs text-slate-500">You will be logged out of the session now.</p>
+            </div>
+          `,
+          confirmButtonColor: isSuspension ? '#f59e0b' : '#ef4444',
+          confirmButtonText: 'Log Out',
+          allowOutsideClick: false,
+          allowEscapeKey: false
+        }).then(() => {
+          logout();
+          navigate('/login');
+        });
+      };
+
+      const handleAccessRestored = (data) => {
+        Swal.fire({
+          icon: 'success',
+          title: '✅ Access Restored',
+          text: data?.message || 'Your student panel access has been restored!',
+          confirmButtonColor: '#10b981'
+        });
+      };
+
       socket.on('force-checkout', handleForceCheckout);
+      socket.on('account-access-restricted', handleAccessRestricted);
+      socket.on('account-access-restored', handleAccessRestored);
 
       return () => {
         socket.off('force-checkout', handleForceCheckout);
+        socket.off('account-access-restricted', handleAccessRestricted);
+        socket.off('account-access-restored', handleAccessRestored);
       };
     }
-  }, [socket, user]);
+  }, [socket, user, logout, navigate]);
 
-  // Real-time Messaging & Announcement Notifications
+  // Real-time Messaging, Announcements & Social Notifications (WhatsApp-style)
   useEffect(() => {
     if (!socket || !user) return;
 
+    const chatPath = user.role === 'student' ? '/student/chat' : '/chat';
+
+    const showGlossyChatNotification = ({ typeLabel, title, subtitle, text, iconLetter = '💬', gradient = 'linear-gradient(135deg, #6366f1, #d946ef)' }) => {
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: true,
+        confirmButtonText: 'Reply 💬',
+        showCloseButton: true,
+        timer: false, // Remains held on screen indefinitely until user clicks the 'X' close button or 'Reply'
+        customClass: {
+          popup: 'glossy-chat-toast'
+        },
+        html: `
+          <div style="text-align: left; padding-right: 1.5rem; user-select: none; width: 100%; box-sizing: border-box;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="width: 7px; height: 7px; border-radius: 9999px; background: #34d399; display: inline-block; box-shadow: 0 0 10px #34d399; flex-shrink: 0;"></span>
+                <span style="font-size: 9.5px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: #a5b4fc;">${typeLabel}</span>
+              </div>
+            </div>
+            <div style="display: flex; align-items: flex-start; gap: 11px;">
+              <div style="width: 38px; height: 38px; border-radius: 12px; background: ${gradient}; color: #ffffff; font-weight: 900; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 14px rgba(99,102,241,0.4);">
+                ${iconLetter}
+              </div>
+              <div style="flex: 1; min-width: 0;">
+                <h4 style="margin: 0; font-size: 13px; font-weight: 800; color: #ffffff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${title}</h4>
+                ${subtitle ? `<p style="margin: 1px 0 0 0; font-size: 10px; font-weight: 600; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${subtitle}</p>` : ''}
+                <p style="margin: 3px 0 0 0; font-size: 11px; line-height: 1.4; color: #e2e8f0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;">${text || 'New message'}</p>
+              </div>
+            </div>
+          </div>
+        `
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate(chatPath);
+        }
+      });
+    };
+
     const handleDirectMessageNotif = (data) => {
+      soundManager.playWhatsAppIncoming();
+      setChatCount(prev => prev + 1);
+
       if (!location.pathname.includes('/chat')) {
-        Swal.fire({
-          toast: true,
-          position: 'top-end',
-          icon: 'info',
-          title: `💬 New Message from ${data.senderName}`,
+        showGlossyChatNotification({
+          typeLabel: 'Direct Message',
+          title: data.senderName,
           text: data.text,
-          showConfirmButton: true,
-          confirmButtonText: 'Open Chat',
-          timer: 5000,
-          background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
-          color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
-        }).then((result) => {
-          if (result.isConfirmed) {
-            navigate(user.role === 'student' ? '/student/chat' : '/batch-chat');
-          }
+          iconLetter: (data.senderName || 'U').charAt(0).toUpperCase(),
+          gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)'
         });
       }
+    };
+
+    const handleGroupMessageNotif = (data) => {
+      soundManager.playWhatsAppIncoming();
       setChatCount(prev => prev + 1);
+
+      if (!location.pathname.includes('/chat')) {
+        showGlossyChatNotification({
+          typeLabel: 'Group Chat',
+          title: data.groupName || 'Chat Group',
+          subtitle: `Sent by ${data.senderName}`,
+          text: data.text,
+          iconLetter: (data.groupName || 'G').charAt(0).toUpperCase(),
+          gradient: 'linear-gradient(135deg, #a855f7, #ec4899)'
+        });
+      }
+    };
+
+    const handleBatchMessageNotif = (data) => {
+      soundManager.playWhatsAppIncoming();
+      setChatCount(prev => prev + 1);
+
+      if (!location.pathname.includes('/chat')) {
+        showGlossyChatNotification({
+          typeLabel: 'Batch Channel',
+          title: data.batchName || 'Academic Batch',
+          subtitle: `Sent by ${data.senderName}`,
+          text: data.text,
+          iconLetter: '#',
+          gradient: 'linear-gradient(135deg, #3b82f6, #06b6d4)'
+        });
+      }
     };
 
     const handleAnnouncementNotif = (data) => {
+      soundManager.playNotification();
       Swal.fire({
         toast: true,
         position: 'top-end',
@@ -1076,14 +1264,125 @@ const Layout = () => {
       });
     };
 
+    const handleFriendRequestReceived = (data) => {
+      setFriendRequestsCount(prev => prev + 1);
+      soundManager.playNotification();
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: `🤝 Friend Request Received`,
+        text: `${data.requester.name} (${data.requester.rollNumber || 'Student'}) sent you a friend request. Accept in Connections or Chat to unlock private messaging!`,
+        timer: 6000,
+        showConfirmButton: true,
+        confirmButtonText: 'View Connections',
+        background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
+        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate('/student/connections');
+        }
+      });
+    };
+
+    const handleFriendRequestAccepted = (data) => {
+      soundManager.playSuccess();
+      setFriendRequestsCount(prev => Math.max(0, prev - 1));
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: `🎉 Friend Request Accepted!`,
+        text: `You and ${data.friend.name} are now friends. Private chat and coin sharing unlocked!`,
+        timer: 6000,
+        background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
+        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
+      });
+    };
+
+    const handleCoinsReceived = (data) => {
+      soundManager.playReward();
+      if (typeof data.newCoins === 'number') {
+        setUserCoins(data.newCoins);
+      } else if (typeof data.amount === 'number') {
+        setUserCoins(prev => prev + data.amount);
+      }
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: `🪙 Coins Received!`,
+        text: `${data.sender?.name || 'A friend'} shared ${data.amount} coins with you!`,
+        timer: 6000,
+        background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
+        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
+      });
+    };
+
+    const handleNewTaskAssigned = (data) => {
+      soundManager.playNotification();
+      fetchCounts();
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'info',
+        title: '📋 New Task Assigned',
+        text: data?.title ? `"${data.title}" has been assigned!` : 'A new task has been assigned to your batch.',
+        timer: 7000,
+        showConfirmButton: true,
+        confirmButtonText: 'View Task',
+        background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
+        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate(user?.role === 'student' ? '/student/tasks' : '/tasks');
+        }
+      });
+    };
+
+    const handleTaskGraded = (data) => {
+      soundManager.playNotification();
+      fetchCounts();
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: '✅ Task Graded',
+        text: data?.title ? `Your submission for "${data.title}" was reviewed!` : 'Your task submission was reviewed.',
+        timer: 7000,
+        showConfirmButton: true,
+        confirmButtonText: 'View Grades',
+        background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
+        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          navigate('/student/grades');
+        }
+      });
+    };
+
     socket.on('new-direct-message-notification', handleDirectMessageNotif);
+    socket.on('new-group-message-notification', handleGroupMessageNotif);
+    socket.on('new-batch-message-notification', handleBatchMessageNotif);
     socket.on('announcement-broadcast', handleAnnouncementNotif);
+    socket.on('friend-request-received', handleFriendRequestReceived);
+    socket.on('friend-request-accepted', handleFriendRequestAccepted);
+    socket.on('coins-received', handleCoinsReceived);
+    socket.on('new-task-assigned', handleNewTaskAssigned);
+    socket.on('task-graded', handleTaskGraded);
 
     return () => {
       socket.off('new-direct-message-notification', handleDirectMessageNotif);
+      socket.off('new-group-message-notification', handleGroupMessageNotif);
+      socket.off('new-batch-message-notification', handleBatchMessageNotif);
       socket.off('announcement-broadcast', handleAnnouncementNotif);
+      socket.off('friend-request-received', handleFriendRequestReceived);
+      socket.off('friend-request-accepted', handleFriendRequestAccepted);
+      socket.off('coins-received', handleCoinsReceived);
+      socket.off('new-task-assigned', handleNewTaskAssigned);
+      socket.off('task-graded', handleTaskGraded);
     };
-  }, [socket, user, location.pathname, navigate]);
+  }, [socket, user, location.pathname, navigate, fetchCounts]);
 
 
 
@@ -1179,17 +1478,19 @@ const Layout = () => {
   };
 
   const clearNotification = (id) => {
-    const updatedCleared = [...clearedNotifs, id];
+    const currentCleared = getPersistedClearedNotifs();
+    const updatedCleared = Array.from(new Set([...currentCleared, id]));
     setClearedNotifs(updatedCleared);
-    localStorage.setItem('clearedNotifs', JSON.stringify(updatedCleared));
+    localStorage.setItem(getClearedNotifsKey(), JSON.stringify(updatedCleared));
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
   const clearAllNotifications = () => {
+    const currentCleared = getPersistedClearedNotifs();
     const allIds = notifications.map(n => n.id);
-    const updatedCleared = [...clearedNotifs, ...allIds];
+    const updatedCleared = Array.from(new Set([...currentCleared, ...allIds]));
     setClearedNotifs(updatedCleared);
-    localStorage.setItem('clearedNotifs', JSON.stringify(updatedCleared));
+    localStorage.setItem(getClearedNotifsKey(), JSON.stringify(updatedCleared));
     setNotifications([]);
     setShowNotifications(false);
   };
@@ -1204,6 +1505,7 @@ const Layout = () => {
       label: 'Overview',
       links: [
         { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
+        { name: 'Portal Directory & Links', path: '/portals', icon: <Share2 size={20} /> },
         { name: 'Traffic Control', path: '/traffic', icon: <Network size={20} /> },
       ]
     },
@@ -1216,6 +1518,7 @@ const Layout = () => {
         { name: 'Mock Drives', path: '/mock-drives', icon: <Briefcase size={20} /> },
         { name: 'Leaderboard', path: '/student/leaderboard', icon: <Trophy size={20} /> },
         { name: 'Study Notes', path: '/admin/notes', icon: <BookOpen size={20} /> },
+        { name: 'Syllabus Tracker', path: '/syllabus-tracker', icon: <BookOpen size={20} /> },
       ]
     },
     {
@@ -1236,8 +1539,9 @@ const Layout = () => {
         { name: 'Check-In Permissions', path: '/checkin-permissions', icon: <ShieldCheck size={20} /> },
         { name: 'Attendance Tracker', path: '/attendance-tracker', icon: <Clock size={20} /> },
         { name: 'Leave Requests', path: '/leaves', icon: <Calendar size={20} />, badge: getBadge('leaves', leavesCount) },
-        { name: 'Batch Chat', path: '/chat', icon: <MessageCircle size={20} /> },
+        { name: 'Batch Chat', path: '/chat', icon: <MessageCircle size={20} />, badge: getBadge('chats', chatCount) },
         { name: 'Activity Logs', path: '/activity-logs', icon: <Activity size={20} /> },
+        { name: 'Access & Suspensions', path: '/access-logs', icon: <ShieldAlert size={20} /> },
       ]
     },
     {
@@ -1264,6 +1568,7 @@ const Layout = () => {
         { name: 'Mock Drives', path: '/mock-drives', icon: <Briefcase size={20} /> },
         { name: 'Leaderboard', path: '/student/leaderboard', icon: <Trophy size={20} /> },
         { name: 'Study Notes', path: '/admin/notes', icon: <BookOpen size={20} /> },
+        { name: 'Syllabus Tracker', path: '/syllabus-tracker', icon: <BookOpen size={20} /> },
       ]
     },
     {
@@ -1272,6 +1577,7 @@ const Layout = () => {
         { name: 'My Assigned Batches', path: '/batches', icon: <BookOpen size={20} /> },
         { name: 'Batch Students', path: '/students', icon: <Users size={20} /> },
         { name: 'Task Tracker', path: '/batch-tracker', icon: <BookOpen size={20} /> },
+        { name: 'Gamification Hub (Free)', path: '/student/wardrobe', icon: <Gamepad2 size={20} /> },
       ]
     },
     {
@@ -1281,8 +1587,9 @@ const Layout = () => {
         { name: 'Check-In Permissions', path: '/checkin-permissions', icon: <ShieldCheck size={20} /> },
         { name: 'Attendance Tracker', path: '/attendance-tracker', icon: <Clock size={20} /> },
         { name: 'Leave Requests', path: '/leaves', icon: <Calendar size={20} />, badge: getBadge('leaves', leavesCount) },
-        { name: 'Batch Chat', path: '/chat', icon: <MessageCircle size={20} /> },
+        { name: 'Batch Chat', path: '/chat', icon: <MessageCircle size={20} />, badge: getBadge('chats', chatCount) },
         { name: 'Activity Logs', path: '/activity-logs', icon: <Activity size={20} /> },
+        { name: 'Access & Suspensions', path: '/access-logs', icon: <ShieldAlert size={20} /> },
       ]
     },
     {
@@ -1307,6 +1614,7 @@ const Layout = () => {
         { name: 'My Tasks', path: '/student/tasks', icon: <FileText size={20} />, badge: getBadge('tasks', pendingCount) },
         { name: 'LeetCode', path: '/student/leetcode', icon: <Code size={20} /> },
         { name: 'My Notes', path: '/student/notes', icon: <BookOpen size={20} /> },
+        { name: 'Syllabus Tracker', path: '/student/syllabus', icon: <BookOpen size={20} /> },
       ]
     },
     {
@@ -1322,6 +1630,7 @@ const Layout = () => {
       label: 'Batches & Chat',
       links: [
         { name: 'My Batches', path: '/student/my-batches', icon: <Users size={20} /> },
+        { name: 'Friend Connections', path: '/student/connections', icon: <UserCheck size={20} />, badge: getBadge('connections', friendRequestsCount) },
         { name: 'Batch Chat', path: '/student/chat', icon: <MessageCircle size={20} />, badge: getBadge('chats', chatCount) },
       ]
     },
@@ -1330,12 +1639,22 @@ const Layout = () => {
       links: [
         { name: 'Login Activity', path: '/student/attendance', icon: <Clock size={20} /> },
         { name: 'Leave Application', path: '/student/leaves', icon: <Calendar size={20} /> },
+        { name: 'Disciplinary Records', path: '/student/disciplinary', icon: <ShieldAlert size={20} /> },
         { name: 'My Profile', path: '/student/profile', icon: <UserIcon size={20} /> },
       ]
     }
   ];
 
   const sections = user?.role === 'admin' ? adminSections : (user?.role === 'mentor' ? mentorSections : studentSections);
+
+  // Active page title for the frozen top bar header
+  const activeLink = sections?.flatMap(s => s.links).find(link => {
+    if (link.path.includes('?')) {
+      return location.pathname === link.path.split('?')[0] && location.search.includes(link.path.split('?')[1]);
+    }
+    return location.pathname === link.path || (link.path !== '/' && link.path !== '/student' && location.pathname.startsWith(link.path));
+  });
+  const activePageTitle = activeLink?.name || (user?.role === 'admin' ? 'Dashboard' : (user?.role === 'mentor' ? 'Dashboard' : 'Dashboard'));
 
   // Auto-expand section containing the active path on mount and navigation
   useEffect(() => {
@@ -1366,7 +1685,31 @@ const Layout = () => {
     }
   }, [location.pathname, sections]);
 
-  // Mobile restriction removed - app is now fully mobile-friendly for all roles
+  // Student Panel Laptop-Only Restriction
+  const [isStudentMobile, setIsStudentMobile] = useState(() => {
+    if (typeof window === 'undefined' || user?.role !== 'student') return false;
+    const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+    return isMobileUA || window.innerWidth < 1024;
+  });
+
+  useEffect(() => {
+    if (user?.role !== 'student') return;
+    const checkViewport = () => {
+      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '');
+      setIsStudentMobile(isMobileUA || window.innerWidth < 1024);
+    };
+    checkViewport();
+    window.addEventListener('resize', checkViewport);
+    window.addEventListener('orientationchange', checkViewport);
+    return () => {
+      window.removeEventListener('resize', checkViewport);
+      window.removeEventListener('orientationchange', checkViewport);
+    };
+  }, [user?.role]);
+
+  if (user?.role === 'student' && isStudentMobile) {
+    return <StudentMobileBlocker onLogout={logout} />;
+  }
 
   return (
     <div className={`transition-colors duration-500 flex bg-transparent relative ${location.pathname.includes('/chat') ? 'h-screen overflow-hidden' : 'min-h-screen'}`}>
@@ -1683,10 +2026,10 @@ const Layout = () => {
       {/* Sidebar (Desktop only - hidden on mobile, use bottom nav instead) */}
       <aside
         style={{ fontFamily: "'ALEXANDER', 'Alexandria', sans-serif" }}
-        className={`fixed z-50 flex-col overflow-hidden transition-transform duration-300 ease-in-out hidden lg:flex inset-y-4 left-4 w-64 glass-panel translate-x-0`}
+        className={`fixed z-50 flex-col overflow-hidden transition-transform duration-300 ease-in-out hidden lg:flex inset-y-0 left-0 w-64 glass-panel rounded-none border-r border-slate-200/60 dark:border-white/10 translate-x-0`}
       >
         {/* Drag indicator removed - sidebar is desktop-only now */}
-        <div className="h-20 lg:h-24 flex items-center px-4 border-b border-slate-100 dark:border-white/10 bg-slate-50/50 dark:bg-black/10">
+        <div className="h-16 lg:h-18 flex items-center px-4 border-b border-slate-200/60 dark:border-white/10 bg-slate-50/40 dark:bg-black/10">
           <div className="flex items-center gap-3 group cursor-pointer min-w-0 flex-1">
             <div className="relative shrink-0">
               <div className="absolute inset-0 bg-theme-primary/20 blur-xl rounded-full scale-150 group-hover:bg-theme-primary/30 transition-all duration-500"></div>
@@ -1695,11 +2038,11 @@ const Layout = () => {
               </div>
             </div>
             <div className="flex flex-col relative z-10 min-w-0 flex-1 justify-center">
-              <span className="font-extrabold text-[19px] leading-tight tracking-tight text-slate-800 dark:text-white transition-all group-hover:text-theme-primary truncate" title={customPanelName || 'SSMS 3.0'}>
-                {customPanelName || 'SSMS 3.0'}
+              <span className="font-extrabold text-[19px] leading-tight tracking-tight text-slate-800 dark:text-white transition-all group-hover:text-theme-primary truncate" title={user?.role === 'mentor' ? 'SSMS - Saran Students Management System' : (customPanelName || 'SSMS 2.0')}>
+                {user?.role === 'mentor' ? 'SSMS' : (customPanelName || 'SSMS 2.0')}
               </span>
-              <span className="text-[9px] font-black tracking-wider text-theme-primary uppercase leading-[1.2] line-clamp-2" title={customPanelSubheading || 'Saran Students Management'}>
-                {customPanelSubheading || (customPanelName ? (activeBatch?.batchName || 'STUDENTS MANAGEMENT') : 'Saran Students Management')}
+              <span className="text-[9px] font-black tracking-wider text-theme-primary uppercase leading-[1.2] line-clamp-2" title={user?.role === 'mentor' ? 'Saran Students Management System' : (customPanelSubheading || 'Saran Students Management')}>
+                {user?.role === 'mentor' ? 'Saran Students Management System' : (customPanelSubheading || (customPanelName ? (activeBatch?.batchName || 'STUDENTS MANAGEMENT') : 'Saran Students Management'))}
               </span>
             </div>
           </div>
@@ -1761,7 +2104,7 @@ const Layout = () => {
                             <span>{link.name}</span>
                           </div>
                           {link.badge > 0 && !isActive && (
-                            <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                            <span className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm shadow-indigo-500/30 animate-pulse">
                               {link.badge}
                             </span>
                           )}
@@ -1787,29 +2130,46 @@ const Layout = () => {
       </aside>
 
       {/* Main Content */}
-      <main className={`flex-1 flex flex-col min-w-0 lg:ml-[280px] relative ${location.pathname.includes('/chat') ? 'h-screen overflow-hidden' : ''}`}>
-        {/* Header */}
-        <header className="h-12 lg:h-16 shrink-0 flex items-center justify-between px-2 lg:px-8 mt-1 lg:mt-2 mx-2 lg:mx-8 z-30 transition-colors duration-300">
-          <div className="lg:hidden flex items-center gap-1.5">
-            <div className="w-7 h-7 rounded-lg bg-white/10 p-0.5 shadow-sm flex items-center justify-center overflow-hidden shrink-0">
-              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+      <main className={`flex-1 flex flex-col min-w-0 lg:ml-64 relative ${location.pathname.includes('/chat') ? 'h-screen overflow-hidden' : ''}`}>
+        {/* Frozen Top Bar Header */}
+        <header className="sticky top-0 z-40 h-16 lg:h-18 shrink-0 flex items-center justify-between px-4 sm:px-6 lg:px-8 bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl border-b border-slate-200/60 dark:border-white/10 transition-colors duration-300">
+          {/* Left: Mobile Brand / Desktop Title & Badge */}
+          <div className="flex items-center gap-3 min-w-0">
+            {/* Mobile Branding */}
+            <div className="lg:hidden flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-white/80 dark:bg-slate-800/80 shadow-2xs p-1 flex items-center justify-center overflow-hidden shrink-0 border border-slate-200/60 dark:border-white/10">
+                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+              </div>
+              <span className="font-black text-xs tracking-tight text-slate-800 dark:text-white uppercase truncate max-w-[120px]">
+                {user?.role === 'admin' ? 'SRAC 2.0' : (user?.role === 'mentor' ? 'SSMS' : 'SSMS 2.0')}
+              </span>
             </div>
-            <span className="font-black text-xs tracking-tight text-slate-800 dark:text-white uppercase truncate max-w-[80px]">
-              {user?.role === 'admin' ? 'Admin' : 'SSMS'}
-            </span>
+
+            {/* Desktop Active Page Title & Custom Panel Name Badge */}
+            <div className="hidden lg:flex items-center gap-2.5 min-w-0">
+              <h1 className="text-lg font-black text-slate-900 dark:text-white capitalize tracking-tight truncate">
+                {activePageTitle}
+              </h1>
+              {user?.role !== 'mentor' && customPanelName && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-theme-primary/10 text-theme-primary border border-theme-primary/20 truncate max-w-[260px] shadow-2xs">
+                  <Building2 size={12} className="shrink-0" />
+                  <span className="truncate">{customPanelName}</span>
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-1 sm:gap-3 glass-panel px-1.5 sm:px-3 py-1 h-10 sm:h-14 rounded-2xl max-w-full">
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2.5 max-w-full">
 
              {/* Online Students Count */}
-            <div className="hidden sm:flex items-center gap-2 bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-full text-sm font-medium border border-slate-200 dark:border-slate-700">
+            <div className="hidden sm:flex items-center gap-2 bg-slate-500/10 dark:bg-white/5 text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-full text-xs font-semibold border border-slate-300/40 dark:border-white/10">
               <div className="w-2 h-2 rounded-full bg-theme-primary animate-pulse"></div>
               <span>{onlineStudentsCount} Online</span>
             </div>
 
             {/* Student Timer */}
             {user?.role === 'student' && sessionActive && (
-              <div className="hidden sm:flex items-center gap-2 bg-theme-primary/10 text-theme-primary px-3 py-1.5 rounded-full text-sm font-medium border border-theme-primary/20">
+              <div className="hidden sm:flex items-center gap-2 bg-theme-primary/10 text-theme-primary px-3 py-1.5 rounded-full text-xs font-bold border border-theme-primary/20">
                 <Clock size={16} className="animate-pulse" />
                 <span>{formatTime(sessionSeconds)}</span>
               </div>
@@ -1817,7 +2177,7 @@ const Layout = () => {
 
             {/* Student Coins Display */}
             {user?.role === 'student' && (
-              <div className="flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-[11px] sm:text-sm font-extrabold border border-amber-500/20 shrink-0">
+              <div className="flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs font-extrabold border border-amber-500/20 shrink-0">
                 <span className="text-xs sm:text-base">🪙</span>
                 <span>{userCoins} <span className="hidden sm:inline">Coins</span></span>
               </div>
@@ -1827,7 +2187,7 @@ const Layout = () => {
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
-                className="relative p-1.5 sm:p-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white rounded-xl transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="relative p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white rounded-xl transition-all hover:bg-slate-500/10 dark:hover:bg-white/10 border border-slate-300/40 dark:border-white/10 cursor-pointer"
                 aria-label="Notifications"
               >
                 <Bell size={16} className="sm:w-[18px] sm:h-[18px]" />
@@ -1882,7 +2242,7 @@ const Layout = () => {
             <div className="relative" ref={themeMenuRef}>
               <button
                 onClick={() => setShowThemeMenu(!showThemeMenu)}
-                className="p-1.5 sm:p-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white rounded-xl transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white rounded-xl transition-all hover:bg-slate-500/10 dark:hover:bg-white/10 border border-slate-300/40 dark:border-white/10 cursor-pointer"
                 aria-label="Select theme color"
               >
                 <Palette size={16} className="sm:w-[18px] sm:h-[18px]" />
@@ -2052,30 +2412,51 @@ const Layout = () => {
               )}
             </div>
 
-            {/* Global Active Batch Bar for Admin & Mentor */}
+            {/* Read-Only Global Active Batch Indicator for Admin & Mentor */}
             {(user?.role === 'admin' || user?.role === 'mentor') && (
-              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-xl shadow-xs">
-                <BookOpen size={13} className="text-indigo-500 shrink-0" />
-                <select
-                  value={selectedBatchId}
-                  onChange={(e) => setSelectedBatchId(e.target.value)}
-                  className="bg-transparent text-[10px] sm:text-[11px] font-extrabold text-slate-800 dark:text-white outline-none cursor-pointer pr-1 max-w-[90px] sm:max-w-none truncate"
-                  title="Global Batch Filter — Scopes the entire portal to this batch"
-                >
-                  <option value="all" className="dark:bg-slate-900 text-slate-800 dark:text-white">All Batches (Global View)</option>
-                  {batchesList.map((b) => (
-                    <option key={b._id} value={b._id} className="dark:bg-slate-900 text-slate-800 dark:text-white">
-                      Batch: {b.batchName}
-                    </option>
-                  ))}
-                </select>
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-500/10 dark:bg-white/5 border border-slate-300/40 dark:border-white/10 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl shadow-2xs">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    {isBatchClosed ? (
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                    ) : (
+                      <>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </>
+                    )}
+                  </span>
+                  <BookOpen size={13} className={isBatchClosed ? 'text-red-500 dark:text-red-400 shrink-0' : 'text-indigo-500 dark:text-indigo-400 shrink-0'} />
+                  <span 
+                    className="text-[10px] sm:text-[11px] font-black text-slate-800 dark:text-slate-100 truncate max-w-[90px] sm:max-w-[170px]"
+                    title={selectedBatchName || activeBatch?.batchName || 'No Batch'}
+                  >
+                    {selectedBatchName || activeBatch?.batchName || 'No Batch'}
+                  </span>
+                  {isBatchClosed && (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-red-500/10 dark:bg-red-950/60 text-red-600 dark:text-red-400 border border-red-500/20 shrink-0">
+                      Closed
+                    </span>
+                  )}
+                </div>
+                {(user?.role === 'admin' || user?.role === 'mentor') && (
+                  <button
+                    type="button"
+                    onClick={openBatchModal}
+                    className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 bg-indigo-50/80 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/60 dark:border-indigo-800/60 px-1.5 py-0.5 rounded-lg transition-all shrink-0 cursor-pointer"
+                    title="Switch Global Active Batch"
+                  >
+                    <ArrowLeftRight size={10} />
+                    <span className="hidden sm:inline">Switch</span>
+                  </button>
+                )}
               </div>
             )}
 
             {/* Dark Mode Toggle */}
             <button
               onClick={toggleDarkMode}
-              className="p-1.5 sm:p-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-white rounded-xl transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white rounded-xl transition-all hover:bg-slate-500/10 dark:hover:bg-white/10 border border-slate-300/40 dark:border-white/10 cursor-pointer"
               aria-label="Toggle dark mode"
             >
               {darkMode ? <Sun size={16} className="sm:w-[18px] sm:h-[18px]" /> : <Moon size={16} className="sm:w-[18px] sm:h-[18px]" />}
@@ -2128,6 +2509,31 @@ const Layout = () => {
           const isChatPage = location.pathname.includes('/chat');
           return (
             <div className={`flex-1 relative min-h-0 ${isChatPage ? 'p-0 sm:p-2 lg:p-3 overflow-hidden h-[calc(100vh-7.5rem)] lg:h-[calc(100vh-4.5rem)] pb-14 lg:pb-0' : 'overflow-auto p-4 lg:p-8 pt-4 pb-20 lg:pb-8'}`}>
+              {!isChatPage && isBatchClosed && (
+                <div className="mb-5 px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between gap-3 text-xs text-amber-800 dark:text-amber-200 shadow-xs animate-fadeIn">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0 text-amber-600 dark:text-amber-400">
+                      <AlertTriangle size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-white truncate">
+                        Academic Batch "{selectedBatchName || activeBatch?.batchName}" is Closed
+                      </p>
+                      <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium truncate">
+                        Completed on {activeBatch?.endDate ? new Date(activeBatch.endDate).toLocaleDateString() : 'deadline'}. The application is displaying historical records in read-only mode.
+                      </p>
+                    </div>
+                  </div>
+                  {(user?.role === 'admin' || user?.role === 'mentor') && (
+                    <button 
+                      onClick={openBatchModal}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-xl text-xs transition-colors shrink-0 shadow-sm cursor-pointer"
+                    >
+                      Switch Batch
+                    </button>
+                  )}
+                </div>
+              )}
               <Outlet context={{ 
                 sessionActive, startSession, endSession, sessionSeconds, formatTime, isCheckingIn, activeLeaveStatus,
                 themeColor, activeTheme: themes.find(t => t.name === themeColor) || themes[0],
@@ -2152,7 +2558,7 @@ const Layout = () => {
                     <img src="/logo.png" alt="SSMS" className="w-full h-full object-contain rounded" />
                   </div>
                   <div>
-                    <span className="font-bold text-sm text-white leading-tight">{customPanelName || 'SSMS 3.0'}</span>
+                    <span className="font-bold text-sm text-white leading-tight">{customPanelName || 'SSMS 2.0'}</span>
                     <span className="block text-[8px] font-bold tracking-wider text-theme-primary uppercase">{customPanelSubheading || 'Students Management'}</span>
                   </div>
                 </div>
@@ -2182,8 +2588,8 @@ const Layout = () => {
                           >
                             <div className="relative">
                               {link.icon}
-                              {link.badge && (
-                                <span className="absolute -top-1 -right-1.5 min-w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center px-0.5 shadow">
+                              {link.badge > 0 && (
+                                <span className="absolute -top-1 -right-1.5 min-w-3.5 h-3.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[8px] font-black rounded-full flex items-center justify-center px-1 shadow animate-pulse">
                                   {link.badge}
                                 </span>
                               )}
@@ -2265,8 +2671,8 @@ const Layout = () => {
               >
                 <div className="relative">
                   {item.icon}
-                  {(item.name === 'Chat') && chatCount > 0 && (
-                    <span className="absolute -top-1 -right-2 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center shadow">
+                  {(item.name === 'Chat' || item.name === 'Batch Chat') && chatCount > 0 && (
+                    <span className="absolute -top-1 -right-2 min-w-3.5 h-3.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[8px] font-black rounded-full flex items-center justify-center px-0.5 shadow animate-pulse">
                       {chatCount}
                     </span>
                   )}
@@ -2282,6 +2688,8 @@ const Layout = () => {
           });
         })()}
       </div>
+      {/* Global Academic Batch Selection Modal for Admin & Mentor */}
+      {(user?.role === 'admin' || user?.role === 'mentor') && <BatchSelectionModal />}
     </div>
   );
 };

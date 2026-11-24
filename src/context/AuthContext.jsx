@@ -1,10 +1,19 @@
-import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
+import {
+  getPrimaryEnvServer,
+  selectBackendNode,
+  shouldRetryRequest,
+  getFallbackServer,
+  normalizeUrl,
+  recordNodeFailure,
+  recordNodeSuccess
+} from '../utils/trafficRouter';
 
 // Set global axios defaults
-const apiUrl = import.meta.env.VITE_API_URL;
-axios.defaults.baseURL = `${apiUrl}/api`;
+const primaryServerConfig = getPrimaryEnvServer();
+axios.defaults.baseURL = `${primaryServerConfig.url}/api`;
 axios.defaults.withCredentials = true;
 
 const AuthContext = createContext();
@@ -17,74 +26,31 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState(null);
-  
-  // Primary server defined in .env
-  const getPrimaryEnvServer = () => {
-    const rawUrl = (import.meta.env.VITE_API_URL || 'https://ssms3-0-be.onrender.com').trim();
-    const cleanUrl = rawUrl.endsWith('/') ? rawUrl.slice(0, -1) : rawUrl;
-    return {
-      id: 'env_primary',
-      name: 'Primary Server (.env)',
-      url: cleanUrl,
-      isPrimary: true,
-      status: 'online',
-      responseTime: 0,
-      isActive: true
-    };
-  };
 
-  // Helper to collect all env backup servers
-  const getEnvServers = () => {
-    const primary = getPrimaryEnvServer();
-    const backupUrls = [
-      import.meta.env.VITE_API_URL1,
-      import.meta.env.VITE_API_URL2,
-      import.meta.env.VITE_API_URL3
-    ].filter(Boolean);
-    
-    const uniqueBackupUrls = [...new Set(backupUrls.map(url => url.trim().endsWith('/') ? url.trim().slice(0, -1) : url.trim()))]
-      .filter(u => u !== primary.url);
-    
-    const backups = uniqueBackupUrls.map((url, idx) => ({
-      id: `env_backup_${idx}`,
-      name: `Backup Node ${idx + 1}`,
-      url: url,
-      isPrimary: false,
-      status: 'unknown',
-      responseTime: 0,
-      isActive: true
-    }));
-
-    return [primary, ...backups];
-  };
+  const isOnWebDomain = typeof window !== 'undefined' && 
+    window.location.hostname !== 'localhost' && 
+    window.location.hostname !== '127.0.0.1';
 
   // State for traffic manager
   const [trafficConfig, setTrafficConfig] = useState(() => {
     const primaryServer = getPrimaryEnvServer();
-    // Clean legacy storage pointing to deprecated server nodes
-    try {
-      const saved = localStorage.getItem('trafficConfig');
-      if (saved && saved.includes('ssms-be-elp4.onrender.com')) {
-        localStorage.removeItem('trafficConfig');
-      }
-    } catch (e) {}
-
     try {
       const saved = localStorage.getItem('trafficConfig');
       const parsed = saved ? JSON.parse(saved) : null;
       if (parsed && Array.isArray(parsed.servers)) {
         const secondaryServers = parsed.servers
-          .filter(s => s.url !== primaryServer.url && !s.url.includes('ssms-be-elp4.onrender.com'))
+          .filter(s => s && s.url && normalizeUrl(s.url) !== normalizeUrl(primaryServer.url))
           .map(s => ({ ...s, isPrimary: false }));
         return {
-          policy: 'failover',
-          manualSelectedServerId: null,
+          policy: parsed.policy || 'failover',
+          manualSelectedServerId: parsed.manualSelectedServerId || null,
+          cpuThreshold: parsed.cpuThreshold || 80,
           servers: [primaryServer, ...secondaryServers]
         };
       }
-      return { policy: 'failover', manualSelectedServerId: null, servers: [primaryServer] };
+      return { policy: 'failover', manualSelectedServerId: null, cpuThreshold: 80, servers: [primaryServer] };
     } catch (e) {
-      return { policy: 'failover', manualSelectedServerId: null, servers: [primaryServer] };
+      return { policy: 'failover', manualSelectedServerId: null, cpuThreshold: 80, servers: [primaryServer] };
     }
   });
 
@@ -96,15 +62,16 @@ export const AuthProvider = ({ children }) => {
   // Fetch public config (active servers list + policy)
   const refreshTrafficConfig = async () => {
     try {
+      const primaryServer = getPrimaryEnvServer();
       const candidates = [
-        import.meta.env.VITE_API_URL,
+        primaryServer.url,
         import.meta.env.VITE_API_URL1,
         import.meta.env.VITE_API_URL2,
         import.meta.env.VITE_API_URL3,
         ...(trafficConfigRef.current.servers?.map(s => s.url) || [])
       ].filter(Boolean);
 
-      const uniqueCandidates = [...new Set(candidates.map(u => u.trim().endsWith('/') ? u.trim().slice(0, -1) : u.trim()))];
+      const uniqueCandidates = [...new Set(candidates.map(u => normalizeUrl(u)))];
 
       let data = null;
       for (const baseUrl of uniqueCandidates) {
@@ -122,30 +89,32 @@ export const AuthProvider = ({ children }) => {
       if (!data) return;
 
       setTrafficConfig(prev => {
-        const primaryServer = getPrimaryEnvServer();
         const dbServers = (data.servers || []).map(dbS => {
-          const cleanUrl = dbS.url.trim().endsWith('/') ? dbS.url.trim().slice(0, -1) : dbS.url.trim();
-          const isPrimary = cleanUrl === primaryServer.url;
+          const cleanUrl = normalizeUrl(dbS.url);
+          const isPrimary = cleanUrl === normalizeUrl(primaryServer.url);
           return {
             id: dbS.id || dbS._id,
-            name: isPrimary ? 'Primary Server (.env)' : dbS.name,
+            name: isPrimary ? primaryServer.name : dbS.name,
             url: cleanUrl,
             isPrimary: isPrimary,
             status: dbS.status || 'unknown',
             responseTime: dbS.responseTime || 0,
+            cpuUsage: dbS.cpuUsage || 0,
             isActive: dbS.isActive !== undefined ? dbS.isActive : true
           };
         });
 
-        const secondaryServers = dbServers.filter(s => s.url !== primaryServer.url && !s.url.includes('ssms-be-elp4.onrender.com'));
+        const secondaryServers = dbServers.filter(s => normalizeUrl(s.url) !== normalizeUrl(primaryServer.url));
         const merged = [primaryServer, ...secondaryServers];
 
+        // Ensure active policy from DB applies directly to student traffic
         const nextConfig = {
-          policy: 'failover',
-          manualSelectedServerId: null,
+          policy: data.policy || prev.policy || 'failover',
+          manualSelectedServerId: data.manualSelectedServerId !== undefined ? data.manualSelectedServerId : prev.manualSelectedServerId,
+          cpuThreshold: data.cpuThreshold !== undefined ? Number(data.cpuThreshold) : (prev.cpuThreshold || 80),
           servers: merged
         };
-        
+
         localStorage.setItem('trafficConfig', JSON.stringify(nextConfig));
         return nextConfig;
       });
@@ -154,7 +123,7 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Background config sync for traffic routing
+  // Background config sync for traffic routing (single effect without duplicate listeners)
   useEffect(() => {
     const syncConfig = async () => {
       await refreshTrafficConfig();
@@ -169,39 +138,21 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  useEffect(() => {
-    refreshTrafficConfig();
-  }, []);
-
-  const isOnWebDomain = typeof window !== 'undefined' && 
-    window.location.hostname !== 'localhost' && 
-    window.location.hostname !== '127.0.0.1';
-
-  // Calculate active socket URL
+  // Calculate active socket URL: Pinned to healthy Primary node with Active-Backup failover
   const getSocketUrl = () => {
-    const { servers, policy, manualSelectedServerId } = trafficConfig;
-    let activeServers = servers && servers.length > 0 
-      ? servers.filter(s => s.status !== 'offline' && s.isActive !== false) 
-      : [];
-    
-    if (isOnWebDomain) {
-      activeServers = activeServers.filter(s => !s.url.includes('localhost') && !s.url.includes('127.0.0.1'));
-    }
-
-    if (activeServers.length > 0) {
-      let chosenServer = activeServers[0];
-      if (policy === 'manual') {
-        const selected = servers.find(s => s.id === manualSelectedServerId || s._id === manualSelectedServerId);
-        if (selected && selected.status !== 'offline' && (!isOnWebDomain || !selected.url.includes('localhost'))) {
-          chosenServer = selected;
-        }
-      } else if (policy === 'latency') {
-        const sorted = [...activeServers].sort((a, b) => a.responseTime - b.responseTime);
-        chosenServer = sorted[0];
-      }
-      return chosenServer.url;
-    }
-    return import.meta.env.VITE_API_URL;
+    const currentConfig = trafficConfigRef.current || trafficConfig;
+    const primaryServer = getPrimaryEnvServer();
+    // Pin persistent socket connections to primary node to ensure room membership convergence
+    const { selectedUrl } = selectBackendNode({
+      policy: 'active-backup',
+      servers: currentConfig.servers,
+      manualSelectedServerId: currentConfig.manualSelectedServerId,
+      cpuThreshold: currentConfig.cpuThreshold,
+      rrIndex: 0,
+      isOnWebDomain,
+      primaryUrl: primaryServer.url
+    });
+    return selectedUrl || primaryServer.url;
   };
 
   const socketUrl = getSocketUrl();
@@ -213,9 +164,13 @@ export const AuthProvider = ({ children }) => {
       console.log(`Connecting socket to: ${socketUrl}`);
       const newSocket = io(socketUrl, {
         withCredentials: true,
-        query: { userId: userIdStr, role: user.role },
-        reconnectionDelay: 5000,
-        reconnectionDelayMax: 30000,
+        transports: ['websocket', 'polling'], // Prioritize WebSocket to prevent session-affinity mismatches across multi-instance URLs
+        auth: { userId: userIdStr, role: user?.role },
+        query: { userId: userIdStr, role: user?.role },
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 2000,
+        reconnectionDelayMax: 15000,
         randomizationFactor: 0.5
       });
       setSocket(newSocket);
@@ -232,114 +187,75 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // 1. Request Interceptor
     const requestInterceptor = axios.interceptors.request.use((config) => {
-      // Add custom header
+      // Add custom header if user session is present
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
-        const parsed = JSON.parse(storedUser);
-        if (parsed && parsed._id) {
-          config.headers['x-user-id'] = parsed._id;
-        }
+        try {
+          const parsed = JSON.parse(storedUser);
+          if (parsed && parsed._id) {
+            config.headers['x-user-id'] = parsed._id;
+          }
+        } catch (e) {}
       }
 
-      // Skip load balancing if URL is already absolute (e.g. pointing to external links, uploads, or a direct ping)
+      // Skip dynamic node routing if URL is already absolute (e.g. cloud upload, external webhook, direct ping)
       if (config.url && (config.url.startsWith('http://') || config.url.startsWith('https://'))) {
         return config;
       }
 
-      // Calculate the base URL based on traffic policy
       const currentConfig = trafficConfigRef.current;
-      const { policy, servers, manualSelectedServerId } = currentConfig;
-      let activeServers = servers && servers.length > 0 
-        ? servers.filter(s => s.status !== 'offline' && s.isActive !== false) 
-        : [];
+      const primaryServer = getPrimaryEnvServer();
 
-      if (isOnWebDomain) {
-        activeServers = activeServers.filter(s => !s.url.includes('localhost') && !s.url.includes('127.0.0.1'));
+      // Deterministically select backend node based on active routing policy
+      const { selectedUrl, nextRrIndex, allNodesUnavailable } = selectBackendNode({
+        policy: currentConfig.policy,
+        servers: currentConfig.servers,
+        manualSelectedServerId: currentConfig.manualSelectedServerId,
+        cpuThreshold: currentConfig.cpuThreshold,
+        rrIndex,
+        isOnWebDomain,
+        primaryUrl: primaryServer.url
+      });
+
+      if (allNodesUnavailable) {
+        console.warn('[TrafficRouter] All registered backend nodes are currently unavailable or in cooldown. Defaulting to primary endpoint.');
       }
 
-      if (activeServers.length > 0) {
-        let selectedUrl = `${activeServers[0].url}/api`;
-
-        switch (policy) {
-          case 'manual': {
-            const selected = servers.find(s => s.id === manualSelectedServerId || s._id === manualSelectedServerId);
-            if (selected && selected.status !== 'offline' && (!isOnWebDomain || !selected.url.includes('localhost'))) {
-              selectedUrl = `${selected.url}/api`;
-            } else {
-              selectedUrl = `${activeServers[0].url}/api`;
-            }
-            break;
-          }
-          case 'latency': {
-            const sorted = [...activeServers].sort((a, b) => (a.responseTime || 999) - (b.responseTime || 999));
-            selectedUrl = `${sorted[0].url}/api`;
-            break;
-          }
-          case 'cpu-adaptive': {
-            const threshold = currentConfig.cpuThreshold || 80;
-            const underLoaded = activeServers.filter(s => (s.cpuUsage || 0) < threshold);
-            if (underLoaded.length > 0) {
-              const sortedByCpu = [...underLoaded].sort((a, b) => (a.cpuUsage || 0) - (b.cpuUsage || 0));
-              selectedUrl = `${sortedByCpu[0].url}/api`;
-            } else {
-              const sortedAll = [...activeServers].sort((a, b) => (a.cpuUsage || 0) - (b.cpuUsage || 0));
-              selectedUrl = `${sortedAll[0].url}/api`;
-            }
-            break;
-          }
-          case 'round-robin': {
-            const selected = activeServers[rrIndex % activeServers.length];
-            rrIndex = (rrIndex + 1) % activeServers.length;
-            selectedUrl = `${selected.url}/api`;
-            break;
-          }
-          case 'failover':
-          default: {
-            const primaryServer = getPrimaryEnvServer();
-            const primaryOnline = activeServers.find(s => s.url === primaryServer.url && s.status !== 'offline');
-            if (primaryOnline) {
-              selectedUrl = `${primaryOnline.url}/api`;
-            } else {
-              selectedUrl = `${activeServers[0].url}/api`;
-            }
-            break;
-          }
-        }
-        config.baseURL = selectedUrl;
-      }
-
+      rrIndex = nextRrIndex;
+      config.baseURL = `${selectedUrl}/api`;
       return config;
     });
 
-    // 2. Response Interceptor for Automatic Failover & Retry
+    // 2. Response Interceptor for Automatic Failover & Safe Retry
     const responseInterceptor = axios.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        // Record node success to clear cooldown upon recovery
+        if (response.config && response.config.baseURL) {
+          recordNodeSuccess(response.config.baseURL);
+        }
+        return response;
+      },
       async (error) => {
         const originalRequest = error.config;
-        
-        // If request failed due to server crash/network loss and hasn't been retried yet
-        if (originalRequest && !originalRequest._retryCount) {
-          originalRequest._retryCount = 1;
-          
-          const isNetworkOr5xxError = !error.response || (error.response.status >= 502 && error.response.status <= 504);
-          
-          if (isNetworkOr5xxError) {
-            const currentConfig = trafficConfigRef.current;
-            const currentBaseURL = originalRequest.baseURL;
-            
-            // Filter other healthy backup servers
-            const backupServers = currentConfig.servers.filter(s => 
-              s.status !== 'offline' && `${s.url}/api` !== currentBaseURL
-            );
-            
-            if (backupServers.length > 0) {
-              const fallbackServer = backupServers[0];
-              originalRequest.baseURL = `${fallbackServer.url}/api`;
-              console.warn(`Request failed on ${currentBaseURL}. Retrying on fallback: ${fallbackServer.name} (${fallbackServer.url})`);
-              
-              // Re-execute axios request with the new baseURL
-              return axios(originalRequest);
-            }
+        if (originalRequest && originalRequest.baseURL) {
+          const isNetworkOr5xx = !error.response || (error.response.status >= 502 && error.response.status <= 504);
+          if (isNetworkOr5xx) {
+            recordNodeFailure(originalRequest.baseURL, error);
+          }
+        }
+
+        // Idempotency check: only retry GET/HEAD/OPTIONS requests on network drops or 502-504 gateway failures
+        if (originalRequest && shouldRetryRequest(error, originalRequest)) {
+          originalRequest._retryCount = (originalRequest._retryCount || 0) + 1;
+
+          const currentConfig = trafficConfigRef.current;
+          const currentBaseURL = originalRequest.baseURL;
+          const fallbackServer = getFallbackServer(currentConfig.servers, currentBaseURL, { isOnWebDomain });
+
+          if (fallbackServer) {
+            originalRequest.baseURL = `${normalizeUrl(fallbackServer.url)}/api`;
+            console.warn(`Idempotent request failed on ${currentBaseURL}. Retrying on fallback node: ${fallbackServer.name} (${fallbackServer.url})`);
+            return axios(originalRequest);
           }
         }
         return Promise.reject(error);
@@ -360,17 +276,28 @@ export const AuthProvider = ({ children }) => {
         try {
           const parsedUser = JSON.parse(storedUser);
           setUser(parsedUser); // Set immediately for fast UI
+          setLoading(false); // Unblock UI immediately so app does not get stuck on 'Loading SSMS...'
           
-          // Then fetch fresh data in background
+          // Then fetch fresh data in background with timeout
           if (parsedUser && parsedUser._id) {
-            const { data } = await axios.get('/auth/profile', {
-              headers: { 'x-user-id': parsedUser._id }
-            });
-            setUser(data);
-            localStorage.setItem('user', JSON.stringify(data));
+            try {
+              const { data } = await axios.get('/auth/profile', {
+                headers: { 'x-user-id': parsedUser._id },
+                timeout: 6000
+              });
+              setUser(data);
+              localStorage.setItem('user', JSON.stringify(data));
+            } catch (err) {
+              if (err.response && err.response.status === 401) {
+                console.warn("Session expired, clearing stored user");
+                setUser(null);
+                localStorage.removeItem('user');
+              }
+            }
           }
+          return;
         } catch (error) {
-          console.error("Error fetching fresh profile:", error);
+          console.error("Error parsing stored user:", error);
         }
       }
       setLoading(false);
@@ -394,20 +321,71 @@ export const AuthProvider = ({ children }) => {
 
   // Global Active Batch State
   const [batchesList, setBatchesList] = useState([]);
+  const [isLoadingBatches, setIsLoadingBatches] = useState(false);
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
+
+  // Initialize selected batch from localStorage
   const [selectedBatchId, setSelectedBatchIdState] = useState(() => {
-    return localStorage.getItem('selectedBatchId') || 'all';
+    const saved = localStorage.getItem('selectedBatchId');
+    return (saved && saved !== 'all') ? saved : '';
   });
+  const [selectedBatchName, setSelectedBatchNameState] = useState(() => {
+    return localStorage.getItem('selectedBatchName') || '';
+  });
+  const [selectedBatch, setSelectedBatch] = useState(null);
 
-  const setSelectedBatchId = (batchId) => {
-    setSelectedBatchIdState(batchId);
-    if (batchId) {
-      localStorage.setItem('selectedBatchId', batchId);
-    } else {
-      localStorage.removeItem('selectedBatchId');
+  const clearBatchSelection = useCallback(() => {
+    setSelectedBatch(null);
+    setSelectedBatchIdState('');
+    setSelectedBatchNameState('');
+    localStorage.removeItem('selectedBatchId');
+    localStorage.removeItem('selectedBatchName');
+    if (user?.role === 'admin' || user?.role === 'mentor') {
+      setIsBatchModalOpen(true);
     }
-  };
+  }, [user?.role]);
 
-  const fetchGlobalBatches = async () => {
+  const selectBatch = useCallback((batchInput) => {
+    if (!batchInput) return;
+    let batchObj = null;
+    if (typeof batchInput === 'string') {
+      batchObj = batchesList.find(b => b._id.toString() === batchInput.toString());
+    } else if (batchInput && batchInput._id) {
+      batchObj = batchInput;
+    }
+
+    if (!batchObj || !batchObj._id) return;
+
+    setSelectedBatch(batchObj);
+    setSelectedBatchIdState(batchObj._id);
+    setSelectedBatchNameState(batchObj.batchName || '');
+    localStorage.setItem('selectedBatchId', batchObj._id);
+    localStorage.setItem('selectedBatchName', batchObj.batchName || '');
+    setIsBatchModalOpen(false);
+  }, [batchesList]);
+
+  const setSelectedBatchId = useCallback((batchId) => {
+    if (!batchId || batchId === 'all') {
+      clearBatchSelection();
+    } else {
+      selectBatch(batchId);
+    }
+  }, [clearBatchSelection, selectBatch]);
+
+  const openBatchModal = useCallback(() => {
+    setIsBatchModalOpen(true);
+  }, []);
+
+  const closeBatchModal = useCallback(() => {
+    // Cannot close modal if no valid batch is selected for admin
+    if (selectedBatchId) {
+      setIsBatchModalOpen(false);
+    }
+  }, [selectedBatchId]);
+
+  const fetchGlobalBatches = useCallback(async () => {
+    if (!user) return;
+    setIsLoadingBatches(true);
     try {
       let sortedBatches = [];
       if (user?.role === 'student') {
@@ -419,36 +397,84 @@ export const AuthProvider = ({ children }) => {
         }
       } else {
         const { data } = await axios.get('/batches');
-        sortedBatches = Array.isArray(data) ? [...data].sort((a, b) => new Date(b.createdAt || b.startDate) - new Date(a.createdAt || a.startDate)) : [];
+        let rawBatches = Array.isArray(data) ? data : [];
+        if (user?.role === 'mentor') {
+          const uId = (user?._id || '').toString();
+          rawBatches = rawBatches.filter(b => {
+            const mId = (b.mentorId?._id || b.mentorId)?.toString();
+            const inMentors = Array.isArray(b.mentors) && b.mentors.some(m => (m?._id || m)?.toString() === uId);
+            return mId === uId || inMentors;
+          });
+        }
+        sortedBatches = [...rawBatches].sort((a, b) => new Date(b.createdAt || b.startDate) - new Date(a.createdAt || a.startDate));
       }
       setBatchesList(sortedBatches);
 
-      const savedBatchId = localStorage.getItem('selectedBatchId');
-      if (savedBatchId && (savedBatchId === 'all' || sortedBatches.some(b => b._id === savedBatchId))) {
-        // Retain user's saved batch selection
+      if (user?.role === 'admin' || user?.role === 'mentor') {
+        const savedBatchId = localStorage.getItem('selectedBatchId');
+        if (savedBatchId && savedBatchId !== 'all') {
+          const matchedBatch = sortedBatches.find(b => b._id.toString() === savedBatchId.toString());
+          if (matchedBatch) {
+            // Valid batch found and confirmed by backend!
+            setSelectedBatch(matchedBatch);
+            setSelectedBatchIdState(matchedBatch._id);
+            setSelectedBatchNameState(matchedBatch.batchName || '');
+            localStorage.setItem('selectedBatchId', matchedBatch._id);
+            localStorage.setItem('selectedBatchName', matchedBatch.batchName || '');
+            setIsBatchModalOpen(false);
+          } else {
+            // Selected batch was deleted or is invalid
+            console.warn(`Saved batch ID ${savedBatchId} no longer exists in available batches.`);
+            setSelectedBatch(null);
+            setSelectedBatchIdState('');
+            setSelectedBatchNameState('');
+            localStorage.removeItem('selectedBatchId');
+            localStorage.removeItem('selectedBatchName');
+            setIsBatchModalOpen(true);
+          }
+        } else {
+          // No batch selected yet! Mandatory selection for admin and mentor
+          setSelectedBatch(null);
+          setSelectedBatchIdState('');
+          setSelectedBatchNameState('');
+          localStorage.removeItem('selectedBatchId');
+          localStorage.removeItem('selectedBatchName');
+          setIsBatchModalOpen(true);
+        }
       } else if (sortedBatches.length > 0) {
-        // Default to the latest batch
-        const latestId = sortedBatches[0]._id;
-        setSelectedBatchIdState(latestId);
-        localStorage.setItem('selectedBatchId', latestId);
+        const savedBatchId = localStorage.getItem('selectedBatchId');
+        const matched = sortedBatches.find(b => b._id.toString() === savedBatchId);
+        const active = matched || sortedBatches[0];
+        setSelectedBatch(active);
+        setSelectedBatchIdState(active._id);
+        setSelectedBatchNameState(active.batchName || '');
       }
     } catch (err) {
       console.error('Error fetching global batches:', err);
+    } finally {
+      setIsLoadingBatches(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (user) {
       fetchGlobalBatches();
     }
-  }, [user?._id, user?.role]);
+  }, [user?._id, user?.role, fetchGlobalBatches]);
 
-  const activeBatch = batchesList.find(b => b._id === selectedBatchId) || batchesList[0];
+  const activeBatch = selectedBatch || batchesList.find(b => b._id.toString() === selectedBatchId?.toString()) || batchesList[0] || null;
+  const isBatchClosed = activeBatch 
+    ? (activeBatch.status === 'Completed' || (activeBatch.endDate && new Date(activeBatch.endDate) <= new Date()))
+    : false;
   const customPanelName = user?.role === 'admin' 
-    ? 'SACS 3.0' 
-    : (activeBatch?.panelName?.trim() || '');
+    ? 'SRAC 2.0' 
+    : user?.role === 'mentor'
+    ? 'SSMS - Saran Students Management System'
+    : (activeBatch?.panelName?.trim() || 'SSMS 2.0');
   const customPanelSubheading = user?.role === 'admin' 
-    ? 'Super Admin Controlling System' 
+    ? 'SR Admin Console & Maintenance System' 
+    : user?.role === 'mentor'
+    ? 'Saran Students Management System'
     : (activeBatch?.panelSubheading?.trim() || '');
 
   const logout = async () => {
@@ -457,6 +483,11 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {}
     setUser(null);
     localStorage.removeItem('user');
+    // Retain selectedBatchId and selectedBatchName in localStorage so that
+    // upon reopening or logging back in, the administrator's preferred batch is restored.
+    setSelectedBatch(null);
+    setSelectedBatchIdState('');
+    setSelectedBatchNameState('');
   };
 
   const updateUser = (userData) => {
@@ -477,8 +508,17 @@ export const AuthProvider = ({ children }) => {
       refreshTrafficConfig,
       selectedBatchId,
       setSelectedBatchId,
+      selectedBatchName,
+      selectedBatch,
       batchesList,
+      isLoadingBatches,
       activeBatch,
+      isBatchClosed,
+      isBatchModalOpen,
+      openBatchModal,
+      closeBatchModal,
+      selectBatch,
+      clearBatchSelection,
       customPanelName,
       customPanelSubheading,
       fetchGlobalBatches

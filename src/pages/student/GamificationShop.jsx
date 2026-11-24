@@ -183,29 +183,33 @@ const GamificationShop = () => {
   }, [activeTab, fetchCatalog]);
 
   const handleUnlock = async (item) => {
-    if (level < (item.requiredLevel || 1)) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Level Locked',
-        text: `You must reach Level ${item.requiredLevel} to purchase this item. Keep earning XP by completing tasks!`,
-        confirmButtonColor: '#f59e0b'
-      });
-      return;
+    const isStaff = authUser?.role === 'admin' || authUser?.role === 'mentor';
+    if (!isStaff) {
+      if (level < (item.requiredLevel || 1)) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Level Locked',
+          text: `You must reach Level ${item.requiredLevel} to purchase this item. Keep earning XP by completing tasks!`,
+          confirmButtonColor: '#f59e0b'
+        });
+        return;
+      }
+
+      if ((userCoins || 0) < item.cost) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Insufficient Coins',
+          html: `<p class="text-sm">You need <b class="text-amber-500">${item.cost - (userCoins || 0)} 🪙</b> more to purchase <b>${item.name}</b>.</p><p class="text-[11px] text-gray-400 mt-2">Complete attendance, daily quizzes, and LeetCode problems to earn coins!</p>`,
+          confirmButtonColor: '#f59e0b'
+        });
+        return;
+      }
     }
 
-    if ((userCoins || 0) < item.cost) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Insufficient Coins',
-        html: `<p class="text-sm">You need <b class="text-amber-500">${item.cost - (userCoins || 0)} 🪙</b> more to purchase <b>${item.name}</b>.</p><p class="text-[11px] text-gray-400 mt-2">Complete attendance, daily quizzes, and LeetCode problems to earn coins!</p>`,
-        confirmButtonColor: '#f59e0b'
-      });
-      return;
-    }
-
+    const unlockCost = isStaff ? 0 : item.cost;
     const result = await Swal.fire({
       title: `Unlock ${item.name}?`,
-      html: `<div class="text-center"><p>Cost: <b class="text-amber-500">${item.cost} 🪙</b></p><p class="text-sm text-gray-400 mt-1">Rarity: ${item.rarity}</p></div>`,
+      html: `<div class="text-center"><p>Cost: <b class="text-amber-500">${unlockCost} 🪙</b></p><p class="text-sm text-gray-400 mt-1">Rarity: ${item.rarity}</p></div>`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#f59e0b',
@@ -296,7 +300,7 @@ const GamificationShop = () => {
   };
 
   const handleBuyChest = async (chestType, cost) => {
-    const isUserAdmin = authUser?.role === 'admin';
+    const isUserAdmin = authUser?.role === 'admin' || authUser?.role === 'mentor';
     const displayCost = isUserAdmin ? 0 : cost;
     const result = await Swal.fire({
       title: `Buy ${chestType} Chest?`,
@@ -339,7 +343,7 @@ const GamificationShop = () => {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Hero Header */}
-      {authUser?.role === 'admin' ? (
+      {authUser?.role === 'admin' || authUser?.role === 'mentor' ? (
         <div className="relative bg-gradient-to-r from-sky-600 via-blue-600 to-indigo-700 p-8 rounded-3xl text-white shadow-xl shadow-blue-500/20 overflow-hidden">
           <div className="absolute top-0 right-0 w-72 h-72 bg-white/5 rounded-full blur-3xl -mr-24 -mt-24"></div>
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-sky-400/10 rounded-full blur-3xl -ml-12 -mb-12"></div>
@@ -347,7 +351,9 @@ const GamificationShop = () => {
             <h1 className="text-3xl font-extrabold flex items-center gap-3">
               <Sparkles className="text-amber-300" size={32} /> Cosmetics Closet
             </h1>
-            <p className="text-sky-100 mt-2 font-medium">Equip any cosmetic customizations to your administrator account instantly for free!</p>
+            <p className="text-sky-100 mt-2 font-medium">
+              Equip any cosmetic customizations to your {authUser?.role === 'mentor' ? 'mentor' : 'administrator'} account instantly for free!
+            </p>
           </div>
         </div>
       ) : (
@@ -402,7 +408,7 @@ const GamificationShop = () => {
       )}
 
       {/* Tab Navigation */}
-      {authUser?.role !== 'admin' && (
+      {authUser?.role !== 'admin' && authUser?.role !== 'mentor' && (
         <div className="flex overflow-x-auto gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/50 dark:border-slate-700/60 custom-scrollbar shrink-0">
           {TABS.map(tab => (
             <button
@@ -780,7 +786,7 @@ const GamificationShop = () => {
 
       {activeTab === 'friends' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          {/* Main Friends Header & Search Request Form */}
+          {/* Main Friends Header & Connections Hub Redirect */}
           <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 p-6 shadow-lg">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <div>
@@ -788,98 +794,19 @@ const GamificationShop = () => {
                   <Users size={22} className="text-violet-500" /> Friends Directory
                 </h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Connect with your classmates using their Roll Number to share coins and check out their profile achievements.
+                  Share coins and celebrate milestones with your connected classmates. Friend requests are exclusively managed in the Centralised Connections Hub.
                 </p>
               </div>
-              <form onSubmit={handleSendRequest} className="w-full md:w-auto flex items-center gap-2">
-                <div className="relative flex-1 md:w-72">
-                  <UserPlus className="absolute left-3.5 top-3 text-slate-400" size={18} />
-                  <input
-                    type="text"
-                    value={friendRollInput}
-                    onChange={(e) => setFriendRollInput(e.target.value)}
-                    placeholder="Enter Friend's Roll Number..."
-                    className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent text-slate-900 dark:text-white font-bold"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={socialLoading || !friendRollInput.trim()}
-                  className="px-4 py-2 text-sm font-bold bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-2xl hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-violet-500/20 shrink-0 cursor-pointer"
+              <div>
+                <Link
+                  to="/student/connections"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-black transition-all shadow-md shadow-violet-500/20 shrink-0"
                 >
-                  Add Friend
-                </button>
-              </form>
+                  <Users size={15} /> Open Friend Connections Hub &rarr;
+                </Link>
+              </div>
             </div>
           </div>
-
-          {/* Pending Invites Section */}
-          {(pendingIncoming.length > 0 || pendingOutgoing.length > 0) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Incoming requests */}
-              {pendingIncoming.length > 0 && (
-                <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 p-6 shadow-lg">
-                  <h4 className="font-extrabold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                    📥 Pending Friend Requests ({pendingIncoming.length})
-                  </h4>
-                  <div className="space-y-3">
-                    {pendingIncoming.map((req) => (
-                      <div key={req.requestId} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/30 border border-slate-200/50 dark:border-slate-700/50 rounded-2xl">
-                        <div className="flex items-center gap-3">
-                          <img src={req.avatar || '/avatars/jerry.png'} alt={req.name} className="w-10 h-10 rounded-full border-2 border-violet-400 bg-slate-200" />
-                          <div>
-                            <p className="text-sm font-extrabold text-slate-900 dark:text-white">{req.name}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">{req.rollNumber}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleRespondRequest(req.requestId, 'accept')}
-                            disabled={socialLoading}
-                            className="px-3 py-1.5 text-xs font-bold bg-emerald-500 text-white rounded-xl hover:bg-emerald-400 disabled:opacity-40 shrink-0 cursor-pointer"
-                          >
-                            Accept
-                          </button>
-                          <button
-                            onClick={() => handleRespondRequest(req.requestId, 'reject')}
-                            disabled={socialLoading}
-                            className="px-3 py-1.5 text-xs font-bold bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl border border-red-500/20 disabled:opacity-40 shrink-0 cursor-pointer"
-                          >
-                            Decline
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Outgoing requests */}
-              {pendingOutgoing.length > 0 && (
-                <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 p-6 shadow-lg">
-                  <h4 className="font-extrabold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
-                    📤 Sent Requests ({pendingOutgoing.length})
-                  </h4>
-                  <div className="space-y-3">
-                    {pendingOutgoing.map((req) => (
-                      <div key={req.requestId} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/30 border border-slate-200/50 dark:border-slate-700/50 rounded-2xl">
-                        <div className="flex items-center gap-3">
-                          <img src={req.avatar || '/avatars/jerry.png'} alt={req.name} className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-700 bg-slate-200" />
-                          <div>
-                            <p className="text-sm font-extrabold text-slate-900 dark:text-white">{req.name}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">{req.rollNumber}</p>
-                          </div>
-                        </div>
-                        <span className="text-xs font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
-                          Pending...
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Friends List Grid */}
           <div className="bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700 p-6 shadow-lg">
@@ -922,7 +849,7 @@ const GamificationShop = () => {
               <div className="text-center py-12 text-slate-500">
                 <Users size={40} className="mx-auto mb-3 opacity-30" />
                 <p className="font-bold">You haven't added any friends yet.</p>
-                <p className="text-xs text-slate-400 mt-1">Enter a Roll Number in the search bar above to get started!</p>
+                <p className="text-xs text-slate-400 mt-1">Visit Friend Connections in the sidebar to send and manage classmate friend requests!</p>
               </div>
             )}
           </div>

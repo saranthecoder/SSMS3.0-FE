@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import 'react-quill-new/dist/quill.snow.css';
-import { FileText, CheckCircle, ExternalLink, Loader2, Link as LinkIcon, Download, RefreshCw, Zap, X } from 'lucide-react';
+import { FileText, CheckCircle, ExternalLink, Loader2, Link as LinkIcon, Download, RefreshCw, Zap, X, AlertTriangle, Clock } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { useAuth } from '../../context/AuthContext';
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
 
 const formatDateTime = (dateString) => {
   if (!dateString) return '';
@@ -22,7 +23,7 @@ const formatDateTime = (dateString) => {
 };
 
 const SubmissionReviews = () => {
-  const { selectedBatchId, batchesList } = useAuth();
+  const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeReview, setActiveReview] = useState(null);
@@ -130,19 +131,33 @@ const SubmissionReviews = () => {
       ]);
       
       const fullSub = subRes.data;
+      const isLate = Boolean(fullSub.isLate || (fullSub.submittedAt && fullSub.taskId?.dueDate && new Date(fullSub.submittedAt) > new Date(fullSub.taskId.dueDate)));
+      const delayMs = isLate && fullSub.submittedAt && fullSub.taskId?.dueDate ? (new Date(fullSub.submittedAt) - new Date(fullSub.taskId.dueDate)) : 0;
+      const delayHours = fullSub.delayHours || (delayMs > 0 ? Math.ceil(delayMs / 3600000) : 0);
+      const latePenalty = fullSub.latePenalty !== undefined ? fullSub.latePenalty : delayHours * 1;
+
+      fullSub.isLate = isLate;
+      fullSub.delayHours = delayHours;
+      fullSub.latePenalty = latePenalty;
       setActiveReview(fullSub);
       
       if (gradeRes && gradeRes.data) {
         const data = gradeRes.data;
         setGradeData({ marksObtained: data.marksObtained, feedback: data.feedback });
         setExistingGradeId(data._id);
+        setIsLateSubmission(isLate);
       } else {
+        const maxMarks = fullSub.taskId?.maxMarks || 10;
+        const autoMarks = isLate ? Math.max(0, maxMarks - latePenalty) : maxMarks;
+        const defaultFeedback = isLate 
+          ? `Late submission (-${latePenalty} mark(s) auto-deducted for ${delayHours}h delay). Good effort, submit on time next time!`
+          : 'Good Work, Keep going...';
         setGradeData({ 
-          marksObtained: fullSub.taskId?.maxMarks || '', 
-          feedback: 'Good Work, Keep going...' 
+          marksObtained: autoMarks, 
+          feedback: defaultFeedback 
         });
+        setIsLateSubmission(isLate);
       }
-      setIsLateSubmission(false);
     } catch (error) {
       console.error('Error opening review modal:', error);
       Swal.fire('Error', 'Could not fetch submission details.', 'error');
@@ -229,6 +244,11 @@ const SubmissionReviews = () => {
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
+
+          <div className="px-3 py-1.5 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-bold border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 whitespace-nowrap">
+            <span>Scope:</span>
+            <span className="text-slate-800 dark:text-white font-extrabold">{selectedBatchName || (batchesList.find(b => b._id === selectedBatchId)?.batchName || 'Active Batch')}</span>
+          </div>
           
           <button
             onClick={handleAutoEvaluate}
@@ -267,10 +287,11 @@ const SubmissionReviews = () => {
                       <div className="font-bold text-slate-800 dark:text-slate-100">{sub.studentId?.name || 'Unknown'}</div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">{sub.studentId?.email}</div>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-1">
                       {sub.status === 'submitted' && <span className="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs font-bold rounded-full">PENDING</span>}
                       {sub.status === 'graded' && <span className="px-2 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs font-bold rounded-full">GRADED</span>}
                       {sub.status === 'resubmit' && <span className="px-2 py-1 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-xs font-bold rounded-full">RESUBMIT</span>}
+                      {sub.isLate && <span className="px-2 py-0.5 bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 text-[10px] font-black rounded-full border border-rose-300/40">LATE (-{sub.latePenalty || sub.delayHours || 1}m)</span>}
                     </div>
                   </div>
                   <div>
@@ -324,9 +345,12 @@ const SubmissionReviews = () => {
                         {formatDateTime(sub.submittedAt || sub.createdAt)}
                       </td>
                       <td className="p-4">
-                        {sub.status === 'submitted' && <span className="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs font-bold rounded-full">PENDING</span>}
-                        {sub.status === 'graded' && <span className="px-2 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs font-bold rounded-full">GRADED</span>}
-                        {sub.status === 'resubmit' && <span className="px-2 py-1 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-xs font-bold rounded-full">RESUBMIT</span>}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {sub.status === 'submitted' && <span className="px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs font-bold rounded-full">PENDING</span>}
+                          {sub.status === 'graded' && <span className="px-2 py-1 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs font-bold rounded-full">GRADED</span>}
+                          {sub.status === 'resubmit' && <span className="px-2 py-1 bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 text-xs font-bold rounded-full">RESUBMIT</span>}
+                          {sub.isLate && <span className="px-2 py-0.5 bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300 text-[10px] font-black rounded-full border border-rose-300/40">LATE (-{sub.latePenalty || sub.delayHours || 1}m)</span>}
+                        </div>
                       </td>
                       <td className="p-4 text-right">
                         {sub.status === 'resubmit' ? (
@@ -542,6 +566,19 @@ const SubmissionReviews = () => {
                     <Loader2 className="animate-spin text-primary-500" size={32} />
                   </div>
                 )}
+                {/* Late Submission & Delay Penalty Notice */}
+                {activeReview.isLate && (
+                  <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs mb-3 shadow-xs">
+                    <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300 font-bold">
+                      <AlertTriangle size={16} className="shrink-0 text-rose-600" />
+                      <span>Late Submission (+{activeReview.delayHours}h delay past deadline)</span>
+                    </div>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-600 text-white font-black text-[11px] self-start sm:self-auto shadow-xs">
+                      <span>Auto Late Penalty: -{activeReview.latePenalty} Mark{activeReview.latePenalty === 1 ? '' : 's'}</span>
+                    </div>
+                  </div>
+                )}
+
                 <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-4 border-b border-slate-200 dark:border-slate-700 pb-2">{existingGradeId ? 'Edit Evaluation' : 'Evaluation Form'}</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>

@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { Users, Plus, Edit, Trash2, Loader2, Calendar, UserMinus, X, Download, Clock, RefreshCw, Search, RotateCcw, CheckCircle, Upload, FileSpreadsheet, UserCheck, AlertTriangle, ShieldCheck, BookOpen, Layers, UserPlus, Link2 } from 'lucide-react';
+import { Users, Plus, Edit, Trash2, Loader2, Calendar, UserMinus, X, Download, Clock, RefreshCw, Search, RotateCcw, CheckCircle, Upload, FileSpreadsheet, UserCheck, AlertTriangle, ShieldCheck, BookOpen, Layers, UserPlus, Link2, Lock, Unlock, CalendarCheck } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import Loader from '../../components/Loader';
 import * as XLSX from 'xlsx';
 
 import { useAuth } from '../../context/AuthContext';
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
 
 const BatchManagement = () => {
-  const { user } = useAuth();
+  const { user, fetchGlobalBatches } = useAuth();
+  const { selectedBatchId, selectedBatchName } = useGlobalBatch();
   const [batches, setBatches] = useState([]);
   const [mentors, setMentors] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,7 +19,9 @@ const BatchManagement = () => {
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
     batchName: '', description: '', startDate: '', endDate: '', status: 'Upcoming', checkInTime: '', checkOutTime: '', mentorId: '',
-    requiredPresentHours: 8, maxValidHours: 10
+    requiredPresentHours: 8, maxValidHours: 10,
+    onsiteMinHours: 8, onsiteMaxHours: 10,
+    wfhMinHours: 8, wfhMaxHours: 10
   });
   const [editingId, setEditingId] = useState(null);
 
@@ -98,7 +102,11 @@ const BatchManagement = () => {
       autoCheckOutEnabled: batch.autoCheckOutEnabled !== undefined ? batch.autoCheckOutEnabled : true,
       mentorId: batch.mentorId?._id || batch.mentorId || '',
       requiredPresentHours: batch.requiredPresentHours !== undefined ? batch.requiredPresentHours : 8,
-      maxValidHours: batch.maxValidHours !== undefined ? batch.maxValidHours : 10
+      maxValidHours: batch.maxValidHours !== undefined ? batch.maxValidHours : 10,
+      onsiteMinHours: batch.onsiteMinHours !== undefined ? batch.onsiteMinHours : (batch.requiredPresentHours !== undefined ? batch.requiredPresentHours : 8),
+      onsiteMaxHours: batch.onsiteMaxHours !== undefined ? batch.onsiteMaxHours : (batch.maxValidHours !== undefined ? batch.maxValidHours : 10),
+      wfhMinHours: batch.wfhMinHours !== undefined ? batch.wfhMinHours : 8,
+      wfhMaxHours: batch.wfhMaxHours !== undefined ? batch.wfhMaxHours : 10
     });
     setEditingId(batch._id);
     setShowModal(true);
@@ -119,9 +127,16 @@ const BatchManagement = () => {
         await axios.post('/batches', payload);
       }
       setShowModal(false);
-      setFormData({ batchName: '', panelName: '', panelSubheading: '', description: '', startDate: '', endDate: '', status: 'Upcoming', checkInTime: '', checkOutTime: '', autoCheckOutTime: '21:00', autoCheckOutEnabled: true, mentorId: '' });
+      setFormData({
+        batchName: '', panelName: '', panelSubheading: '', description: '', startDate: '', endDate: '', status: 'Upcoming',
+        checkInTime: '', checkOutTime: '', autoCheckOutTime: '21:00', autoCheckOutEnabled: true, mentorId: '',
+        requiredPresentHours: 8, maxValidHours: 10,
+        onsiteMinHours: 8, onsiteMaxHours: 10,
+        wfhMinHours: 8, wfhMaxHours: 10
+      });
       setEditingId(null);
       fetchBatches();
+      if (fetchGlobalBatches) fetchGlobalBatches();
     } catch (error) {
       console.error('Error saving batch:', error);
     } finally {
@@ -144,9 +159,143 @@ const BatchManagement = () => {
       try {
         await axios.delete(`/batches/${id}`);
         fetchBatches();
+        if (fetchGlobalBatches) fetchGlobalBatches();
         Swal.fire('Deleted!', 'The batch has been deleted.', 'success');
       } catch (error) {
         Swal.fire('Error', 'Could not delete batch.', 'error');
+      }
+    }
+  };
+
+  const handleCloseBatch = async (batch) => {
+    let todayStr = new Date().toISOString().split('T')[0];
+    const { value: formValues } = await Swal.fire({
+      title: 'Close Batch',
+      html: `
+        <div class="text-left text-xs font-semibold space-y-3">
+          <p class="text-slate-600 dark:text-slate-300">Are you sure you want to close batch <b>"${batch.batchName}"</b>? Once closed, this batch will be marked as Completed across the application.</p>
+          <div>
+            <label class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Set Close Batch Date:</label>
+            <input id="swal-close-date" type="date" value="${todayStr}" class="w-full px-3 py-2 border rounded-lg text-sm bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white" />
+          </div>
+        </div>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, Close Batch',
+      focusConfirm: false,
+      preConfirm: () => {
+        const dateVal = document.getElementById('swal-close-date').value;
+        if (!dateVal) {
+          Swal.showValidationMessage('Please select a close date');
+          return false;
+        }
+        return dateVal;
+      }
+    });
+
+    if (formValues) {
+      try {
+        await axios.put(`/batches/${batch._id}/close`, {
+          closeDate: formValues,
+          status: 'Completed'
+        });
+        Swal.fire('Batch Closed', `Batch "${batch.batchName}" has been successfully closed.`, 'success');
+        fetchBatches();
+        if (fetchGlobalBatches) fetchGlobalBatches();
+      } catch (err) {
+        Swal.fire('Error', err.response?.data?.message || 'Failed to close batch', 'error');
+      }
+    }
+  };
+
+  const handleEditCloseDate = async (batch) => {
+    let currentEndDate = '';
+    try {
+      if (batch.endDate) currentEndDate = new Date(batch.endDate).toISOString().split('T')[0];
+    } catch (e) {}
+
+    const { value: newDate } = await Swal.fire({
+      title: 'Edit Close Batch Date',
+      html: `
+        <div class="text-left text-xs font-semibold space-y-3">
+          <p class="text-slate-600 dark:text-slate-300">Update the scheduled completion / close date for <b>"${batch.batchName}"</b>:</p>
+          <div>
+            <label class="block font-bold text-slate-700 dark:text-slate-200 mb-1">Close Batch Date:</label>
+            <input id="swal-edit-close-date" type="date" value="${currentEndDate}" class="w-full px-3 py-2 border rounded-lg text-sm bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white" />
+          </div>
+          <p class="text-[11px] text-slate-400">Note: If set to today or a past date, the batch will close automatically.</p>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonColor: '#4f46e5',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Update Date',
+      preConfirm: () => {
+        const val = document.getElementById('swal-edit-close-date').value;
+        if (!val) {
+          Swal.showValidationMessage('Please select a valid date');
+          return false;
+        }
+        return val;
+      }
+    });
+
+    if (newDate) {
+      try {
+        await axios.put(`/batches/${batch._id}`, {
+          endDate: newDate
+        });
+        Swal.fire('Updated', 'Close batch date updated successfully.', 'success');
+        fetchBatches();
+        if (fetchGlobalBatches) fetchGlobalBatches();
+      } catch (err) {
+        Swal.fire('Error', err.response?.data?.message || 'Failed to update close date', 'error');
+      }
+    }
+  };
+
+  const handleReopenBatch = async (batch) => {
+    const defaultEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const { value: newEndDate } = await Swal.fire({
+      title: 'Reopen Batch',
+      html: `
+        <div class="text-left text-xs font-semibold space-y-3">
+          <p class="text-slate-600 dark:text-slate-300">Reopen batch <b>"${batch.batchName}"</b> as Active. Please set a future close date:</p>
+          <div>
+            <label class="block font-bold text-slate-700 dark:text-slate-200 mb-1">New Close Date:</label>
+            <input id="swal-reopen-date" type="date" value="${defaultEnd}" class="w-full px-3 py-2 border rounded-lg text-sm bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white" />
+          </div>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#10b981',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Reopen Batch',
+      preConfirm: () => {
+        const val = document.getElementById('swal-reopen-date').value;
+        if (!val || new Date(val) <= new Date()) {
+          Swal.showValidationMessage('Please select a future date to reopen');
+          return false;
+        }
+        return val;
+      }
+    });
+
+    if (newEndDate) {
+      try {
+        await axios.put(`/batches/${batch._id}`, {
+          status: 'Active',
+          endDate: newEndDate
+        });
+        Swal.fire('Reopened!', `Batch "${batch.batchName}" is now Active.`, 'success');
+        fetchBatches();
+        if (fetchGlobalBatches) fetchGlobalBatches();
+      } catch (err) {
+        Swal.fire('Error', err.response?.data?.message || 'Failed to reopen batch', 'error');
       }
     }
   };
@@ -462,7 +611,16 @@ const BatchManagement = () => {
             <FileSpreadsheet size={18} className="text-emerald-400" /> Excel Template
           </button>
           {user?.role === 'admin' && (
-            <button onClick={() => { setFormData({ batchName: '', description: '', startDate: '', endDate: '', status: 'Upcoming', checkInTime: '', checkOutTime: '', mentorId: '', requiredPresentHours: 8, maxValidHours: 10 }); setEditingId(null); setShowModal(true); }} className="btn-primary flex items-center gap-2 cursor-pointer">
+            <button onClick={() => {
+              setFormData({
+                batchName: '', description: '', startDate: '', endDate: '', status: 'Upcoming', checkInTime: '', checkOutTime: '', mentorId: '',
+                requiredPresentHours: 8, maxValidHours: 10,
+                onsiteMinHours: 8, onsiteMaxHours: 10,
+                wfhMinHours: 8, wfhMaxHours: 10
+              });
+              setEditingId(null);
+              setShowModal(true);
+            }} className="btn-primary flex items-center gap-2 cursor-pointer">
               <Plus size={20} /> Create Batch
             </button>
           )}
@@ -502,6 +660,11 @@ const BatchManagement = () => {
           <option value="Completed">Completed</option>
         </select>
 
+        <div className="px-3 py-1.5 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-bold border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 whitespace-nowrap">
+          <span>Active Scope:</span>
+          <span className="text-slate-800 dark:text-white font-extrabold">{selectedBatchName || 'None'}</span>
+        </div>
+
         <button 
           onClick={handleResetFilters}
           className="px-3 py-1.5 flex items-center justify-center gap-1.5 font-medium text-sm text-rose-600 bg-rose-50 dark:bg-rose-900/20 rounded-lg hover:bg-rose-100 transition-colors border border-rose-100 dark:border-rose-800/50 whitespace-nowrap cursor-pointer w-full sm:w-auto sm:ml-auto"
@@ -519,19 +682,32 @@ const BatchManagement = () => {
             <p className="text-sm mt-1 font-medium">Try adjusting your filters or search term.</p>
           </div>
         ) : (
-          filteredBatches.map((batch) => (
-          <div key={batch._id} className="glass-panel p-6 card-hover flex flex-col justify-between">
-            <div>
-              <div className="flex justify-between items-start mb-3">
-                <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100">{batch.batchName}</h3>
-                <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${
-                  batch.status === 'Active' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' :
-                  batch.status === 'Completed' ? 'bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-200' :
-                  'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                }`}>
-                  {batch.status}
-                </span>
-              </div>
+          filteredBatches.map((batch) => {
+            const isCurrentBatch = selectedBatchId && batch._id.toString() === selectedBatchId.toString();
+            const isClosed = (batch.status || '').toLowerCase() === 'completed' || (batch.endDate && new Date(batch.endDate) <= new Date());
+            return (
+            <div key={batch._id} className={`glass-panel p-6 card-hover flex flex-col justify-between ${isCurrentBatch ? 'ring-2 ring-indigo-500 shadow-indigo-500/20 shadow-lg' : ''}`}>
+              <div>
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100">{batch.batchName}</h3>
+                    {isCurrentBatch && (
+                      <span className="px-2 py-0.5 text-[10px] font-black uppercase tracking-wider bg-indigo-600 text-white rounded-md">
+                        Active Scope
+                      </span>
+                    )}
+                  </div>
+                  <span className={`px-2.5 py-1 text-xs font-black rounded-full flex items-center gap-1 ${
+                    isClosed
+                      ? 'bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800/60'
+                      : batch.status === 'Active'
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                  }`}>
+                    {isClosed && <Lock size={12} />}
+                    {isClosed ? 'Closed' : batch.status}
+                  </span>
+                </div>
               <p className="text-slate-600 dark:text-slate-300 text-sm mb-4 line-clamp-2">{batch.description}</p>
               
               {/* Assigned Mentor Badge */}
@@ -546,16 +722,40 @@ const BatchManagement = () => {
               </div>
 
               {/* Attendance Hours Limits Badge */}
-              <div className="mb-4 flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/40 p-2 px-3 rounded-xl border border-slate-100 dark:border-slate-800/60">
-                <span>Present: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">≥ {batch.requiredPresentHours !== undefined ? batch.requiredPresentHours : 8}h</strong></span>
-                <span>Max Valid: <strong className="text-amber-600 dark:text-amber-400 font-bold">≤ {batch.maxValidHours !== undefined ? batch.maxValidHours : 10}h</strong></span>
+              <div className="mb-4 grid grid-cols-2 gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/40 p-2.5 px-3 rounded-xl border border-slate-100 dark:border-slate-800/60">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">On-Site Policy</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-bold">≥ {batch.onsiteMinHours !== undefined ? batch.onsiteMinHours : (batch.requiredPresentHours !== undefined ? batch.requiredPresentHours : 8)}h</span>
+                  <span className="text-slate-400 mx-1">/</span>
+                  <span className="text-amber-600 dark:text-amber-400 font-bold">≤ {batch.onsiteMaxHours !== undefined ? batch.onsiteMaxHours : (batch.maxValidHours !== undefined ? batch.maxValidHours : 10)}h</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">WFH Policy</span>
+                  <span className="text-sky-600 dark:text-sky-400 font-bold">≥ {batch.wfhMinHours !== undefined ? batch.wfhMinHours : 8}h</span>
+                  <span className="text-slate-400 mx-1">/</span>
+                  <span className="text-amber-600 dark:text-amber-400 font-bold">≤ {batch.wfhMaxHours !== undefined ? batch.wfhMaxHours : 10}h</span>
+                </div>
               </div>
 
               <div className="space-y-2 mb-4">
-                <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-                  <div className="flex items-center gap-1"><Calendar size={16}/> {new Date(batch.startDate).toLocaleDateString()}</div>
+                <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center gap-1"><Calendar size={15}/> {new Date(batch.startDate).toLocaleDateString()}</div>
                   <span>to</span>
-                  <div className="flex items-center gap-1"><Calendar size={16}/> {new Date(batch.endDate).toLocaleDateString()}</div>
+                  <div className="flex items-center gap-1">
+                    <Calendar size={15}/> 
+                    <span className={isClosed ? 'text-red-600 dark:text-red-400 font-bold' : ''}>
+                      {new Date(batch.endDate).toLocaleDateString()}
+                    </span>
+                    {user?.role === 'admin' && (
+                      <button 
+                        onClick={() => handleEditCloseDate(batch)} 
+                        title="Edit Close Batch Date"
+                        className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded text-indigo-500 cursor-pointer ml-1"
+                      >
+                        <Edit size={12} />
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {(batch.checkInTime || batch.checkOutTime) && (
                   <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
@@ -591,18 +791,46 @@ const BatchManagement = () => {
               </div>
 
               {user?.role === 'admin' && (
-                <div className="flex items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
-                  <button onClick={() => handleEdit(batch)} className="text-indigo-600 hover:text-indigo-700 p-2 rounded-md hover:bg-indigo-50 transition-colors flex items-center gap-1 text-xs font-semibold cursor-pointer">
-                    <Edit size={16} /> Edit Batch
+                <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+                  <button onClick={() => handleEdit(batch)} className="text-indigo-600 hover:text-indigo-700 p-1.5 rounded-md hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors flex items-center gap-1 text-xs font-semibold cursor-pointer">
+                    <Edit size={14} /> Edit
                   </button>
-                  <button onClick={() => handleDelete(batch._id)} className="text-red-500 hover:text-red-600 p-2 rounded-md hover:bg-red-50 transition-colors ml-auto cursor-pointer">
-                    <Trash2 size={18} />
+
+                  {isClosed ? (
+                    <button 
+                      onClick={() => handleReopenBatch(batch)} 
+                      className="text-emerald-600 hover:text-emerald-700 p-1.5 rounded-md hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors flex items-center gap-1 text-xs font-bold cursor-pointer"
+                      title="Reopen Batch as Active"
+                    >
+                      <Unlock size={14} /> Reopen
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => handleCloseBatch(batch)} 
+                      className="text-amber-600 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors flex items-center gap-1 text-xs font-bold cursor-pointer"
+                      title="Close Batch"
+                    >
+                      <Lock size={14} /> Close Batch
+                    </button>
+                  )}
+
+                  <button 
+                    onClick={() => handleEditCloseDate(batch)} 
+                    className="text-slate-600 dark:text-slate-300 hover:text-indigo-600 p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                    title="Edit Close Batch Date"
+                  >
+                    <CalendarCheck size={14} /> Close Date
+                  </button>
+
+                  <button onClick={() => handleDelete(batch._id)} className="text-red-500 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors ml-auto cursor-pointer" title="Delete Batch">
+                    <Trash2 size={16} />
                   </button>
                 </div>
               )}
             </div>
           </div>
-        )))}
+        );
+      }))}
       </div>
 
       {/* Create / Edit Batch Modal */}
@@ -676,7 +904,7 @@ const BatchManagement = () => {
                       className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none transition-all dark:text-white text-sm placeholder:text-slate-500 font-extrabold" 
                       value={formData.panelName || ''} 
                       onChange={e => setFormData({...formData, panelName: e.target.value})} 
-                      placeholder="e.g. PSMS (Default: SSMS 3.0)" 
+                      placeholder="e.g. PSMS (Default: SSMS 2.0)" 
                     />
                   </div>
 
@@ -717,8 +945,9 @@ const BatchManagement = () => {
                     <input required type="date" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none text-xs text-slate-800 dark:text-white" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">End Date *</label>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">End / Close Date *</label>
                     <input required type="date" className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none text-xs text-slate-800 dark:text-white" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} />
+                    <p className="text-[10px] text-slate-400 mt-0.5">Closes automatically on deadline</p>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Check-in Time</label>
@@ -768,50 +997,90 @@ const BatchManagement = () => {
               {/* Section 3: Attendance Thresholds & Status */}
               <div className="space-y-4">
                 <h3 className="text-xs font-black uppercase tracking-wider text-purple-500 flex items-center gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-800">
-                  <CheckCircle size={14} /> 3. Attendance Rules & Batch Status
+                  <CheckCircle size={14} /> 3. Attendance Policies (On-Site & WFH) & Batch Status
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-900/40 p-3.5 rounded-2xl border border-slate-200/70 dark:border-slate-800">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Present Hours Limit *</label>
+                    <label className="block text-xs font-bold text-emerald-700 dark:text-emerald-400 mb-1">On-Site Min Hours (Present) *</label>
                     <input 
                       required 
                       type="number" 
                       min="1" 
                       max="24" 
-                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none text-sm text-slate-800 dark:text-white font-bold" 
-                      value={formData.requiredPresentHours} 
-                      onChange={e => setFormData({...formData, requiredPresentHours: e.target.value})} 
+                      className="w-full px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none text-sm text-slate-800 dark:text-white font-bold" 
+                      value={formData.onsiteMinHours} 
+                      onChange={e => setFormData({
+                        ...formData, 
+                        onsiteMinHours: Number(e.target.value),
+                        requiredPresentHours: Number(e.target.value)
+                      })} 
                       placeholder="8"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">Min hours for Present (default: 8)</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Min physical office hours for Present (default: 8)</p>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Max Valid Hours Limit *</label>
+                    <label className="block text-xs font-bold text-amber-700 dark:text-amber-400 mb-1">On-Site Max Valid Hours *</label>
                     <input 
                       required 
                       type="number" 
                       min="1" 
                       max="24" 
-                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none text-sm text-slate-800 dark:text-white font-bold" 
-                      value={formData.maxValidHours} 
-                      onChange={e => setFormData({...formData, maxValidHours: e.target.value})} 
+                      className="w-full px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none text-sm text-slate-800 dark:text-white font-bold" 
+                      value={formData.onsiteMaxHours} 
+                      onChange={e => setFormData({
+                        ...formData, 
+                        onsiteMaxHours: Number(e.target.value),
+                        maxValidHours: Number(e.target.value)
+                      })} 
                       placeholder="10"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">Hours above this set Invalid (default: 10)</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Hours above this set to Invalid (default: 10)</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-sky-50/50 dark:bg-slate-900/40 p-3.5 rounded-2xl border border-sky-100 dark:border-slate-800">
+                  <div>
+                    <label className="block text-xs font-bold text-sky-700 dark:text-sky-400 mb-1">WFH Min Hours (Present) *</label>
+                    <input 
+                      required 
+                      type="number" 
+                      min="1" 
+                      max="24" 
+                      className="w-full px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none text-sm text-slate-800 dark:text-white font-bold" 
+                      value={formData.wfhMinHours} 
+                      onChange={e => setFormData({...formData, wfhMinHours: Number(e.target.value)})} 
+                      placeholder="8"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">Min remote work hours for Present (default: 8)</p>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Batch Status</label>
-                    <select 
-                      className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none text-sm text-slate-800 dark:text-white cursor-pointer font-bold" 
-                      value={formData.status} 
-                      onChange={e => setFormData({...formData, status: e.target.value})}
-                    >
-                      <option value="Upcoming">Upcoming</option>
-                      <option value="Active">Active</option>
-                      <option value="Completed">Completed</option>
-                    </select>
+                    <label className="block text-xs font-bold text-amber-700 dark:text-amber-400 mb-1">WFH Max Valid Hours *</label>
+                    <input 
+                      required 
+                      type="number" 
+                      min="1" 
+                      max="24" 
+                      className="w-full px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none text-sm text-slate-800 dark:text-white font-bold" 
+                      value={formData.wfhMaxHours} 
+                      onChange={e => setFormData({...formData, wfhMaxHours: Number(e.target.value)})} 
+                      placeholder="10"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">WFH hours above this set to Invalid (default: 10)</p>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Batch Status</label>
+                  <select 
+                    className="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none text-sm text-slate-800 dark:text-white cursor-pointer font-bold" 
+                    value={formData.status} 
+                    onChange={e => setFormData({...formData, status: e.target.value})}
+                  >
+                    <option value="Upcoming">Upcoming</option>
+                    <option value="Active">Active</option>
+                    <option value="Completed">Completed</option>
+                  </select>
                 </div>
               </div>
 

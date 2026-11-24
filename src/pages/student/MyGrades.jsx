@@ -94,7 +94,12 @@ const MyGrades = () => {
                   <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-6 -mt-6 blur-xl"></div>
                   <div className="relative z-10 flex flex-col items-center">
                     <span className="mb-2 drop-shadow-md text-white/90 flex justify-center"><Icon size={40} strokeWidth={1.5} /></span>
-                    <div className="text-3xl font-black mb-2">{score} <span className="text-lg opacity-80 font-bold">/ {max}</span></div>
+                    <div className="text-3xl font-black mb-1">{score} <span className="text-lg opacity-80 font-bold">/ {max}</span></div>
+                    {grade.latePenalty > 0 && (
+                      <div className="mb-2 px-2.5 py-0.5 rounded-full bg-rose-500/30 text-rose-100 text-[10px] font-bold border border-rose-300/40 inline-flex items-center gap-1">
+                        <span>⚠️ Late Penalty: -{grade.latePenalty}m ({grade.delayHours || Math.ceil(grade.latePenalty)}h delay)</span>
+                      </div>
+                    )}
                     <h3 className="font-bold text-xs uppercase tracking-wider bg-white/20 px-3 py-1.5 rounded-full backdrop-blur-md shadow-sm border border-white/10">{encouragement}</h3>
                   </div>
                 </div>
@@ -169,7 +174,13 @@ const MyGrades = () => {
                     )}
                     <div className="border-t border-slate-200 dark:border-slate-700 pt-2 flex justify-between items-center text-sm">
                       <span className="text-slate-500 dark:text-slate-400 font-bold">Percentage:</span>
-                      <span className="font-black text-theme-primary">{formatScore(score.percentage)}%</span>
+                      <span className="font-black text-theme-primary">
+                        {formatScore(
+                          (score.percentage && Number(score.percentage) > 0)
+                            ? score.percentage
+                            : (drive.maxMarks && Number(drive.maxMarks) > 0 ? (Number(score.totalMarks || 0) / Number(drive.maxMarks)) * 100 : 0)
+                        )}%
+                      </span>
                     </div>
                   </div>
                   
@@ -194,3 +205,4 @@ const MyGrades = () => {
 };
 
 export default MyGrades;
+

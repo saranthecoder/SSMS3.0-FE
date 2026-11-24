@@ -7,6 +7,7 @@ import 'react-quill-new/dist/quill.snow.css';
 import { BookOpen, Loader2, UploadCloud, FileText as FileTextIcon, Link as LinkIcon, Save, X, ArrowLeft } from 'lucide-react';
 import Loader from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
 
 const formatLocalISO = (dateStr) => {
   if (!dateStr) return '';
@@ -31,7 +32,7 @@ const TaskCreateEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditMode = !!id;
-  const { selectedBatchId } = useAuth();
+  const { selectedBatchId } = useGlobalBatch();
 
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -95,7 +96,7 @@ const TaskCreateEdit = () => {
           setFormData({
             title: task.title,
             description: task.description,
-            dueDate: task.dueDate ? formatLocalDate(task.dueDate) : '',
+            dueDate: task.dueDate ? formatLocalISO(task.dueDate) : '',
             maxMarks: task.maxMarks,
             batchId: task.batchId?._id || task.batchId,
             taskType: task.taskType || 'text',
@@ -313,14 +314,20 @@ const TaskCreateEdit = () => {
           {/* Due Date & Max Marks */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Due Date</label>
+              <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                <span>Deadline (Date & Time) *</span>
+                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">Live Countdown Enabled</span>
+              </label>
               <input 
                 required 
-                type="date" 
-                className="input-field py-2.5 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700" 
+                type="datetime-local" 
+                className="input-field py-2.5 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-mono text-xs sm:text-sm text-slate-900 dark:text-white" 
                 value={formData.dueDate} 
                 onChange={e => setFormData({...formData, dueDate: e.target.value})} 
               />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Students will see an active countdown with seconds. Auto-grading deducts 1 mark for each hour of delay.
+              </p>
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Max Marks</label>

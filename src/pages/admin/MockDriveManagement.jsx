@@ -4,6 +4,7 @@ import Swal from 'sweetalert2';
 import { Plus, Trash2, Award, Upload, Download, Loader2, Search, Check, AlertCircle, RefreshCw, Eye, X, Save, Edit3 } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { useAuth } from '../../context/AuthContext';
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
 
 const formatScore = (val) => {
   if (val === undefined || val === null) return 'N/A';
@@ -12,7 +13,8 @@ const formatScore = (val) => {
 };
 
 const MockDriveManagement = () => {
-  const { user, selectedBatchId, batchesList } = useAuth();
+  const { user } = useAuth();
+  const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
   const [batches, setBatches] = useState([]);
   const [mockDrives, setMockDrives] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +32,21 @@ const MockDriveManagement = () => {
   const [parsedRows, setParsedRows] = useState([]);
   const [unmatchedStudents, setUnmatchedStudents] = useState([]);
   const [parsedMaxMarks, setParsedMaxMarks] = useState(749);
+
+  // Details Modal State
+  const [activeMockDrive, setActiveMockDrive] = useState(null);
+  const [scoresList, setScoresList] = useState([]);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+
+  // Score Editing State
+  const [editingStudentId, setEditingStudentId] = useState(null);
+  const [editAptitude, setEditAptitude] = useState(0);
+  const [editMcq, setEditMcq] = useState(0);
+  const [editCoding, setEditCoding] = useState(0);
+  const [editTechHr, setEditTechHr] = useState(0);
+  const [editHr, setEditHr] = useState(0);
+  const [editGrade, setEditGrade] = useState('Fail');
+  const [editAttended, setEditAttended] = useState(false);
 
   const fetchBatches = async () => {
     try {
@@ -300,6 +317,11 @@ const MockDriveManagement = () => {
           <p className="text-slate-500 mt-1 font-medium">Upload Excel mock drives and track student placement performances</p>
         </div>
         <div className="flex items-center gap-3">
+          <div className="px-3 py-1.5 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-bold border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 whitespace-nowrap">
+            <span>Scope:</span>
+            <span className="text-slate-800 dark:text-white font-extrabold">{selectedBatchName || (batchesList.find(b => b._id === selectedBatchId)?.batchName || 'Active Batch')}</span>
+          </div>
+
           <button 
             onClick={() => {
               setUploadTitle('');
@@ -621,179 +643,222 @@ const MockDriveManagement = () => {
                 <div className="flex-1 flex flex-col min-h-0 space-y-4">
                   <div className="flex-1 flex flex-col min-h-0 border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
                     <div className="flex-1 overflow-y-auto custom-scrollbar">
-                      <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-black uppercase tracking-wider sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
-                          <tr>
-                            <th className="px-4 py-4">Student</th>
-                            <th className="px-4 py-4">Roll Number</th>
-                            <th className="px-4 py-4 text-center">Aptitude</th>
-                            <th className="px-4 py-4 text-center">Tech MCQ</th>
-                            <th className="px-4 py-4 text-center">Coding</th>
-                            <th className="px-4 py-4 text-center">Tech HR</th>
-                            <th className="px-4 py-4 text-center">HR</th>
-                            <th className="px-4 py-4 text-center">Total</th>
-                            <th className="px-4 py-4 text-center">Percentage</th>
-                            <th className="px-4 py-4 text-center">Grade</th>
-                            <th className="px-4 py-4 text-center">Attended</th>
-                            <th className="px-4 py-4 text-center">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {scoresList.length === 0 ? (
-                            <tr>
-                              <td colSpan="12" className="text-center py-8 text-slate-500 dark:text-slate-400">
-                                No score records found.
-                              </td>
-                            </tr>
-                          ) : (
-                            scoresList.map((score) => {
-                              const student = score.studentId || {};
-                              const isEditing = editingStudentId === (student._id || student);
+                      {(() => {
+                        const dynamicRoundHeaders = Array.from(
+                          new Set(
+                            scoresList.flatMap(s => (s.roundScores || []).map(r => r.name))
+                          )
+                        );
+                        const hasDynamicRounds = dynamicRoundHeaders.length > 0;
 
-                              if (isEditing) {
-                                return (
-                                  <tr key={student._id || score._id} className="bg-indigo-50/50 dark:bg-indigo-900/10">
-                                    <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{student.name || 'Unknown'}</td>
-                                    <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{student.rollNumber || 'N/A'}</td>
-                                    <td className="px-4 py-3 text-center">
-                                      <input 
-                                        type="text" 
-                                        placeholder="N/A"
-                                        className="w-16 px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm text-center focus:ring-2 focus:ring-emerald-500" 
-                                        value={editAptitude === null ? '' : editAptitude} 
-                                        onChange={e => setEditAptitude(e.target.value === '' ? null : e.target.value)} 
-                                      />
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                      <input 
-                                        type="text" 
-                                        placeholder="N/A"
-                                        className="w-16 px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm text-center focus:ring-2 focus:ring-emerald-500" 
-                                        value={editMcq === null ? '' : editMcq} 
-                                        onChange={e => setEditMcq(e.target.value === '' ? null : e.target.value)} 
-                                      />
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                      <input 
-                                        type="number" 
-                                        className="w-16 px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm text-center focus:ring-2 focus:ring-emerald-500" 
-                                        value={editCoding} 
-                                        onChange={e => setEditCoding(e.target.value)} 
-                                      />
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                      <input 
-                                        type="number" 
-                                        className="w-16 px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm text-center focus:ring-2 focus:ring-emerald-500" 
-                                        value={editTechHr} 
-                                        onChange={e => setEditTechHr(e.target.value)} 
-                                      />
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                      <input 
-                                        type="number" 
-                                        className="w-16 px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm text-center focus:ring-2 focus:ring-emerald-500" 
-                                        value={editHr} 
-                                        onChange={e => setEditHr(e.target.value)} 
-                                      />
-                                    </td>
-                                    <td className="px-4 py-3 font-black text-slate-800 dark:text-slate-200 text-center">
-                                      {formatScore(
-                                        (editAptitude === null || editAptitude === '' ? 0 : Number(editAptitude)) + 
-                                        (editMcq === null || editMcq === '' ? 0 : Number(editMcq)) + 
-                                        Number(editCoding) + 
-                                        Number(editTechHr) + 
-                                        Number(editHr)
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-3 font-black text-emerald-500 text-center">
-                                      {formatScore((
-                                        ((editAptitude === null || editAptitude === '' ? 0 : Number(editAptitude)) + 
-                                         (editMcq === null || editMcq === '' ? 0 : Number(editMcq)) + 
-                                         Number(editCoding) + 
-                                         Number(editTechHr) + 
-                                         Number(editHr)) / (activeMockDrive.maxMarks || 749)
-                                      ) * 100)}%
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                      <select 
-                                        className="px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm" 
-                                        value={editGrade} 
-                                        onChange={e => setEditGrade(e.target.value)}
-                                      >
-                                        <option value="A">A</option>
-                                        <option value="B">B</option>
-                                        <option value="C">C</option>
-                                        <option value="D">D</option>
-                                        <option value="Fail">Fail</option>
-                                      </select>
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                      <input 
-                                        type="checkbox" 
-                                        className="w-4 h-4 text-emerald-500 rounded focus:ring-emerald-500" 
-                                        checked={editAttended} 
-                                        onChange={e => setEditAttended(e.target.checked)} 
-                                      />
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      <div className="flex gap-2 justify-center">
-                                        <button 
-                                          onClick={() => handleUpdateScore(student._id)} 
-                                          className="p-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 shadow-md shadow-emerald-500/20"
-                                          title="Save"
-                                        >
-                                          <Save size={14} />
-                                        </button>
-                                        <button 
-                                          onClick={() => setEditingStudentId(null)} 
-                                          className="p-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-300"
-                                          title="Cancel"
-                                        >
-                                          <X size={14} />
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              }
-
-                              return (
-                                <tr key={student._id || score._id} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/10 transition-colors duration-200">
-                                  <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{student.name || 'Unknown'}</td>
-                                  <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{student.rollNumber || 'N/A'}</td>
-                                  <td className="px-4 py-3 text-center">{formatScore(score.aptitude)}</td>
-                                  <td className="px-4 py-3 text-center">{formatScore(score.mcq)}</td>
-                                  <td className="px-4 py-3 text-center">{formatScore(score.coding)}</td>
-                                  <td className="px-4 py-3 text-center">{formatScore(score.techHr)}</td>
-                                  <td className="px-4 py-3 text-center">{formatScore(score.hr)}</td>
-                                  <td className="px-4 py-3 text-center font-bold text-indigo-500 dark:text-indigo-400">{formatScore(score.totalMarks)}</td>
-                                  <td className="px-4 py-3 text-center font-bold text-emerald-500">{formatScore(score.percentage)}%</td>
-                                  <td className="px-4 py-3 text-center font-medium">
-                                    <span className={`px-2 py-0.5 rounded text-xs ${score.grade === 'Fail' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'}`}>
-                                      {score.grade}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <span className={`px-2 py-0.5 rounded text-xs ${score.attended ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400'}`}>
-                                      {score.attended ? 'Present' : 'Absent'}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <button 
-                                      onClick={() => handleStartEdit(score)} 
-                                      className="p-1.5 text-indigo-500 hover:bg-indigo-500/10 rounded-lg transition-colors cursor-pointer"
-                                      title="Edit Score"
-                                    >
-                                      <Edit3 size={14} />
-                                    </button>
+                        return (
+                          <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-black uppercase tracking-wider sticky top-0 z-10 border-b border-slate-100 dark:border-slate-800">
+                              <tr>
+                                <th className="px-4 py-4">Student</th>
+                                <th className="px-4 py-4">Roll Number</th>
+                                {hasDynamicRounds ? (
+                                  dynamicRoundHeaders.map(h => (
+                                    <th key={h} className="px-4 py-4 text-center">{h}</th>
+                                  ))
+                                ) : (
+                                  <>
+                                    <th className="px-4 py-4 text-center">Aptitude</th>
+                                    <th className="px-4 py-4 text-center">Tech MCQ</th>
+                                    <th className="px-4 py-4 text-center">Coding</th>
+                                    <th className="px-4 py-4 text-center">Tech HR</th>
+                                    <th className="px-4 py-4 text-center">HR</th>
+                                  </>
+                                )}
+                                <th className="px-4 py-4 text-center">Total</th>
+                                <th className="px-4 py-4 text-center">Percentage</th>
+                                <th className="px-4 py-4 text-center">Grade</th>
+                                <th className="px-4 py-4 text-center">Attended</th>
+                                <th className="px-4 py-4 text-center">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                              {scoresList.length === 0 ? (
+                                <tr>
+                                  <td colSpan={hasDynamicRounds ? dynamicRoundHeaders.length + 7 : 12} className="text-center py-8 text-slate-500 dark:text-slate-400">
+                                    No score records found.
                                   </td>
                                 </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </table>
+                              ) : (
+                                scoresList.map((score) => {
+                                  const student = score.studentId || {};
+                                  const isEditing = editingStudentId === (student._id || student);
+
+                                  if (isEditing) {
+                                    return (
+                                      <tr key={student._id || score._id} className="bg-indigo-50/50 dark:bg-indigo-900/10">
+                                        <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{student.name || 'Unknown'}</td>
+                                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{student.rollNumber || 'N/A'}</td>
+                                        {hasDynamicRounds ? (
+                                          dynamicRoundHeaders.map(h => {
+                                            const r = (score.roundScores || []).find(item => item.name === h);
+                                            return (
+                                              <td key={h} className="px-4 py-3 text-center font-semibold">
+                                                {r ? formatScore(r.score) : 'N/A'}
+                                              </td>
+                                            );
+                                          })
+                                        ) : (
+                                          <>
+                                            <td className="px-4 py-3 text-center">
+                                              <input 
+                                                type="text" 
+                                                placeholder="N/A"
+                                                className="w-16 px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm text-center focus:ring-2 focus:ring-emerald-500" 
+                                                value={editAptitude === null ? '' : editAptitude} 
+                                                onChange={e => setEditAptitude(e.target.value === '' ? null : e.target.value)} 
+                                              />
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              <input 
+                                                type="text" 
+                                                placeholder="N/A"
+                                                className="w-16 px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm text-center focus:ring-2 focus:ring-emerald-500" 
+                                                value={editMcq === null ? '' : editMcq} 
+                                                onChange={e => setEditMcq(e.target.value === '' ? null : e.target.value)} 
+                                              />
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              <input 
+                                                type="number" 
+                                                className="w-16 px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm text-center focus:ring-2 focus:ring-emerald-500" 
+                                                value={editCoding} 
+                                                onChange={e => setEditCoding(e.target.value)} 
+                                              />
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              <input 
+                                                type="number" 
+                                                className="w-16 px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm text-center focus:ring-2 focus:ring-emerald-500" 
+                                                value={editTechHr} 
+                                                onChange={e => setEditTechHr(e.target.value)} 
+                                              />
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                              <input 
+                                                type="number" 
+                                                className="w-16 px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm text-center focus:ring-2 focus:ring-emerald-500" 
+                                                value={editHr} 
+                                                onChange={e => setEditHr(e.target.value)} 
+                                              />
+                                            </td>
+                                          </>
+                                        )}
+                                        <td className="px-4 py-3 font-black text-slate-800 dark:text-slate-200 text-center">
+                                          {formatScore(score.totalMarks)}
+                                        </td>
+                                        <td className="px-4 py-3 font-black text-emerald-500 text-center">
+                                          {formatScore(
+                                            (score.percentage && Number(score.percentage) > 0)
+                                              ? score.percentage
+                                              : (activeMockDrive?.maxMarks ? (Number(score.totalMarks || 0) / Number(activeMockDrive.maxMarks)) * 100 : 0)
+                                          )}%
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                          <select 
+                                            className="px-2 py-1 bg-white dark:bg-slate-800 border rounded-lg text-sm" 
+                                            value={editGrade} 
+                                            onChange={e => setEditGrade(e.target.value)}
+                                          >
+                                            <option value="A">A</option>
+                                            <option value="B">B</option>
+                                            <option value="C">C</option>
+                                            <option value="D">D</option>
+                                            <option value="Fail">Fail</option>
+                                          </select>
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                          <input 
+                                            type="checkbox" 
+                                            className="w-4 h-4 text-emerald-500 rounded focus:ring-emerald-500" 
+                                            checked={editAttended} 
+                                            onChange={e => setEditAttended(e.target.checked)} 
+                                          />
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <div className="flex gap-2 justify-center">
+                                            <button 
+                                              onClick={() => handleUpdateScore(student._id)} 
+                                              className="p-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 shadow-md shadow-emerald-500/20"
+                                              title="Save"
+                                            >
+                                              <Save size={14} />
+                                            </button>
+                                            <button 
+                                              onClick={() => setEditingStudentId(null)} 
+                                              className="p-1.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-300"
+                                              title="Cancel"
+                                            >
+                                              <X size={14} />
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  }
+
+                                  return (
+                                    <tr key={student._id || score._id} className="hover:bg-indigo-500/5 dark:hover:bg-indigo-500/10 transition-colors duration-200">
+                                      <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{student.name || 'Unknown'}</td>
+                                      <td className="px-4 py-3 text-slate-500 dark:text-slate-400">{student.rollNumber || 'N/A'}</td>
+                                      {hasDynamicRounds ? (
+                                        dynamicRoundHeaders.map(h => {
+                                          const r = (score.roundScores || []).find(item => item.name === h);
+                                          return (
+                                            <td key={h} className="px-4 py-3 text-center font-semibold text-slate-800 dark:text-slate-200">
+                                              {r !== undefined && r.score !== undefined ? formatScore(r.score) : 'N/A'}
+                                            </td>
+                                          );
+                                        })
+                                      ) : (
+                                        <>
+                                          <td className="px-4 py-3 text-center">{formatScore(score.aptitude)}</td>
+                                          <td className="px-4 py-3 text-center">{formatScore(score.mcq)}</td>
+                                          <td className="px-4 py-3 text-center">{formatScore(score.coding)}</td>
+                                          <td className="px-4 py-3 text-center">{formatScore(score.techHr)}</td>
+                                          <td className="px-4 py-3 text-center">{formatScore(score.hr)}</td>
+                                        </>
+                                      )}
+                                      <td className="px-4 py-3 text-center font-bold text-indigo-500 dark:text-indigo-400">{formatScore(score.totalMarks)}</td>
+                                      <td className="px-4 py-3 text-center font-bold text-emerald-500">
+                                        {formatScore(
+                                          (score.percentage && Number(score.percentage) > 0)
+                                            ? score.percentage
+                                            : (activeMockDrive?.maxMarks ? (Number(score.totalMarks || 0) / Number(activeMockDrive.maxMarks)) * 100 : 0)
+                                        )}%
+                                      </td>
+                                      <td className="px-4 py-3 text-center font-medium">
+                                        <span className={`px-2 py-0.5 rounded text-xs ${score.grade === 'Fail' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'}`}>
+                                          {score.grade}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-3 text-center">
+                                        <span className={`px-2 py-0.5 rounded text-xs ${score.attended ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400'}`}>
+                                          {score.attended ? 'Present' : 'Absent'}
+                                        </span>
+                                      </td>
+                                      <td className="px-4 py-3 text-center">
+                                        <button 
+                                          onClick={() => handleStartEdit(score)} 
+                                          className="p-1.5 text-indigo-500 hover:bg-indigo-500/10 rounded-lg transition-colors cursor-pointer"
+                                          title="Edit Score"
+                                        >
+                                          <Edit3 size={14} />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

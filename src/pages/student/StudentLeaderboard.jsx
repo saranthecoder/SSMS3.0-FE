@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Trophy, Medal, Award, Flame, Eye, Lock, Star, Heart, Shield } from 'lucide-react';
 import Loader from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
 
 const formatScore = (val) => {
   if (val === undefined || val === null || isNaN(val)) return '0';
@@ -80,7 +81,8 @@ const getNamecolorClass = (value) => {
 };
 
 const StudentLeaderboard = () => {
-  const { user, selectedBatchId } = useAuth();
+  const { user } = useAuth();
+  const { selectedBatchId, selectedBatchName } = useGlobalBatch();
   const [batches, setBatches] = useState([]);
   const [selectedBatch, setSelectedBatch] = useState('');
   const [leaderboard, setLeaderboard] = useState([]);
@@ -188,15 +190,22 @@ const StudentLeaderboard = () => {
           <p className="text-indigo-100 mt-2 font-medium">Compete with your peers and maintain your streaks!</p>
         </div>
         <div className="relative z-10">
-          <select 
-            className="bg-white/20 border border-white/30 text-white rounded-xl px-4 py-2.5 outline-none font-medium appearance-none backdrop-blur-sm min-w-[200px]"
-            value={selectedBatch}
-            onChange={(e) => setSelectedBatch(e.target.value)}
-          >
-            {batches.map(b => (
-              <option key={b._id} value={b.batchId._id} className="text-slate-900">{b.batchId.batchName}</option>
-            ))}
-          </select>
+          {(user?.role === 'admin' || user?.role === 'mentor') ? (
+            <div className="bg-white/20 border border-white/30 text-white rounded-xl px-4 py-2 font-bold backdrop-blur-sm flex items-center gap-2">
+              <span className="text-xs uppercase tracking-wider text-indigo-200">Active Scope:</span>
+              <span className="text-sm font-black text-white">{selectedBatchName || batches.find(b => (b.batchId?._id || b.batchId) === selectedBatch)?.batchId?.batchName || 'Batch'}</span>
+            </div>
+          ) : (
+            <select 
+              className="bg-white/20 border border-white/30 text-white rounded-xl px-4 py-2.5 outline-none font-medium appearance-none backdrop-blur-sm min-w-[200px]"
+              value={selectedBatch}
+              onChange={(e) => setSelectedBatch(e.target.value)}
+            >
+              {batches.map(b => (
+                <option key={b._id} value={b.batchId._id} className="text-slate-900">{b.batchId.batchName}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 

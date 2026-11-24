@@ -19,7 +19,9 @@ const LeaveRequests = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const { data } = await axios.get('/leaves');
+      const { data } = await axios.get('/leaves', {
+        params: { batchId: selectedBatchId }
+      });
       setLeaves(data);
     } catch (error) {
       console.error('Error fetching leave requests data:', error);
@@ -30,7 +32,7 @@ const LeaveRequests = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [selectedBatchId]);
 
   const handleUpdateStatus = async (id, status) => {
     try {
@@ -61,7 +63,6 @@ const LeaveRequests = () => {
 
   const handleResetFilters = () => {
     setSearchTerm('');
-    setSelectedBatch('');
     setSelectedStatus('all');
   };
 
@@ -78,10 +79,12 @@ const LeaveRequests = () => {
       studentEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
       reasonText.toLowerCase().includes(searchTerm.toLowerCase());
 
+    const studentBatchId = leave.studentId?.batch?._id || leave.studentId?.batch || leave.batchId;
+
     const matchesBatch = 
+      !selectedBatchId ||
       selectedBatchId === 'all' || 
-      leave.studentId?.batch === selectedBatchId || 
-      (leave.studentId?.batch?._id === selectedBatchId);
+      (studentBatchId && studentBatchId.toString() === selectedBatchId.toString());
 
     const matchesStatus = 
       selectedStatus === 'all' || 

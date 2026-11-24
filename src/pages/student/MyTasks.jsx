@@ -4,7 +4,7 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { Loader2, Upload, ExternalLink, Lock, Calendar, FileText as FileTextIcon, UploadCloud, Link as LinkIcon, AlignLeft, Download, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, Upload, ExternalLink, Lock, Calendar, FileText as FileTextIcon, UploadCloud, Link as LinkIcon, AlignLeft, Download, CheckCircle, ChevronDown, ChevronUp, Clock, AlertTriangle } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 
 const formatDateTime = (dateString) => {
@@ -20,6 +20,83 @@ const formatDateTime = (dateString) => {
   hours = hours ? hours : 12; 
   const timeStr = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
   return `${dd}/${mm}/${yy} - ${timeStr}`;
+};
+
+// Live real-time Countdown Timer with seconds for Task Deadlines
+const TaskCountdownTimer = ({ dueDate, isSubmitted, submission }) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!dueDate) return null;
+
+  const dueTime = new Date(dueDate).getTime();
+  const diffMs = dueTime - now;
+
+  // If student already submitted
+  if (isSubmitted && submission) {
+    const subTime = new Date(submission.submittedAt || submission.createdAt).getTime();
+    const wasLate = subTime > dueTime;
+    if (wasLate) {
+      const delayMs = subTime - dueTime;
+      const delayHours = Math.ceil(delayMs / (1000 * 60 * 60));
+      const penalty = submission.latePenalty || delayHours;
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-black bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+          <Clock size={11} className="text-rose-500" />
+          <span>Submitted {delayHours}h late (-{penalty} mark{penalty > 1 ? 's' : ''})</span>
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-black bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+        <CheckCircle size={11} className="text-emerald-500" />
+        <span>Submitted on time</span>
+      </span>
+    );
+  }
+
+  // Not submitted yet - Active Countdown or Expired
+  if (diffMs > 0) {
+    const totalSec = Math.floor(diffMs / 1000);
+    const d = Math.floor(totalSec / 86400);
+    const h = Math.floor((totalSec % 86400) / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+
+    const pad = (n) => String(n).padStart(2, '0');
+    const isUrgent = diffMs < 3600000; // under 1 hour
+
+    return (
+      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-mono font-black border transition-all ${
+        isUrgent
+          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40 animate-pulse'
+          : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800'
+      }`}>
+        <Clock size={11} className={isUrgent ? 'text-amber-500 animate-spin' : 'text-indigo-500'} />
+        <span>
+          {d > 0 ? `${d}d ${pad(h)}h ${pad(m)}m ${pad(s)}s` : `${pad(h)}h ${pad(m)}m ${pad(s)}s`}
+        </span>
+      </span>
+    );
+  }
+
+  // Deadline Expired (Overdue)
+  const overdueMs = Math.abs(diffMs);
+  const overdueHours = Math.ceil(overdueMs / (1000 * 60 * 60));
+  const penalty = overdueHours;
+
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-black bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+      <AlertTriangle size={11} className="text-rose-500 shrink-0" />
+      <span>Expired (-{penalty} mark{penalty > 1 ? 's' : ''} penalty)</span>
+    </span>
+  );
 };
 
 const MyTasks = () => {
@@ -401,7 +478,7 @@ const MyTasks = () => {
           const isNew = new Date(task.createdAt) > new Date(Date.now() - 24 * 60 * 60 * 1000);
           
           // Check if the task is overdue
-          const isOverdue = new Date() > new Date(task.dueDate).setHours(23, 59, 59, 999) && !isSubmitted;
+          const isOverdue = new Date() > new Date(task.dueDate) && !isSubmitted;
 
           return (
             <div key={task._id} className={`relative overflow-hidden rounded-3xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl shadow-slate-200/50 dark:shadow-black/50 p-6 sm:p-8 flex flex-col group hover:scale-[1.02] transition-transform duration-300 ${isOverdue ? 'border-l-4 border-l-red-500' : ''}`}>
@@ -418,7 +495,10 @@ const MyTasks = () => {
                       <span className="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-widest border border-red-200 dark:border-red-800/50">Overdue</span>
                     )}
                   </div>
-                  <span className="text-[10px] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">{task.batchId?.batchName}</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">{task.batchId?.batchName}</span>
+                    <TaskCountdownTimer dueDate={task.dueDate} isSubmitted={isSubmitted} submission={submission} />
+                  </div>
                 </div>
               </div>
               
@@ -461,7 +541,7 @@ const MyTasks = () => {
               
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-700/50 pt-5 mt-auto">
                 <div className={`flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-lg border whitespace-nowrap ${isOverdue ? 'text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-900/30 dark:text-red-400' : 'text-amber-600 bg-amber-50 border-amber-100 dark:bg-amber-900/20 dark:border-amber-900/30 dark:text-amber-400'}`}>
-                  <Calendar size={14} /> Due: {new Date(task.dueDate).toLocaleDateString()}
+                  <Calendar size={14} /> Due: {formatDateTime(task.dueDate)}
                 </div>
                 {isSubmitted ? (
                   <div className="flex flex-wrap items-center gap-2">
@@ -497,8 +577,12 @@ const MyTasks = () => {
               <button onClick={() => setActiveTask(null)} className="text-slate-400 hover:text-slate-600 dark:text-slate-300">&times;</button>
             </div>
             
-            <div className="p-4 bg-primary-50/50 dark:bg-primary-900/10 border-b border-primary-100 dark:border-primary-900/30">
+            <div className="p-4 bg-primary-50/50 dark:bg-primary-900/10 border-b border-primary-100 dark:border-primary-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <p className="font-semibold text-primary-900 dark:text-primary-300">{activeTask.title}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Deadline: {formatDateTime(activeTask.dueDate)}</span>
+                <TaskCountdownTimer dueDate={activeTask.dueDate} isSubmitted={false} />
+              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto max-h-[85vh]">

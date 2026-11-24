@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { Search, ClipboardList, Briefcase, Code, Calendar, Award, ExternalLink, Download, FileText, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 import SkeletonLoader from '../components/SkeletonLoader';
@@ -14,12 +15,16 @@ const stripHtml = (html) => {
 };
 
 const PublicResources = () => {
-  const [data, setData] = useState({ tasks: [], leetcodeProblems: [] });
+  const [data, setData] = useState({ tasks: [], leetcodeProblems: [], batches: [], selectedBatch: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('all'); // all, tasks, projects, leetcode
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedBatch, setSelectedBatch] = useState('');
+  const [searchParams] = useSearchParams();
+  const urlBatchParam = useMemo(() => searchParams.get('batchId') || searchParams.get('batch') || '', [searchParams]);
+  const isCustomBatchScope = Boolean(urlBatchParam);
+
+  const [selectedBatch, setSelectedBatch] = useState(() => urlBatchParam);
 
   // Open task description in new tab with orange/black/white light theme styles
   const handleViewTask = (item) => {
@@ -163,12 +168,13 @@ const PublicResources = () => {
     }
   };
 
-  const fetchResources = async () => {
+  const fetchResources = async (targetBatch = selectedBatch) => {
     setLoading(true);
     setError('');
     try {
-      // Fetch public allocated resources
-      const { data: resData } = await axios.get('/public/allocated-resources');
+      const actualBatch = typeof targetBatch === 'string' ? targetBatch : selectedBatch;
+      const query = actualBatch ? `?batchId=${encodeURIComponent(actualBatch)}` : '';
+      const { data: resData } = await axios.get(`/public/allocated-resources${query}`);
       setData(resData);
     } catch (err) {
       console.error(err);
@@ -178,8 +184,23 @@ const PublicResources = () => {
     }
   };
 
+  const handleBatchChange = (newBatchId) => {
+    setSelectedBatch(newBatchId);
+    if (typeof window !== 'undefined' && window.history.replaceState) {
+      const url = new URL(window.location);
+      if (newBatchId) {
+        url.searchParams.set('batchId', newBatchId);
+      } else {
+        url.searchParams.delete('batchId');
+        url.searchParams.delete('batch');
+      }
+      window.history.replaceState({}, '', url);
+    }
+    fetchResources(newBatchId);
+  };
+
   useEffect(() => {
-    fetchResources();
+    fetchResources(selectedBatch);
   }, []);
 
   // Format Dates Helper
@@ -202,15 +223,22 @@ const PublicResources = () => {
   const uniqueBatches = useMemo(() => {
     const batchesMap = {};
     
-    data.tasks.forEach(task => {
+    // Priority to all registered batches returned from server
+    if (Array.isArray(data.batches)) {
+      data.batches.forEach(b => {
+        if (b._id) batchesMap[b._id.toString()] = b.batchName;
+      });
+    }
+
+    (data.tasks || []).forEach(task => {
       if (task.batchId && task.batchId._id) {
-        batchesMap[task.batchId._id] = task.batchId.batchName;
+        batchesMap[task.batchId._id.toString()] = task.batchId.batchName;
       }
     });
 
-    data.leetcodeProblems.forEach(problem => {
+    (data.leetcodeProblems || []).forEach(problem => {
       if (problem.batchId && problem.batchId._id) {
-        batchesMap[problem.batchId._id] = problem.batchId.batchName;
+        batchesMap[problem.batchId._id.toString()] = problem.batchId.batchName;
       }
     });
 
@@ -301,10 +329,37 @@ const PublicResources = () => {
               <p className="text-slate-600 mt-2 font-medium text-sm sm:text-base max-w-2xl">
                 Public access list of allocated curriculum tasks, project work specifications, and LeetCode coding problems across all active training cohorts.
               </p>
+              {data.selectedBatch ? (
+                <div className="mt-3 inline-flex items-center gap-2 bg-orange-50 border border-orange-200 text-orange-800 px-3.5 py-1.5 rounded-2xl text-xs font-bold shadow-2xs">
+                  <span>Scoped to Batch: <strong className="text-orange-950">{data.selectedBatch.batchName}</strong></span>
+                  {!isCustomBatchScope && (
+                    <button
+                      type="button"
+                      onClick={() => handleBatchChange('')}
+                      className="text-orange-600 hover:text-orange-950 font-black ml-1.5 hover:underline cursor-pointer"
+                    >
+                      View All Batches ✕
+                    </button>
+                  )}
+                </div>
+              ) : selectedBatch ? (
+                <div className="mt-3 inline-flex items-center gap-2 bg-orange-50 border border-orange-200 text-orange-800 px-3.5 py-1.5 rounded-2xl text-xs font-bold shadow-2xs">
+                  <span>Scoped to Batch: <strong className="text-orange-950">{uniqueBatches.find(b => b.id === selectedBatch)?.name || 'Selected Batch'}</strong></span>
+                  {!isCustomBatchScope && (
+                    <button
+                      type="button"
+                      onClick={() => handleBatchChange('')}
+                      className="text-orange-600 hover:text-orange-950 font-black ml-1.5 hover:underline cursor-pointer"
+                    >
+                      View All Batches ✕
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </div>
             <button 
               id="refresh-btn"
-              onClick={fetchResources}
+              onClick={() => fetchResources(selectedBatch)}
               className="p-3 bg-slate-900 hover:bg-black text-white rounded-2xl transition-all cursor-pointer shadow-md shrink-0 flex items-center gap-2"
               title="Refresh Directory"
             >
@@ -340,9 +395,9 @@ const PublicResources = () => {
           </div>
 
           {/* Search and Dropdowns */}
-          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0">
+          <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto shrink-0 items-center">
             {/* Search Input */}
-            <div className="relative w-full sm:w-64">
+            <div className={`relative w-full ${isCustomBatchScope ? 'sm:w-80' : 'sm:w-64'}`}>
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
                 id="search-input"
@@ -354,18 +409,20 @@ const PublicResources = () => {
               />
             </div>
 
-            {/* Batch Selector */}
-            <select
-              id="batch-select"
-              value={selectedBatch}
-              onChange={(e) => setSelectedBatch(e.target.value)}
-              className="w-full sm:w-48 bg-white border border-slate-200 text-sm text-slate-900 rounded-xl py-2.5 px-3 focus:outline-none focus:border-orange-500 transition-colors"
-            >
-              <option value="">All Batches</option>
-              {uniqueBatches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+            {/* Batch Selector - Hidden when accessing via custom batch public URL */}
+            {!isCustomBatchScope && (
+              <select
+                id="batch-select"
+                value={selectedBatch}
+                onChange={(e) => handleBatchChange(e.target.value)}
+                className="w-full sm:w-56 bg-white border border-slate-200 text-sm text-slate-900 rounded-xl py-2.5 px-3 focus:outline-none focus:border-orange-500 transition-colors font-bold cursor-pointer"
+              >
+                <option value="">All Batches (Global)</option>
+                {uniqueBatches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
           </div>
         </section>
 
@@ -380,7 +437,7 @@ const PublicResources = () => {
             <h2 className="text-xl font-bold text-slate-900 mb-2">Sync Error</h2>
             <p className="text-sm text-rose-600 font-medium">{error}</p>
             <button 
-              onClick={fetchResources}
+              onClick={() => fetchResources(selectedBatch)}
               className="mt-6 px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl transition-all cursor-pointer"
             >
               Try Reloading

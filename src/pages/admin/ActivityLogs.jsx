@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { RefreshCw, FileText, ArrowRight, ArrowLeft, Calendar, UserPlus, Award, BookOpen } from 'lucide-react';
+import { RefreshCw, FileText, ArrowRight, ArrowLeft, Calendar, UserPlus, Award, BookOpen, ShieldAlert, ShieldCheck } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 
 const ActivityLogs = () => {
@@ -124,6 +124,16 @@ const ActivityLogs = () => {
                   badgeColor = 'bg-cyan-50 text-cyan-600 dark:bg-cyan-950/30 dark:text-cyan-400 border border-cyan-100 dark:border-cyan-900/30';
                   circleBg = 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-500';
                   iconElement = <BookOpen size={15} />;
+                  break;
+                case 'ACCESS RESTRICTION':
+                  badgeColor = 'bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400 border border-rose-100 dark:border-rose-900/30';
+                  circleBg = 'bg-rose-50 dark:bg-rose-950/40 text-rose-500';
+                  iconElement = <ShieldAlert size={15} />;
+                  break;
+                case 'ACCESS RESTORED':
+                  badgeColor = 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/30';
+                  circleBg = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-500';
+                  iconElement = <ShieldCheck size={15} />;
                   break;
                 default:
                   badgeColor = 'bg-slate-50 text-slate-600 dark:bg-slate-950/30 dark:text-slate-450 border border-slate-100 dark:border-slate-900/30';

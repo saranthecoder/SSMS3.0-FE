@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import axios from 'axios';
-import { Loader2, ShieldCheck, Search, CheckCircle2, XCircle, Users, RefreshCw } from 'lucide-react';
+import { Loader2, ShieldCheck, Search, CheckCircle2, XCircle, Users, RefreshCw, Clock } from 'lucide-react';
 import Swal from 'sweetalert2';
 import Loader from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
@@ -15,6 +15,7 @@ const CheckInPermissions = () => {
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [grantingAccess, setGrantingAccess] = useState(false);
+  const [workHours, setWorkHours] = useState(8);
 
   // Filters and Sorting
   const [searchTerm, setSearchTerm] = useState('');
@@ -78,11 +79,12 @@ const CheckInPermissions = () => {
       await axios.post('/checkin-access/grant', {
         studentIds: selectedStudents,
         accessType,
-        batchId: effectiveBatchId
+        batchId: effectiveBatchId,
+        workHours: Number(workHours) || 8
       });
       Swal.fire({
         title: 'Access Granted',
-        text: `Granted ${accessType === 'wfh' ? 'Work From Home' : 'On-Site'} access for selected students.`,
+        text: `Granted ${accessType === 'wfh' ? 'Work From Home' : 'On-Site'} access (${Number(workHours) || 8}h work time) for selected students.`,
         icon: 'success',
         timer: 1500,
         showConfirmButton: false
@@ -137,11 +139,12 @@ const CheckInPermissions = () => {
       await axios.post('/checkin-access/grant', {
         studentIds: targetStudents,
         accessType,
-        batchId: effectiveBatchId
+        batchId: effectiveBatchId,
+        workHours: Number(workHours) || 8
       });
       Swal.fire({
         title: 'Bulk Access Granted',
-        text: `Granted ${accessType === 'wfh' ? 'WFH' : 'On-Site'} access to all ${targetStudents.length} filtered students.`,
+        text: `Granted ${accessType === 'wfh' ? 'WFH' : 'On-Site'} access (${Number(workHours) || 8}h work time) to all ${targetStudents.length} filtered students.`,
         icon: 'success',
         timer: 1500,
         showConfirmButton: false
@@ -305,6 +308,20 @@ const CheckInPermissions = () => {
           </div>
           
           <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-850 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+              <Clock size={15} className="text-emerald-500" />
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Daily Work Hours:</span>
+              <input
+                type="number"
+                min="1"
+                max="24"
+                value={workHours}
+                onChange={e => setWorkHours(e.target.value)}
+                className="w-12 px-1.5 py-0.5 text-xs font-black text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500 text-emerald-600 dark:text-emerald-400"
+              />
+              <span className="text-xs font-semibold text-slate-400">h</span>
+            </div>
+
             {selectedStudents.length === 0 ? (
               <>
                 <button
@@ -413,13 +430,18 @@ const CheckInPermissions = () => {
                     {/* Status Badge */}
                     <div>
                       {access ? (
-                        <span className={`text-[10px] uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full border ${
-                          access.accessType === 'wfh'
-                            ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20'
-                            : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                        }`}>
-                          {access.accessType === 'wfh' ? 'WFH' : 'ON-SITE'}
-                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`text-[10px] uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full border ${
+                            access.accessType === 'wfh'
+                              ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20'
+                              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                          }`}>
+                            {access.accessType === 'wfh' ? 'WFH' : 'ON-SITE'}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                            {access.workHours || 8}h Work Time
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-[10px] uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700">
                           NO ACCESS

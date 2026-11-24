@@ -203,3 +203,90 @@
     background-position: 0% -1000%;
   }
 }
+
+/* ─── Premium Glossy Glassmorphic Chat Toast ─── */
+body.swal2-toast-shown .swal2-container {
+  width: auto !important;
+  max-width: 100vw !important;
+  overflow: visible !important;
+  overflow-x: visible !important;
+  padding: 0.85rem 1rem !important;
+}
+
+body.swal2-toast-shown .swal2-container.swal2-top-end,
+body.swal2-toast-shown .swal2-container.swal2-top-right {
+  inset: 0.65rem 0.65rem auto auto !important;
+}
+
+.swal2-popup.glossy-chat-toast {
+  background: rgba(15, 23, 42, 0.94) !important;
+  backdrop-filter: blur(24px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(200%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.7), 0 0 30px rgba(99, 102, 241, 0.25) !important;
+  border-radius: 1.35rem !important;
+  padding: 0.95rem 1.15rem !important;
+  width: 22rem !important;
+  max-width: calc(100vw - 2rem) !important;
+  color: #ffffff !important;
+  overflow: visible !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.swal2-popup.glossy-chat-toast .swal2-html-container {
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.swal2-popup.glossy-chat-toast .swal2-close {
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 1.3rem !important;
+  font-weight: 700 !important;
+  transition: all 0.2s ease !important;
+  top: 0.65rem !important;
+  right: 0.75rem !important;
+  width: 1.75rem !important;
+  height: 1.75rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 9999px !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.swal2-popup.glossy-chat-toast .swal2-close:hover {
+  color: #ffffff !important;
+  background: rgba(239, 68, 68, 0.4) !important;
+  transform: scale(1.1) !important;
+}
+
+.swal2-popup.glossy-chat-toast .swal2-actions {
+  margin: 0.6rem 0 0.1rem 0 !important;
+  width: 100% !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 0.5rem !important;
+}
+
+.swal2-popup.glossy-chat-toast .swal2-confirm {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 4px 15px rgba(99, 102, 241, 0.45) !important;
+  color: #ffffff !important;
+  font-weight: 900 !important;
+  font-size: 0.75rem !important;
+  letter-spacing: 0.02em !important;
+  padding: 0.45rem 1.15rem !important;
+  border-radius: 0.85rem !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.swal2-popup.glossy-chat-toast .swal2-confirm:hover {
+  transform: translateY(-1px) scale(1.03) !important;
+  box-shadow: 0 6px 22px rgba(99, 102, 241, 0.6) !important;
+}

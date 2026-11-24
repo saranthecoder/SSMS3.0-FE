@@ -36,6 +36,17 @@ class SoundManager {
     oscillator.stop(this.audioContext.currentTime + duration);
   }
 
+  playWhatsAppIncoming() {
+    // Iconic high-clarity WhatsApp notification chime (F#5: 739.99Hz, C#6: 1108.73Hz)
+    this.playTone(739.99, 'sine', 0.12, 0.15);
+    setTimeout(() => this.playTone(1108.73, 'sine', 0.28, 0.18), 100);
+  }
+
+  playWhatsAppOutgoing() {
+    // Iconic WhatsApp gentle outgoing message sent "pop"
+    this.playTone(850, 'triangle', 0.04, 0.09);
+  }
+
   playClick() {
     // A short, subtle "pop" or "click" sound
     this.playTone(600, 'sine', 0.05, 0.05);

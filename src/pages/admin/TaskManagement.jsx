@@ -5,10 +5,11 @@ import Swal from 'sweetalert2';
 import { BookOpen, Plus, FileText as FileTextIcon, Edit, Trash2, Link as LinkIcon, RefreshCw, Search, RotateCcw, CheckCircle, Clock, Calendar } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { useAuth } from '../../context/AuthContext';
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
 
 const TaskManagement = () => {
   const navigate = useNavigate();
-  const { selectedBatchId, batchesList } = useAuth();
+  const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
   const [tasks, setTasks] = useState([]);
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -259,7 +260,6 @@ const TaskManagement = () => {
   const handleResetFilters = () => {
     setSearchTerm('');
     setFilterCategory('All');
-    setFilterBatch('');
   };
 
   const filteredTasks = tasks.filter(task => {
@@ -313,6 +313,11 @@ const TaskManagement = () => {
         >
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
+
+        <div className="px-3 py-1.5 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-bold border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 whitespace-nowrap">
+          <span>Scope:</span>
+          <span className="text-slate-800 dark:text-white font-extrabold">{selectedBatchName || (batchesList.find(b => b._id === selectedBatchId)?.batchName || 'Active Batch')}</span>
+        </div>
 
         <select 
           className="input-field py-1.5 text-sm w-full sm:w-auto min-w-[140px]"

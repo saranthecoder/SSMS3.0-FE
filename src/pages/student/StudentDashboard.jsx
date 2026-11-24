@@ -87,13 +87,31 @@ const StudentDashboard = () => {
   const [analytics, setAnalytics] = useState(null);
 
   const [clearedNotifs, setClearedNotifs] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('clearedNotifs')) || []; } catch { return []; }
+    try {
+      const key = user?._id ? `clearedNotifs_${user._id}` : 'clearedNotifs_guest';
+      return JSON.parse(localStorage.getItem(key)) || [];
+    } catch {
+      return [];
+    }
   });
 
+  useEffect(() => {
+    try {
+      const key = user?._id ? `clearedNotifs_${user._id}` : 'clearedNotifs_guest';
+      setClearedNotifs(JSON.parse(localStorage.getItem(key)) || []);
+    } catch {
+      setClearedNotifs([]);
+    }
+  }, [user?._id]);
+
   const dismissNotification = (id) => {
-    const updated = [...clearedNotifs, id];
+    const key = user?._id ? `clearedNotifs_${user._id}` : 'clearedNotifs_guest';
+    const current = (() => {
+      try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; }
+    })();
+    const updated = Array.from(new Set([...current, id]));
     setClearedNotifs(updated);
-    localStorage.setItem('clearedNotifs', JSON.stringify(updated));
+    localStorage.setItem(key, JSON.stringify(updated));
     if (fetchCounts) fetchCounts();
   };
   const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, leave: 0, inProgress: 0, invalid: 0, total: 0, percentage: 0 });
@@ -191,7 +209,7 @@ const StudentDashboard = () => {
             particleSize={0.022}
             holdDuration={2.2}
             sequence={[
-              { type: 'text', text: customPanelName || 'SSMS 3.0', offset: [0, 0, 0] },
+              { type: 'text', text: customPanelName || 'SSMS 2.0', offset: [0, 0, 0] },
               { type: 'shape', shape: 'torus', offset: [0, 0, 0] },
               { type: 'text', text: user?.name.toUpperCase() || 'STUDENT', offset: [0, 0, 0] },
               { type: 'shape', shape: 'sphere', offset: [0, 0, 0] }
@@ -425,7 +443,7 @@ const StudentDashboard = () => {
                       ? 'bg-sky-400 text-slate-950 border border-sky-300 animate-pulse' 
                       : 'bg-emerald-400 text-slate-950 border border-emerald-300'
                   }`}>
-                    {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'}
+                    {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'} ({checkInAccess.workHours || 8}h)
                   </span>
                 )}
               </h3>
@@ -626,7 +644,11 @@ const StudentDashboard = () => {
                 <div className="bg-white/15 px-4 py-2 rounded-2xl border border-white/20 shadow-inner text-center w-full max-w-[200px]">
                   <span className="text-[10px] font-extrabold uppercase tracking-widest text-teal-100 block">Latest Performance</span>
                   <span className="text-3xl font-black text-white leading-none mt-1 inline-block drop-shadow-md">
-                    {Math.round(mockScores[0]?.percentage || 0)}%
+                    {Math.round(
+                      (mockScores[0]?.percentage && Number(mockScores[0]?.percentage) > 0)
+                        ? mockScores[0].percentage
+                        : (mockScores[0]?.mockDriveId?.maxMarks ? ((Number(mockScores[0]?.totalMarks || 0) / Number(mockScores[0].mockDriveId.maxMarks)) * 100) : 0)
+                    )}%
                   </span>
                 </div>
                 <div className="w-full text-center mt-2">

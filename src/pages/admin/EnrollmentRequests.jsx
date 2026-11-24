@@ -3,8 +3,10 @@ import axios from 'axios';
 import { UserCheck, UserX, Loader2, Clock, RefreshCw, Search, RotateCcw } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import Swal from 'sweetalert2';
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
 
 const EnrollmentRequests = () => {
+  const { selectedBatchId, selectedBatchName } = useGlobalBatch();
   const [requests, setRequests] = useState([]);
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -12,13 +14,21 @@ const EnrollmentRequests = () => {
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedBatch, setSelectedBatch] = useState('');
+  const [selectedBatch, setSelectedBatch] = useState(selectedBatchId || '');
+
+  // Synchronize when global batch selection changes
+  useEffect(() => {
+    if (selectedBatchId) {
+      setSelectedBatch(selectedBatchId);
+    }
+  }, [selectedBatchId]);
 
   const fetchRequests = async () => {
     try {
       setLoading(true);
+      const queryParam = selectedBatch ? `?batchId=${selectedBatch}` : '';
       const [enrollRes, batchesRes] = await Promise.all([
-        axios.get('/enrollments/pending'),
+        axios.get(`/enrollments/pending${queryParam}`),
         axios.get('/batches')
       ]);
       setRequests(enrollRes.data);
@@ -32,7 +42,7 @@ const EnrollmentRequests = () => {
 
   useEffect(() => {
     fetchRequests();
-  }, []);
+  }, [selectedBatch]);
 
   const handleAction = async (id, action) => {
     setActionLoading({ id, action });
@@ -117,6 +127,13 @@ const EnrollmentRequests = () => {
             <option key={b._id} value={b._id}>{b.batchName}</option>
           ))}
         </select>
+
+        {selectedBatchId && selectedBatch === selectedBatchId && (
+          <div className="px-2.5 py-1 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-bold border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Active Scope</span>
+          </div>
+        )}
 
         <button 
           onClick={() => { setSearchTerm(''); setSelectedBatch(''); }}

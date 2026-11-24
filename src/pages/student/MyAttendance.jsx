@@ -258,7 +258,14 @@ const MyAttendance = () => {
                       </td>
                     {viewMode === 'Day' ? (
                       <td className="p-4">
-                        {renderStatusBadge(log.status)}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {renderStatusBadge(log.status)}
+                          {log.accessType && (
+                            <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white/10 text-slate-300">
+                              {log.accessType === 'wfh' ? 'WFH' : 'On-Site'} ({log.workHours || log.requiredPresentHours || 8}h)
+                            </span>
+                          )}
+                        </div>
                       </td>
                     ) : (
                       <>

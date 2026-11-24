@@ -1,31 +1,91 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Lock, Loader2, Users, Activity, CheckCircle, Clock, ShieldCheck, Search, Code, GitBranch, Globe, Terminal, XCircle, Layout, ArrowRight, BookOpen, TrendingUp, Cpu, BarChart3, FileText, ClipboardList, Award, Eye, Timer, UserCheck, UserX, Hash, Calendar, ChevronDown, ChevronRight, RefreshCw, GraduationCap, Briefcase, Building2, Flame } from 'lucide-react';
+import { Lock, Loader2, Users, Activity, CheckCircle, Clock, ShieldCheck, ShieldAlert, Ban, Search, Code, GitBranch, Globe, Terminal, XCircle, Layout, ArrowRight, BookOpen, TrendingUp, Cpu, BarChart3, FileText, ClipboardList, Award, Eye, Timer, UserCheck, UserX, Hash, Calendar, ChevronDown, ChevronRight, RefreshCw, GraduationCap, Briefcase, Building2, Flame, LogOut, Sun, Moon } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import SkeletonLoader from '../components/SkeletonLoader';
 
 const PASSCODES = ['SA123', 'ETH123'];
 
+const VERIFY_ORANGE_CSS = `
+  .verify-panel-orange {
+    background-color: #0b0f17 !important;
+    background-image: radial-gradient(at 0% 0%, rgba(249, 115, 22, 0.08) 0px, transparent 50%), radial-gradient(at 100% 100%, rgba(234, 88, 12, 0.05) 0px, transparent 50%) !important;
+    color: #e2e8f0 !important;
+  }
+  .verify-panel-orange .bg-slate-900 {
+    background-color: #0d121d !important;
+    border-color: rgba(249, 115, 22, 0.22) !important;
+  }
+  .verify-panel-orange .bg-slate-800 {
+    background-color: #111827 !important;
+    border-color: rgba(249, 115, 22, 0.18) !important;
+  }
+  .verify-panel-orange .border-slate-700 {
+    border-color: rgba(249, 115, 22, 0.2) !important;
+  }
+  .verify-panel-orange .text-indigo-400 {
+    color: #f97316 !important;
+  }
+  .verify-panel-orange .bg-indigo-600 {
+    background-color: #ea580c !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 14px 0 rgba(234, 88, 12, 0.35) !important;
+  }
+  .verify-panel-orange .hover\\:bg-indigo-700:hover {
+    background-color: #c2410c !important;
+  }
+  .verify-panel-orange .bg-indigo-500\\/20,
+  .verify-panel-orange .bg-indigo-600\\/20 {
+    background-color: rgba(249, 115, 22, 0.15) !important;
+    color: #fb923c !important;
+    border-color: rgba(249, 115, 22, 0.35) !important;
+  }
+  .verify-panel-orange .bg-indigo-500\\/10 {
+    background-color: rgba(249, 115, 22, 0.1) !important;
+    color: #f97316 !important;
+    border-color: rgba(249, 115, 22, 0.25) !important;
+  }
+  .verify-panel-orange .border-indigo-500\\/30 {
+    border-color: rgba(249, 115, 22, 0.35) !important;
+  }
+  .verify-panel-orange input:focus, .verify-panel-orange select:focus {
+    border-color: #ea580c !important;
+    outline: none !important;
+    box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.25) !important;
+  }
+  .verify-panel-orange aside {
+    background-color: #0d121d !important;
+    border-color: rgba(249, 115, 22, 0.2) !important;
+  }
+  .verify-panel-orange header {
+    background-color: #0d121d !important;
+    border-color: rgba(249, 115, 22, 0.2) !important;
+  }
+  .verify-panel-orange tr:hover {
+    background-color: rgba(249, 115, 22, 0.05) !important;
+  }
+`;
+
 const VERIFY_LIGHT_CSS = `
   .verify-panel {
-    background-color: #f0f9ff !important;
-    background-image: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 40%, #ffffff 100%) !important;
+    background-color: #fffaf5 !important;
+    background-image: linear-gradient(135deg, #fff7ed 0%, #fffaf5 40%, #ffffff 100%) !important;
     color: #334155 !important;
   }
   .verify-panel .bg-slate-900 {
-    background-color: #f0f9ff !important;
-    border-color: #bae6fd !important;
+    background-color: #fff7ed !important;
+    border-color: #fed7aa !important;
   }
   .verify-panel .bg-slate-800 {
     background-color: #ffffff !important;
-    border-color: #bae6fd !important;
+    border-color: #fed7aa !important;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02) !important;
   }
   .verify-panel .border-slate-700 {
-    border-color: #e0f2fe !important;
+    border-color: #ffedd5 !important;
   }
   .verify-panel .text-white {
-    color: #0c4a6e !important;
+    color: #431407 !important;
   }
   .verify-panel .text-slate-200 {
     color: #334155 !important;
@@ -40,47 +100,48 @@ const VERIFY_LIGHT_CSS = `
     color: #64748b !important;
   }
   .verify-panel .text-indigo-400 {
-    color: #0284c7 !important;
+    color: #ea580c !important;
   }
   .verify-panel .bg-indigo-600 {
-    background-color: #0284c7 !important;
+    background-color: #ea580c !important;
     color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(234, 88, 12, 0.25) !important;
   }
   .verify-panel .hover\\:bg-indigo-700\\:hover {
-    background-color: #0369a1 !important;
+    background-color: #c2410c !important;
   }
   .verify-panel .bg-indigo-500\\/20 {
-    background-color: #e0f2fe !important;
-    color: #0369a1 !important;
-    border-color: #bae6fd !important;
+    background-color: #fff7ed !important;
+    color: #ea580c !important;
+    border-color: #fed7aa !important;
   }
   .verify-panel .bg-indigo-600\\/20 {
-    background-color: #e0f2fe !important;
-    color: #0369a1 !important;
-    border-color: #bae6fd !important;
+    background-color: #fff7ed !important;
+    color: #ea580c !important;
+    border-color: #fed7aa !important;
   }
   .verify-panel .bg-slate-900\\/60 {
-    background-color: #f0f9ff !important;
-    border-color: #bae6fd !important;
+    background-color: #fff7ed !important;
+    border-color: #fed7aa !important;
   }
   .verify-panel .bg-slate-900\\/40 {
-    background-color: #f1f5f9 !important;
-    border-color: #cbd5e1 !important;
-  }
-  .verify-panel .bg-slate-800\\/50 {
     background-color: #f8fafc !important;
     border-color: #e2e8f0 !important;
   }
+  .verify-panel .bg-slate-800\\/50 {
+    background-color: #fffaf5 !important;
+    border-color: #fed7aa !important;
+  }
   .verify-panel .border-slate-700\\/30 {
-    border-color: #bae6fd !important;
+    border-color: #fed7aa !important;
   }
   .verify-panel .border-slate-700\\/50 {
-    border-color: #bae6fd !important;
+    border-color: #fed7aa !important;
   }
   .verify-panel .bg-slate-700 {
-    background-color: #e2e8f0 !important;
-    border-color: #cbd5e1 !important;
-    color: #334155 !important;
+    background-color: #ffedd5 !important;
+    border-color: #fed7aa !important;
+    color: #431407 !important;
   }
   .verify-panel .text-emerald-400 {
     color: #059669 !important;
@@ -111,9 +172,9 @@ const VERIFY_LIGHT_CSS = `
     border-color: #fde68a !important;
   }
   .verify-panel .bg-indigo-500\\/10 {
-    background-color: #e0f2fe !important;
-    color: #0284c7 !important;
-    border-color: #bae6fd !important;
+    background-color: #fff7ed !important;
+    color: #ea580c !important;
+    border-color: #fed7aa !important;
   }
   .verify-panel input {
     background-color: #ffffff !important;
@@ -129,32 +190,32 @@ const VERIFY_LIGHT_CSS = `
     background-color: #ffffff !important;
   }
   .verify-panel th {
-    background-color: #f1f5f9 !important;
+    background-color: #f8fafc !important;
     color: #475569 !important;
   }
   .verify-panel tr:hover {
-    background-color: #f8fafc !important;
+    background-color: #fff7ed !important;
   }
   .verify-panel aside {
     background-color: #ffffff !important;
-    border-color: #e0f2fe !important;
+    border-color: #ffedd5 !important;
   }
   .verify-panel aside button:not(.bg-indigo-600) {
     color: #475569 !important;
   }
   .verify-panel aside button:not(.bg-indigo-600):hover {
-    background-color: #f0f9ff !important;
-    color: #0284c7 !important;
+    background-color: #fff7ed !important;
+    color: #ea580c !important;
   }
   .verify-panel header {
-    background-color: rgba(255, 255, 255, 0.8) !important;
-    border-color: #e0f2fe !important;
-    color: #0c4a6e !important;
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    border-color: #ffedd5 !important;
+    color: #431407 !important;
   }
   .verify-panel header button {
-    background-color: #f0f9ff !important;
-    border-color: #bae6fd !important;
-    color: #0284c7 !important;
+    background-color: #fff7ed !important;
+    border-color: #fed7aa !important;
+    color: #ea580c !important;
   }
 `;
 
@@ -206,12 +267,14 @@ const SIDEBAR_ITEMS = [
   { id: 'students', label: 'Students', icon: Users },
   { id: 'live', label: 'Live Activity', icon: Activity },
   { id: 'attendance', label: 'Attendance', icon: UserCheck },
+  { id: 'syllabus', label: 'Syllabus Tracker', icon: BookOpen },
   { id: 'tasks', label: 'Tasks', icon: ClipboardList },
   { id: 'leetcode', label: 'LeetCode', icon: Code },
   { id: 'submissions', label: 'Submissions', icon: FileText },
   { id: 'grades', label: 'Grades', icon: Award },
   { id: 'mockDrives', label: 'Mock Tests', icon: Briefcase },
   { id: 'leaves', label: 'Leave Requests', icon: Calendar },
+  { id: 'disciplinary', label: 'Access & Suspension', icon: ShieldAlert },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'logs', label: 'Activity Logs', icon: Clock },
 ];
@@ -221,16 +284,52 @@ const SIDEBAR_ITEMS = [
 // ═══════════════════════════════════════════════════════════
 const Verification = () => {
   const [passcode, setPasscode] = useState('');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    try {
+      const savedAuth = localStorage.getItem('ssms_monitor_auth');
+      const savedCode = localStorage.getItem('ssms_monitor_passcode');
+      return savedAuth === 'true' && !!savedCode;
+    } catch {
+      return false;
+    }
+  });
   const [loading, setLoading] = useState(false);
+  const [verifyingPin, setVerifyingPin] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
   const [activeModule, setActiveModule] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Search / Filter states
+  // Monitor Theme: Default to 'light' theme
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ssms_monitor_theme');
+      if (saved === 'orange' || saved === 'dark' || saved === 'light') return saved;
+      return 'light';
+    } catch {
+      return 'light';
+    }
+  });
+
+  const cycleTheme = () => {
+    const sequence = ['light', 'orange', 'dark'];
+    const next = sequence[(sequence.indexOf(theme) + 1) % sequence.length];
+    setTheme(next);
+    try {
+      localStorage.setItem('ssms_monitor_theme', next);
+    } catch {}
+  };
+
+  // Search / Filter states - synchronized with global active batch
   const [searchTerm, setSearchTerm] = useState('');
-  const [batchFilter, setBatchFilter] = useState('');
+  const [batchFilter, setBatchFilter] = useState(() => {
+    try {
+      const saved = localStorage.getItem('selectedBatchId');
+      return (saved && saved !== 'all') ? saved : '';
+    } catch {
+      return '';
+    }
+  });
   const [statusFilter, setStatusFilter] = useState('');
 
   // Student detail modal
@@ -242,6 +341,10 @@ const Verification = () => {
   const [mockBatchFilter, setMockBatchFilter] = useState('');
   const [mockDriveFilter, setMockDriveFilter] = useState('');
   const [mockStatusFilter, setMockStatusFilter] = useState('');
+
+  // Syllabus Tracker filter states
+  const [syllabusBatchFilter, setSyllabusBatchFilter] = useState('');
+  const [syllabusStatusFilter, setSyllabusStatusFilter] = useState('');
 
   const {
     stats = {},
@@ -255,7 +358,9 @@ const Verification = () => {
     leetcodeSubmissions = [],
     mockDriveScores = [],
     enrollments = [],
-    leaves = []
+    leaves = [],
+    accessLogs = [],
+    syllabusTracks = []
   } = data || {};
 
   const uniqueMockDrives = useMemo(() => {
@@ -319,13 +424,199 @@ const Verification = () => {
     });
   }, [filteredMockScores]);
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (PASSCODES.includes(passcode.toUpperCase())) {
-      setIsAuthenticated(true);
-      setError('');
-    } else {
+  // Batch Scoped Data & Dynamic Dashboard Calculations (Hooks must run unconditionally)
+  const currentBatchObj = useMemo(() => {
+    if (!batchFilter) return null;
+    return batches.find(b => (b._id?._id || b._id)?.toString() === batchFilter.toString()) || null;
+  }, [batches, batchFilter]);
+
+  const scopedStudents = useMemo(() => {
+    if (!batchFilter) return students;
+    return students.filter(s => (s.batchId?._id || s.batchId)?.toString() === batchFilter.toString());
+  }, [students, batchFilter]);
+
+  const scopedTasks = useMemo(() => {
+    if (!batchFilter) return tasks;
+    return tasks.filter(t => (t.batchId?._id || t.batchId)?.toString() === batchFilter.toString());
+  }, [tasks, batchFilter]);
+
+  const scopedSubmissions = useMemo(() => {
+    if (!batchFilter) return submissions;
+    const sIdSet = new Set(scopedStudents.map(s => s._id?.toString()).filter(Boolean));
+    const tIdSet = new Set(scopedTasks.map(t => t._id?.toString()).filter(Boolean));
+    return submissions.filter(s => {
+      const sId = (s.studentId?._id || s.studentId)?.toString();
+      const tId = (s.taskId?._id || s.taskId)?.toString();
+      return (sId && sIdSet.has(sId)) || (tId && tIdSet.has(tId));
+    });
+  }, [submissions, batchFilter, scopedStudents, scopedTasks]);
+
+  const scopedActiveStudents = useMemo(() => {
+    if (!batchFilter) return activeStudents;
+    const sIdSet = new Set(scopedStudents.map(s => s._id?.toString()).filter(Boolean));
+    return activeStudents.filter(a => {
+      const sId = (a.studentId?._id || a.studentId)?.toString();
+      return sId && sIdSet.has(sId);
+    });
+  }, [activeStudents, batchFilter, scopedStudents]);
+
+  const scopedMockScores = useMemo(() => {
+    if (!batchFilter) return mockDriveScores;
+    const sIdSet = new Set(scopedStudents.map(s => s._id?.toString()).filter(Boolean));
+    return mockDriveScores.filter(m => {
+      const sId = (m.studentId?._id || m.studentId)?.toString();
+      return sId && sIdSet.has(sId);
+    });
+  }, [mockDriveScores, batchFilter, scopedStudents]);
+
+  const scopedTimeline = useMemo(() => {
+    if (!batchFilter) return activityTimeline;
+    const sRollSet = new Set(scopedStudents.map(s => s.rollNumber).filter(Boolean));
+    return activityTimeline.filter(e => !e.rollNumber || sRollSet.has(e.rollNumber));
+  }, [activityTimeline, batchFilter, scopedStudents]);
+
+  const dashboardStats = useMemo(() => {
+    if (!batchFilter) {
+      return {
+        totalStudents: stats.totalStudents || students.length,
+        activeStudents: activeStudents.length,
+        offlineStudents: Math.max(0, (stats.totalStudents || students.length) - activeStudents.length),
+        totalTasks: stats.totalTasks || tasks.length,
+        pendingReviews: stats.pendingReviews || submissions.filter(s => s.status === 'pending' || s.status === 'submitted').length,
+        completedReviews: stats.completedReviews || submissions.filter(s => s.status === 'graded').length,
+        totalSubmissions: stats.totalSubmissions || submissions.length,
+        avgAttendanceDays: stats.avgAttendanceDays || 0,
+        avgPerformance: stats.avgPerformance || 0,
+        avgMockDriveScore: stats.avgMockDriveScore || 0,
+        topLeetcodeStreak: stats.topLeetcodeStreak || 0,
+        totalLeetcodeSolved: stats.totalLeetcodeSolved || 0,
+      };
+    }
+
+    const totalStudents = scopedStudents.length;
+    const activeCount = scopedActiveStudents.length;
+    const offlineCount = Math.max(0, totalStudents - activeCount);
+    const totalTasksCount = scopedTasks.length;
+    const pendingReviews = scopedSubmissions.filter(s => s.status === 'pending' || s.status === 'submitted').length;
+    const completedReviews = scopedSubmissions.filter(s => s.status === 'graded').length;
+    const totalSubmissionsCount = scopedSubmissions.length;
+    
+    const avgAttendance = totalStudents > 0
+      ? Math.round(scopedStudents.reduce((sum, s) => sum + (s.daysPresent || 0), 0) / totalStudents)
+      : (currentBatchObj?.avgAttendanceDays || 0);
+    
+    const avgPerf = totalStudents > 0
+      ? Math.round(scopedStudents.reduce((sum, s) => sum + (s.overallScore || s.avgGrade || 0), 0) / totalStudents)
+      : (currentBatchObj?.avgGrade || 0);
+
+    const avgMock = scopedMockScores.length > 0
+      ? Math.round(scopedMockScores.reduce((sum, m) => sum + (m.percentage || 0), 0) / scopedMockScores.length)
+      : 0;
+
+    const topStreak = totalStudents > 0
+      ? Math.max(...scopedStudents.map(s => s.leetcodeStreak || 0), 0)
+      : 0;
+
+    const totalLc = totalStudents > 0
+      ? scopedStudents.reduce((sum, s) => sum + (s.totalLeetcodeSubmissions || s.leetcodeProblemsSolved || 0), 0)
+      : 0;
+
+    return {
+      totalStudents,
+      activeStudents: activeCount,
+      offlineStudents: offlineCount,
+      totalTasks: totalTasksCount,
+      pendingReviews,
+      completedReviews,
+      totalSubmissions: totalSubmissionsCount,
+      avgAttendanceDays: avgAttendance,
+      avgPerformance: avgPerf,
+      avgMockDriveScore: avgMock,
+      topLeetcodeStreak: topStreak,
+      totalLeetcodeSolved: totalLc,
+    };
+  }, [batchFilter, stats, students, activeStudents, tasks, submissions, scopedStudents, scopedActiveStudents, scopedTasks, scopedSubmissions, scopedMockScores, currentBatchObj]);
+
+  // Filtered data helpers
+  const filteredStudents = useMemo(() => {
+    return students.filter(s => {
+      const matchSearch = !searchTerm || (s.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (s.rollNumber || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const sBatchId = (s.batchId?._id || s.batchId)?.toString();
+      const matchBatch = !batchFilter || sBatchId === batchFilter;
+      const matchStatus = !statusFilter || (statusFilter === 'active' ? s.isActive : !s.isActive);
+      return matchSearch && matchBatch && matchStatus;
+    });
+  }, [students, searchTerm, batchFilter, statusFilter]);
+
+  const filteredSubmissions = useMemo(() => {
+    return scopedSubmissions.filter(s => {
+      const matchSearch = !searchTerm || (s.studentId?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (s.taskId?.title || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchStatus = !statusFilter || s.status === statusFilter;
+      return matchSearch && matchStatus;
+    });
+  }, [scopedSubmissions, searchTerm, statusFilter]);
+
+  const handleLogin = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const cleanCode = (passcode || '').trim().toUpperCase();
+    if (!cleanCode) {
+      setError('Please enter a passcode or PIN.');
+      return;
+    }
+    setError('');
+    setVerifyingPin(true);
+
+    try {
+      // 1. Check with backend PIN verification API
+      const { data: verifyRes } = await axios.post('/public/monitor/verify-pin', { pin: cleanCode });
+      if (verifyRes && verifyRes.valid) {
+        setIsAuthenticated(true);
+        setPasscode(cleanCode);
+        try {
+          localStorage.setItem('ssms_monitor_auth', 'true');
+          localStorage.setItem('ssms_monitor_passcode', cleanCode);
+          if (verifyRes.panelName) {
+            localStorage.setItem('ssms_monitor_panel_name', verifyRes.panelName);
+          }
+        } catch (err) {}
+
+        const { data: d } = await axios.get(`/public/monitor?pin=${encodeURIComponent(cleanCode)}`);
+        setData(d);
+        return;
+      }
       setError('Invalid passcode.');
+    } catch (err) {
+      // Fallback for hardcoded keys if offline or legacy
+      if (PASSCODES.includes(cleanCode)) {
+        setIsAuthenticated(true);
+        setPasscode(cleanCode);
+        try {
+          localStorage.setItem('ssms_monitor_auth', 'true');
+          localStorage.setItem('ssms_monitor_passcode', cleanCode);
+        } catch (e) {}
+        try {
+          const { data: d } = await axios.get(`/public/monitor?pin=${encodeURIComponent(cleanCode)}`);
+          setData(d);
+        } catch (e) {}
+        return;
+      }
+      const msg = err.response?.data?.message || 'Invalid passcode.';
+      setError(msg);
+    } finally {
+      setVerifyingPin(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setPasscode('');
+    setData(null);
+    try {
+      localStorage.removeItem('ssms_monitor_auth');
+      localStorage.removeItem('ssms_monitor_passcode');
+      localStorage.removeItem('ssms_monitor_panel_name');
+    } catch (err) {
+      console.error('Failed to clear monitor session:', err);
     }
   };
 
@@ -334,11 +625,40 @@ const Verification = () => {
       setLoading(true);
     }
     try {
-      const { data: d } = await axios.get('/public/monitor');
+      const activePin = (passcode || '').trim() || localStorage.getItem('ssms_monitor_passcode') || '';
+      const query = activePin ? `?pin=${encodeURIComponent(activePin.toUpperCase())}` : '';
+      const { data: d } = await axios.get(`/public/monitor${query}`);
       setData(d);
-    } catch { setError('Failed to load data.'); }
-    finally { setLoading(false); }
+    } catch {
+      setError('Failed to load data.');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // Check URL query param ?pin= on initial load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlPin = params.get('pin');
+    if (urlPin) {
+      const cleanUrlPin = urlPin.trim().toUpperCase();
+      setPasscode(cleanUrlPin);
+      axios.post('/public/monitor/verify-pin', { pin: cleanUrlPin })
+        .then(async (res) => {
+          if (res.data?.valid) {
+            setIsAuthenticated(true);
+            try {
+              localStorage.setItem('ssms_monitor_auth', 'true');
+              localStorage.setItem('ssms_monitor_passcode', cleanUrlPin);
+              if (res.data.panelName) localStorage.setItem('ssms_monitor_panel_name', res.data.panelName);
+            } catch (e) {}
+            const { data: d } = await axios.get(`/public/monitor?pin=${encodeURIComponent(cleanUrlPin)}`);
+            setData(d);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   useEffect(() => { if (isAuthenticated) fetchData(); }, [isAuthenticated]);
 
@@ -385,8 +705,18 @@ const Verification = () => {
   // ─── LOGIN SCREEN ────────────────────────────────────────
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans verify-panel">
-        <style>{VERIFY_LIGHT_CSS}</style>
+      <div className={`min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans relative ${theme === 'light' ? 'verify-panel' : theme === 'orange' ? 'verify-panel-orange' : ''}`}>
+        {theme === 'light' && <style>{VERIFY_LIGHT_CSS}</style>}
+        {theme === 'orange' && <style>{VERIFY_ORANGE_CSS}</style>}
+        <div className="absolute top-5 right-5 flex items-center gap-2">
+          <button
+            onClick={cycleTheme}
+            className="px-3 py-2 rounded-2xl bg-slate-800 text-slate-300 hover:text-white border border-slate-700 shadow-md text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            title={`Current theme: ${theme.toUpperCase()} (Click to toggle Light / Orange / Dark)`}
+          >
+            {theme === 'light' ? <span className="flex items-center gap-1 text-amber-500"><Sun size={14} /> Light</span> : theme === 'orange' ? <span className="text-orange-400">🍊 Orange</span> : <span className="flex items-center gap-1 text-indigo-400"><Moon size={14} /> Dark</span>}
+          </button>
+        </div>
         <div className="max-w-md w-full bg-slate-800 rounded-3xl p-8 border border-slate-700 shadow-2xl">
           <div className="w-16 h-16 bg-indigo-500/20 text-indigo-400 rounded-2xl flex items-center justify-center mx-auto mb-6"><ShieldCheck size={32} /></div>
           <h1 className="text-2xl font-bold text-white text-center mb-1">Monitoring Center</h1>
@@ -394,10 +724,17 @@ const Verification = () => {
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
-              <input type="password" value={passcode} onChange={(e) => setPasscode(e.target.value)} placeholder="Enter Passcode..." className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl py-3 pl-12 pr-4 focus:outline-none focus:border-indigo-500 transition-colors" required />
+              <input type="text" value={passcode} onChange={(e) => setPasscode(e.target.value)} placeholder="Enter Passcode or PIN..." className="w-full bg-slate-900 border border-slate-700 text-white rounded-xl py-3 pl-12 pr-4 focus:outline-none focus:border-indigo-500 transition-colors uppercase font-mono tracking-wider" required />
             </div>
             {error && <p className="text-rose-500 text-sm font-medium">{error}</p>}
-            <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl transition-colors">Access Monitoring Center</button>
+            <button 
+              type="submit" 
+              disabled={verifyingPin} 
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-3 px-4 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-2"
+            >
+              {verifyingPin && <Loader2 size={16} className="animate-spin" />}
+              <span>{verifyingPin ? 'Verifying PIN...' : 'Access Monitoring Center'}</span>
+            </button>
           </form>
         </div>
       </div>
@@ -406,8 +743,9 @@ const Verification = () => {
 
   if (loading || !data) {
     return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8 relative verify-panel">
-        <style>{VERIFY_LIGHT_CSS}</style>
+      <div className={`min-h-screen bg-slate-900 flex flex-col items-center justify-center p-8 relative ${theme === 'light' ? 'verify-panel' : theme === 'orange' ? 'verify-panel-orange' : ''}`}>
+        {theme === 'light' && <style>{VERIFY_LIGHT_CSS}</style>}
+        {theme === 'orange' && <style>{VERIFY_ORANGE_CSS}</style>}
         <div className="absolute top-8 z-10 flex items-center gap-2 bg-indigo-600/20 text-indigo-400 px-4 py-2 rounded-full border border-indigo-500/30 animate-pulse">
           <Loader2 size={16} className="animate-spin" /><span className="text-sm font-bold">Connecting to Live Systems & Syncing Data...</span>
         </div>
@@ -831,19 +1169,423 @@ const Verification = () => {
     );
   };
 
-  // Filtered data helpers
-  const filteredStudents = students.filter(s => {
-    const matchSearch = (s.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (s.rollNumber || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchBatch = !batchFilter || (s.batchId && s.batchId.toString() === batchFilter);
-    const matchStatus = !statusFilter || (statusFilter === 'active' ? s.isActive : !s.isActive);
-    return matchSearch && matchBatch && matchStatus;
-  });
+  const renderDisciplinaryModule = () => {
+    const rawLogs = accessLogs || [];
+    const filteredLogs = rawLogs.filter(log => {
+      const sName = log.studentName || '';
+      const sRoll = log.studentRollNumber || '';
+      const reason = log.reason || '';
+      const by = log.performedByName || '';
+      const matchesSearch = !searchTerm || 
+        sName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        sRoll.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        by.toLowerCase().includes(searchTerm.toLowerCase());
 
-  const filteredSubmissions = submissions.filter(s => {
-    const matchSearch = (s.studentId?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (s.taskId?.title || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchStatus = !statusFilter || s.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+      const logBatchId = (log.batchId?._id || log.batchId)?.toString();
+      const matchedBatchObj = batches.find(b => b._id === batchFilter);
+      const matchesBatch = !batchFilter || 
+        (logBatchId && logBatchId === batchFilter) || 
+        log.batchName === batchFilter || 
+        (matchedBatchObj && log.batchName === matchedBatchObj.batchName);
+      const matchesStatus = !statusFilter || log.action === statusFilter;
+      return matchesSearch && matchesBatch && matchesStatus;
+    });
+
+    const totalActions = filteredLogs.length;
+    const totalBlocked = filteredLogs.filter(l => l.action === 'block').length;
+    const totalSuspended = filteredLogs.filter(l => l.action === 'suspend').length;
+    const totalRestored = filteredLogs.filter(l => l.action === 'restore').length;
+
+    return (
+      <div className="space-y-6">
+        {/* Header & Controls */}
+        <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-white">Student Access & Disciplinary Records</h2>
+            <p className="text-sm text-slate-400">Executive institutional audit of student panel blocks, temporary suspensions, and restorations.</p>
+          </div>
+          <div className="flex flex-wrap gap-2 w-full xl:w-auto">
+            <div className="relative flex-1 sm:flex-none sm:w-56">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <input 
+                type="text" 
+                placeholder="Search student, roll, reason..." 
+                className="w-full bg-slate-900 border border-slate-700 text-sm text-white rounded-xl py-2 pl-9 pr-3 focus:outline-none focus:border-indigo-500 shadow-xs" 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+              />
+            </div>
+            <select 
+              className="bg-slate-900 border border-slate-700 text-sm text-white rounded-xl py-2 px-3 focus:outline-none focus:border-indigo-500 shadow-xs cursor-pointer" 
+              value={batchFilter} 
+              onChange={(e) => {
+                const val = e.target.value;
+                setBatchFilter(val);
+                try {
+                  if (val) {
+                    localStorage.setItem('selectedBatchId', val);
+                    const bObj = batches.find(b => b._id === val);
+                    if (bObj) localStorage.setItem('selectedBatchName', bObj.batchName);
+                  } else {
+                    localStorage.removeItem('selectedBatchId');
+                    localStorage.removeItem('selectedBatchName');
+                  }
+                } catch (err) {}
+              }}
+            >
+              <option value="">All Batches</option>
+              {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
+            </select>
+            <select 
+              className="bg-slate-900 border border-slate-700 text-sm text-white rounded-xl py-2 px-3 focus:outline-none focus:border-indigo-500 shadow-xs cursor-pointer" 
+              value={statusFilter} 
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="">All Actions</option>
+              <option value="suspend">Suspension</option>
+              <option value="block">Permanent Block</option>
+              <option value="restore">Restored</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Overview Stats Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xs">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Records</p>
+            <p className="text-2xl font-black text-white mt-1">{totalActions}</p>
+          </div>
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xs">
+            <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">Suspensions</p>
+            <p className="text-2xl font-black text-amber-400 mt-1">{totalSuspended}</p>
+          </div>
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xs">
+            <p className="text-xs font-bold text-rose-400 uppercase tracking-wider">Blocked</p>
+            <p className="text-2xl font-black text-rose-400 mt-1">{totalBlocked}</p>
+          </div>
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xs">
+            <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Restored</p>
+            <p className="text-2xl font-black text-emerald-400 mt-1">{totalRestored}</p>
+          </div>
+        </div>
+
+        {/* Records Table */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-800/70 border-b border-slate-800 text-slate-300 uppercase font-bold text-[10px] tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Timestamp</th>
+                  <th className="py-3 px-4">Student</th>
+                  <th className="py-3 px-4">Batch</th>
+                  <th className="py-3 px-4">Action</th>
+                  <th className="py-3 px-4">Reason / Notes</th>
+                  <th className="py-3 px-4">Duration / Expiry</th>
+                  <th className="py-3 px-4">Issued By</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                      <p className="text-sm font-semibold">No disciplinary or access records match your filter criteria.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredLogs.map(log => {
+                    const isBlock = log.action === 'block';
+                    const isSuspend = log.action === 'suspend';
+                    const isRestore = log.action === 'restore';
+
+                    return (
+                      <tr key={log._id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="py-3 px-4 font-mono text-slate-400 whitespace-nowrap">
+                          {new Date(log.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                        </td>
+                        <td className="py-3 px-4">
+                          <button
+                            type="button"
+                            onClick={() => log.studentRollNumber && openStudentProfile(log.studentRollNumber)}
+                            className="text-left font-bold text-white hover:text-indigo-400 transition-colors cursor-pointer"
+                          >
+                            <p className="leading-tight">{log.studentName}</p>
+                            <p className="font-mono text-[10px] text-slate-400 font-normal">{log.studentRollNumber || log.studentEmail}</p>
+                          </button>
+                        </td>
+                        <td className="py-3 px-4 text-slate-300 font-medium whitespace-nowrap">
+                          {log.batchName || 'General'}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {isBlock && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                              <Ban size={10} /> BLOCKED
+                            </span>
+                          )}
+                          {isSuspend && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                              <Clock size={10} /> SUSPENDED
+                            </span>
+                          )}
+                          {isRestore && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              <CheckCircle size={10} /> RESTORED
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 max-w-xs truncate text-slate-200" title={log.reason}>
+                          {log.reason || '—'}
+                        </td>
+                        <td className="py-3 px-4 text-slate-300 whitespace-nowrap">
+                          {isSuspend ? (
+                            log.suspendedUntil ? (
+                              <span>Until {new Date(log.suspendedUntil).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} ({log.durationHours || '?'}h)</span>
+                            ) : (
+                              <span>{log.durationHours ? `${log.durationHours}h` : 'Temporary'}</span>
+                            )
+                          ) : isBlock ? (
+                            <span className="text-rose-400 font-semibold">Permanent Block</span>
+                          ) : (
+                            <span className="text-emerald-400 font-semibold">Active</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-slate-300 whitespace-nowrap">
+                          <span className="font-semibold text-white">{log.performedByName}</span>{' '}
+                          <span className="text-[10px] uppercase text-slate-400">({log.performedByRole})</span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderSyllabusModule = () => {
+    const rawSyllabus = syllabusTracks || [];
+    const filteredSyllabus = rawSyllabus.filter(item => {
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = !searchTerm ||
+        (item.title || '').toLowerCase().includes(term) ||
+        (item.description || '').toLowerCase().includes(term) ||
+        (item.batchName || '').toLowerCase().includes(term) ||
+        (item.mentorName || '').toLowerCase().includes(term) ||
+        (item.subtopics || []).some(st => (st || '').toLowerCase().includes(term));
+
+      const bId = item.batchId?._id ? item.batchId._id.toString() : item.batchId?.toString();
+      const matchesBatch = !syllabusBatchFilter || bId === syllabusBatchFilter || item.batchName === syllabusBatchFilter;
+      const matchesStatus = !syllabusStatusFilter || item.status === syllabusStatusFilter;
+
+      return matchesSearch && matchesBatch && matchesStatus;
+    }).sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+
+    const totalSessions = rawSyllabus.length;
+    const totalHours = rawSyllabus.reduce((acc, c) => acc + (Number(c.hoursSpent) || 0), 0);
+    const completedCount = rawSyllabus.filter(s => s.status === 'completed').length;
+    const distinctBatches = new Set(rawSyllabus.map(s => s.batchName).filter(Boolean)).size;
+
+    const exportSyllabusToExcel = () => {
+      if (!filteredSyllabus || filteredSyllabus.length === 0) {
+        alert('No syllabus records available to export.');
+        return;
+      }
+      const dataToExport = filteredSyllabus.map((item, idx) => ({
+        '#': idx + 1,
+        'Date': item.date ? new Date(item.date).toLocaleDateString() : (item.dateStr || 'N/A'),
+        'Batch': item.batchName || 'General',
+        'Mentor': item.mentorName || 'Faculty',
+        'Topic / Chapter': item.title || '',
+        'Concepts / Subtopics': (item.subtopics || []).join(', '),
+        'Lecture Summary': item.description || '',
+        'Hours Taught': item.hoursSpent || 0,
+        'Progress %': `${item.completionPercentage || 0}%`,
+        'Status': item.status || 'completed'
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Syllabus_Audit_Report");
+      XLSX.writeFile(workbook, `Syllabus_Audit_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Module Header & Filters */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-white flex items-center gap-2">
+              <BookOpen className="text-indigo-400" size={24} />
+              Daily Syllabus Audit & Coverage Tracker
+            </h2>
+            <p className="text-xs text-slate-400 mt-1">
+              Verify daily curriculum progression, topics taught, lecture notes, and assignments uploaded by mentors.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 sm:flex-none sm:w-56">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <input 
+                type="text" 
+                placeholder="Search topic, mentor, notes..." 
+                className="w-full bg-slate-900 border border-slate-700 text-sm text-white rounded-xl py-2 pl-9 pr-3 focus:outline-none focus:border-indigo-500 shadow-xs" 
+                value={searchTerm} 
+                onChange={(e) => setSearchTerm(e.target.value)} 
+              />
+            </div>
+            <select 
+              className="bg-slate-900 border border-slate-700 text-sm text-white rounded-xl py-2 px-3 focus:outline-none focus:border-indigo-500 shadow-xs cursor-pointer" 
+              value={syllabusBatchFilter} 
+              onChange={(e) => setSyllabusBatchFilter(e.target.value)}
+            >
+              <option value="">All Batches</option>
+              {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
+            </select>
+            <select 
+              className="bg-slate-900 border border-slate-700 text-sm text-white rounded-xl py-2 px-3 focus:outline-none focus:border-indigo-500 shadow-xs cursor-pointer" 
+              value={syllabusStatusFilter} 
+              onChange={(e) => setSyllabusStatusFilter(e.target.value)}
+            >
+              <option value="">All Statuses</option>
+              <option value="completed">Completed</option>
+              <option value="in-progress">In-Progress</option>
+              <option value="planned">Planned</option>
+            </select>
+            <button
+              onClick={exportSyllabusToExcel}
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+              title="Download Excel Report"
+            >
+              <FileText size={14} />
+              Export
+            </button>
+          </div>
+        </div>
+
+        {/* Overview Stats Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xs">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Lessons</p>
+            <p className="text-2xl font-black text-white mt-1">{totalSessions}</p>
+          </div>
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xs">
+            <p className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Instruction Hours</p>
+            <p className="text-2xl font-black text-indigo-400 mt-1">{totalHours.toFixed(1)} hrs</p>
+          </div>
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xs">
+            <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Completed Topics</p>
+            <p className="text-2xl font-black text-emerald-400 mt-1">{completedCount}</p>
+          </div>
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-xs">
+            <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">Covered Batches</p>
+            <p className="text-2xl font-black text-amber-400 mt-1">{distinctBatches}</p>
+          </div>
+        </div>
+
+        {/* Records Table */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-800/70 border-b border-slate-800 text-slate-300 uppercase font-bold text-[10px] tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Batch & Mentor</th>
+                  <th className="py-3 px-4">Topic / Concepts</th>
+                  <th className="py-3 px-4">Lecture Summary</th>
+                  <th className="py-3 px-4">Hours / Progress</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Resources</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {filteredSyllabus.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                      <BookOpen className="mx-auto mb-2 text-slate-500 opacity-50" size={32} />
+                      <p className="text-sm font-semibold">No syllabus records match your filter criteria.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredSyllabus.map(item => {
+                    const statusColor = 
+                      item.status === 'completed' ? 'emerald' : 
+                      item.status === 'in-progress' ? 'amber' : 'slate';
+
+                    return (
+                      <tr key={item._id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="py-3 px-4 font-mono text-slate-400 whitespace-nowrap">
+                          {item.date ? new Date(item.date).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : (item.dateStr || '—')}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="font-bold text-white block">{item.batchName || 'General'}</span>
+                          <span className="text-[11px] text-slate-400">By {item.mentorName || 'Faculty'}</span>
+                        </td>
+                        <td className="py-3 px-4 max-w-xs">
+                          <p className="font-semibold text-white leading-tight">{item.title}</p>
+                          {item.subtopics && item.subtopics.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {item.subtopics.map((st, sidx) => (
+                                <span key={sidx} className="px-1.5 py-0.5 rounded text-[9px] bg-slate-800 text-indigo-300 border border-slate-700/60 font-mono">
+                                  {st}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 max-w-sm">
+                          <p className="text-slate-300 text-xs line-clamp-2" title={item.description}>
+                            {item.description || '—'}
+                          </p>
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="text-slate-200 font-semibold">{item.hoursSpent || 0} hrs</div>
+                          <div className="w-16 bg-slate-800 rounded-full h-1.5 mt-1 overflow-hidden border border-slate-700">
+                            <div 
+                              className="bg-indigo-500 h-full rounded-full" 
+                              style={{ width: `${Math.min(100, Math.max(0, item.completionPercentage || 0))}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-${statusColor}-500/20 text-${statusColor}-400 border border-${statusColor}-500/30`}>
+                            {item.status || 'completed'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          {item.resources && item.resources.length > 0 ? (
+                            <div className="flex items-center gap-1">
+                              {item.resources.map((res, ridx) => (
+                                <a
+                                  key={ridx}
+                                  href={res.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[11px] px-2 py-0.5 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 font-medium inline-block truncate max-w-[100px]"
+                                  title={res.title || res.url}
+                                >
+                                  {res.title || 'Link'}
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-slate-500 text-xs">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // ─── RENDER MODULES ──────────────────────────────────────
   const renderModule = () => {
@@ -854,27 +1596,49 @@ const Verification = () => {
         <div className="space-y-6">
           {/* Training Info */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 bg-slate-800/50 p-4 rounded-xl border border-slate-700/50">
-            <div><p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Trainer</p><p className="text-sm text-white font-bold">Saran Velmurugan</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Batch</p><p className="text-sm text-indigo-400 font-bold">Python Full Stack Dev</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Organising</p><p className="text-sm text-emerald-400 font-bold">Ethnotech Academic Sol.</p></div>
-            <div><p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Duration</p><p className="text-sm text-white font-bold">2 Months</p></div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Trainer</p>
+              <p className="text-sm text-white font-bold truncate">
+                {currentBatchObj?.mentorId?.name || currentBatchObj?.mentorName || (currentBatchObj ? 'Faculty Assigned' : 'All Faculty Leads')}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Batch Scope</p>
+              <p className="text-sm text-indigo-400 font-bold truncate">
+                {currentBatchObj ? currentBatchObj.batchName : 'All Batches (Global Overview)'}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Organising</p>
+              <p className="text-sm text-emerald-400 font-bold truncate">
+                {currentBatchObj?.panelName || data?.panelName || 'Ethnotech Academic Sol.'}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Duration / Status</p>
+              <p className="text-sm text-white font-bold truncate">
+                {currentBatchObj?.startDate && currentBatchObj?.endDate 
+                  ? `${new Date(currentBatchObj.startDate).toLocaleDateString([], {month: 'short', day: 'numeric'})} - ${new Date(currentBatchObj.endDate).toLocaleDateString([], {month: 'short', day: 'numeric', year: 'numeric'})}`
+                  : (currentBatchObj?.status || 'Active Academic Session')}
+              </p>
+            </div>
           </div>
 
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
             {[
-              { label: 'Total Students', value: stats.totalStudents, color: 'indigo' },
-              { label: 'Active Now', value: stats.activeStudents, color: 'emerald', pulse: true },
-              { label: 'Offline', value: stats.offlineStudents, color: 'slate' },
-              { label: 'Total Tasks', value: stats.totalTasks, color: 'blue' },
-              { label: 'Pending Reviews', value: stats.pendingReviews, color: 'amber' },
-              { label: 'Completed Reviews', value: stats.completedReviews, color: 'emerald' },
-              { label: 'Total Submissions', value: stats.totalSubmissions, color: 'cyan' },
-              { label: 'Avg Attendance', value: `${stats.avgAttendanceDays}d`, color: 'teal' },
-              { label: 'Avg Performance', value: `${stats.avgPerformance}%`, color: 'orange' },
-              { label: 'Avg Mock Drive', value: `${stats.avgMockDriveScore || 0}%`, color: 'purple' },
-              { label: 'Top LC Streak', value: `${stats.topLeetcodeStreak || 0}d`, color: 'orange' },
-              { label: 'Total LC Solved', value: stats.totalLeetcodeSolved || 0, color: 'amber' },
+              { label: 'Total Students', value: dashboardStats.totalStudents, color: 'indigo' },
+              { label: 'Active Now', value: dashboardStats.activeStudents, color: 'emerald', pulse: true },
+              { label: 'Offline', value: dashboardStats.offlineStudents, color: 'slate' },
+              { label: 'Total Tasks', value: dashboardStats.totalTasks, color: 'blue' },
+              { label: 'Pending Reviews', value: dashboardStats.pendingReviews, color: 'amber' },
+              { label: 'Completed Reviews', value: dashboardStats.completedReviews, color: 'emerald' },
+              { label: 'Total Submissions', value: dashboardStats.totalSubmissions, color: 'cyan' },
+              { label: 'Avg Attendance', value: `${dashboardStats.avgAttendanceDays}d`, color: 'teal' },
+              { label: 'Avg Performance', value: `${dashboardStats.avgPerformance}%`, color: 'orange' },
+              { label: 'Avg Mock Drive', value: `${dashboardStats.avgMockDriveScore || 0}%`, color: 'purple' },
+              { label: 'Top LC Streak', value: `${dashboardStats.topLeetcodeStreak || 0}d`, color: 'orange' },
+              { label: 'Total LC Solved', value: dashboardStats.totalLeetcodeSolved || 0, color: 'amber' },
             ].map((stat, i) => (
               <div key={i} className={`bg-slate-800 border border-slate-700 rounded-2xl p-4 relative overflow-hidden ${stat.pulse ? 'border-b-4 border-b-emerald-500' : ''}`}>
                 <p className="text-slate-400 font-bold text-[10px] uppercase tracking-wider mb-1">{stat.label}</p>
@@ -888,11 +1652,11 @@ const Verification = () => {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 flex flex-col h-[420px]">
               <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> Live Tracking ({activeStudents.length})
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> Live Tracking ({scopedActiveStudents.length})
               </h2>
               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
-                {activeStudents.length === 0 ? <p className="text-slate-500 text-sm text-center mt-8">No students active right now.</p> :
-                  activeStudents.map(log => (
+                {scopedActiveStudents.length === 0 ? <p className="text-slate-500 text-sm text-center mt-8">No students active right now.</p> :
+                  scopedActiveStudents.map(log => (
                     <div key={log._id} className="bg-slate-900 border border-slate-700 p-3 rounded-xl flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold shrink-0 border border-emerald-500/30 text-sm">{log.studentId?.name?.charAt(0) || '?'}</div>
                       <div className="min-w-0 flex-1">
@@ -914,8 +1678,8 @@ const Verification = () => {
                 <Clock size={16} className="text-indigo-400" /> Today's Activity Timeline
               </h2>
               <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
-                {activityTimeline.length === 0 ? <p className="text-slate-500 text-sm text-center mt-8">No activity recorded today.</p> :
-                  activityTimeline.slice(0, 50).map((event, i) => (
+                {scopedTimeline.length === 0 ? <p className="text-slate-500 text-sm text-center mt-8">No activity recorded today.</p> :
+                  scopedTimeline.slice(0, 50).map((event, i) => (
                     <div key={i} className="flex items-start gap-3 p-2">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs ${
                         event.type === 'check-in' ? 'bg-emerald-500/20 text-emerald-400' :
@@ -955,7 +1719,7 @@ const Verification = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {[...students]
+                      {[...scopedStudents]
                         .sort((a, b) => (b.overallScore || 0) - (a.overallScore || 0))
                         .slice(0, 5)
                         .map((s, idx) => (
@@ -988,9 +1752,9 @@ const Verification = () => {
               <h3 className="text-sm font-bold text-white mb-4 uppercase tracking-wider flex items-center gap-2"><Activity size={16} className="text-indigo-400" /> Submission Status</h3>
               <div className="space-y-3">
                 {[
-                  { label: 'Graded', count: stats.completedReviews, color: 'emerald' },
-                  { label: 'Pending', count: stats.pendingReviews, color: 'amber' },
-                  { label: 'Resubmit', count: submissions.filter(s => s.status === 'resubmit').length, color: 'rose' },
+                  { label: 'Graded', count: dashboardStats.completedReviews, color: 'emerald' },
+                  { label: 'Pending', count: dashboardStats.pendingReviews, color: 'amber' },
+                  { label: 'Resubmit', count: scopedSubmissions.filter(s => s.status === 'resubmit').length, color: 'rose' },
                 ].map((item, i) => (
                   <div key={i} className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-700">
                     <span className="text-xs text-slate-400 font-bold uppercase">{item.label}</span>
@@ -1183,7 +1947,7 @@ const Verification = () => {
                   <th className="py-3 px-4 font-semibold text-center">Avg Grade</th>
                 </tr></thead>
                 <tbody>
-                  {[...students].sort((a, b) => b.daysPresent - a.daysPresent).map(s => (
+                  {[...scopedStudents].sort((a, b) => (b.daysPresent || 0) - (a.daysPresent || 0)).map(s => (
                     <tr key={s._id} className="border-t border-slate-700/50 hover:bg-slate-700/20 transition-colors">
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
@@ -1400,7 +2164,7 @@ const Verification = () => {
           <h2 className="text-lg font-bold text-white">Grade Monitoring</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             {(() => {
-              const graded = submissions.filter(s => s.grade);
+              const graded = scopedSubmissions.filter(s => s.grade);
               const marks = graded.map(s => s.grade.marksObtained);
               const highest = marks.length ? Math.max(...marks) : 0;
               const lowest = marks.length ? Math.min(...marks) : 0;
@@ -1454,10 +2218,10 @@ const Verification = () => {
           {/* Platform Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              { label: 'Active Students', value: stats.activeStudents, color: 'emerald' },
-              { label: 'Tasks Completed', value: stats.completedReviews, color: 'indigo' },
-              { label: 'Total Submissions', value: stats.totalSubmissions, color: 'cyan' },
-              { label: 'Overall Performance', value: `${stats.avgPerformance}%`, color: 'amber' },
+              { label: 'Active Students', value: dashboardStats.activeStudents, color: 'emerald' },
+              { label: 'Tasks Completed', value: dashboardStats.completedReviews, color: 'indigo' },
+              { label: 'Total Submissions', value: dashboardStats.totalSubmissions, color: 'cyan' },
+              { label: 'Overall Performance', value: `${dashboardStats.avgPerformance}%`, color: 'amber' },
             ].map((s, i) => (
               <div key={i} className="bg-slate-800 border border-slate-700 rounded-2xl p-5 text-center">
                 <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-2">{s.label}</p>
@@ -1477,8 +2241,8 @@ const Verification = () => {
                 { label: '30-49%', range: [30, 49], color: 'orange' },
                 { label: '0-29%', range: [0, 29], color: 'rose' },
               ].map((tier, i) => {
-                const count = students.filter(s => s.avgGrade >= tier.range[0] && s.avgGrade <= tier.range[1]).length;
-                const pct = students.length > 0 ? Math.round((count / students.length) * 100) : 0;
+                const count = scopedStudents.filter(s => (s.avgGrade || 0) >= tier.range[0] && (s.avgGrade || 0) <= tier.range[1]).length;
+                const pct = scopedStudents.length > 0 ? Math.round((count / scopedStudents.length) * 100) : 0;
                 return (
                   <div key={i} className="bg-slate-900 border border-slate-700 rounded-xl p-4 text-center">
                     <p className={`text-2xl font-black text-${tier.color}-400`}>{count}</p>
@@ -1556,17 +2320,22 @@ const Verification = () => {
 
       case 'leaves': return renderLeavesModule();
 
+      case 'disciplinary': return renderDisciplinaryModule();
+
+      case 'syllabus': return renderSyllabusModule();
+
       default: return <p className="text-slate-500">Module not found.</p>;
     }
   };
 
   // ─── MAIN LAYOUT ──────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-200 font-sans flex verify-panel">
-      <style>{VERIFY_LIGHT_CSS}</style>
-      {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-800 border-r border-slate-700 flex flex-col transform transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static`}>
-        <div className="p-5 border-b border-slate-700">
+    <div className={`h-screen w-full overflow-hidden bg-slate-900 text-slate-200 font-sans flex ${theme === 'light' ? 'verify-panel' : theme === 'orange' ? 'verify-panel-orange' : ''}`}>
+      {theme === 'light' && <style>{VERIFY_LIGHT_CSS}</style>}
+      {theme === 'orange' && <style>{VERIFY_ORANGE_CSS}</style>}
+      {/* Sidebar - Frozen / Sticky */}
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-slate-800 border-r border-slate-700 flex flex-col transform transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:h-screen lg:shrink-0`}>
+        <div className="p-5 border-b border-slate-700 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-indigo-500/20 text-indigo-400 rounded-xl flex items-center justify-center"><ShieldCheck size={18} /></div>
             <div>
@@ -1585,35 +2354,83 @@ const Verification = () => {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-700">
-          <div className="flex items-center gap-2 text-[10px] text-slate-500">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-            <span>Connected · {new Date().toLocaleTimeString()}</span>
+        <div className="p-4 border-t border-slate-700 space-y-3 shrink-0">
+          <div className="flex items-center justify-between text-[10px] text-slate-500">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+              <span>Connected · {new Date().toLocaleTimeString()}</span>
+            </div>
           </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer"
+          >
+            <LogOut size={14} /> Exit Monitoring
+          </button>
         </div>
       </aside>
 
       {/* Mobile Overlay */}
       {sidebarOpen && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)}></div>}
 
-      {/* Main Content */}
-      <main className="flex-1 min-w-0">
-        {/* Top Bar */}
-        <header className="sticky top-0 z-20 bg-slate-900/80 backdrop-blur-sm border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+      {/* Main Content Area */}
+      <main className="flex-1 min-w-0 h-screen flex flex-col overflow-hidden">
+        {/* Top Bar - Frozen / Sticky */}
+        <header className="shrink-0 z-20 bg-slate-900/80 backdrop-blur-sm border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden p-2 bg-slate-800 border border-slate-700 text-slate-300 rounded-xl"><Layout size={16} /></button>
             <h1 className="text-lg font-bold text-white capitalize">{SIDEBAR_ITEMS.find(i => i.id === activeModule)?.label || 'Dashboard'}</h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* Global Batch Scope Switcher */}
+            <select
+              value={batchFilter}
+              onChange={(e) => {
+                const val = e.target.value;
+                setBatchFilter(val);
+                try {
+                  if (val) {
+                    localStorage.setItem('selectedBatchId', val);
+                    const bObj = batches.find(b => b._id === val);
+                    if (bObj) localStorage.setItem('selectedBatchName', bObj.batchName);
+                  } else {
+                    localStorage.removeItem('selectedBatchId');
+                    localStorage.removeItem('selectedBatchName');
+                  }
+                } catch (err) {}
+              }}
+              className="bg-slate-800 border border-slate-700 text-xs font-bold text-white rounded-xl py-1.5 px-2.5 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-xs max-w-[140px] sm:max-w-[200px] truncate"
+              title="Active Batch Scope"
+            >
+              <option value="">Scope: All Batches</option>
+              {batches.map(b => (
+                <option key={b._id} value={b._id}>Scope: {b.batchName}</option>
+              ))}
+            </select>
             <div className="hidden sm:flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-400">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>{new Date().toLocaleString()}
             </div>
-            <button onClick={fetchData} className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl transition-colors"><RefreshCw size={16} /></button>
+            <button onClick={fetchData} title="Refresh Data" className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"><RefreshCw size={16} /></button>
+            <button 
+              onClick={cycleTheme} 
+              title={`Current Theme: ${theme.toUpperCase()} (Click to toggle Light / Orange / Dark)`} 
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              {theme === 'light' ? <span className="flex items-center gap-1 text-amber-500"><Sun size={14} /> Light</span> : theme === 'orange' ? <span className="text-orange-400">🍊 Orange</span> : <span className="flex items-center gap-1 text-indigo-400"><Moon size={14} /> Dark</span>}
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 hover:text-rose-300 border border-rose-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs"
+              title="Logout from Monitoring Center"
+            >
+              <LogOut size={14} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
           </div>
         </header>
 
-        {/* Module Content */}
-        <div className="p-4 sm:p-6 lg:p-8">
+        {/* Module Content - Scrollable Content Only */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar">
           {renderModule()}
         </div>
       </main>

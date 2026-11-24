@@ -2,24 +2,49 @@ import { useState, useEffect } from 'react';
 import { Link, useOutletContext, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
-import { Users, BookOpen, CheckCircle, Clock, FileText, User as UserIcon, UserPlus, MessageCircle, Code, Gamepad2, Calendar, ChevronRight, RefreshCw, Activity, TrendingUp, ShieldCheck, Lock, Globe, Briefcase, Trophy, Network, LayoutTemplate, X } from 'lucide-react';
+import { 
+  Users, BookOpen, CheckCircle, Clock, FileText, User as UserIcon, UserPlus, 
+  MessageCircle, Code, Gamepad2, Calendar, ChevronRight, RefreshCw, Activity, 
+  TrendingUp, ShieldCheck, Lock, Globe, Briefcase, Trophy, Network, LayoutTemplate, 
+  X, Copy, Check, ExternalLink, GraduationCap, UserCheck, Share2 
+} from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { MagicDust } from '../../components/ui/magic-dust-shader';
 
 const AdminDashboard = () => {
-  const { user, selectedBatchId = 'all', setSelectedBatchId, batchesList = [], customPanelName, customPanelSubheading, trafficConfig } = useAuth();
+  const { user, customPanelName, customPanelSubheading, trafficConfig } = useAuth();
+  const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
   const { themeColor, activeTheme, fetchCounts } = useOutletContext();
   const navigate = useNavigate();
 
   const [clearedNotifs, setClearedNotifs] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('clearedNotifs')) || []; } catch { return []; }
+    try {
+      const key = user?._id ? `clearedNotifs_${user._id}` : 'clearedNotifs_guest';
+      return JSON.parse(localStorage.getItem(key)) || [];
+    } catch {
+      return [];
+    }
   });
 
+  useEffect(() => {
+    try {
+      const key = user?._id ? `clearedNotifs_${user._id}` : 'clearedNotifs_guest';
+      setClearedNotifs(JSON.parse(localStorage.getItem(key)) || []);
+    } catch {
+      setClearedNotifs([]);
+    }
+  }, [user?._id]);
+
   const dismissNotification = (id) => {
-    const updated = [...clearedNotifs, id];
+    const key = user?._id ? `clearedNotifs_${user._id}` : 'clearedNotifs_guest';
+    const current = (() => {
+      try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; }
+    })();
+    const updated = Array.from(new Set([...current, id]));
     setClearedNotifs(updated);
-    localStorage.setItem('clearedNotifs', JSON.stringify(updated));
+    localStorage.setItem(key, JSON.stringify(updated));
     if (fetchCounts) fetchCounts();
   };
 
@@ -36,12 +61,14 @@ const AdminDashboard = () => {
       const url = `/analytics/dashboard?timeframe=${timeframe}&batchId=${selectedBatchId}${isRefresh ? '&refresh=true' : ''}`;
       const [dashRes, serversRes, configRes] = await Promise.all([
         axios.get(url),
-        axios.get('/traffic/servers').catch(() => ({ data: [] })),
-        axios.get('/traffic/config').catch(() => ({ data: { policy: 'failover' } }))
+        user?.role === 'admin' ? axios.get('/traffic/servers').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+        user?.role === 'admin' ? axios.get('/traffic/config').catch(() => ({ data: { policy: 'failover' } })) : Promise.resolve({ data: { policy: 'failover' } })
       ]);
       setStats(dashRes.data);
-      setTrafficServers(serversRes.data || []);
-      setTrafficPolicy(configRes.data?.policy || 'failover');
+      if (user?.role === 'admin') {
+        setTrafficServers(serversRes.data || []);
+        setTrafficPolicy(configRes.data?.policy || 'failover');
+      }
     } catch (error) {
       console.error('Error fetching stats:', error);
     } finally {
@@ -132,22 +159,14 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Global Batch Filter Dropdown */}
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
-          <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3.5 py-2 rounded-2xl shadow-sm">
-            <BookOpen size={16} className="text-indigo-500 shrink-0" />
-            <select
-              value={selectedBatchId}
-              onChange={e => setSelectedBatchId(e.target.value)}
-              className="bg-transparent text-xs font-extrabold text-slate-800 dark:text-white outline-none cursor-pointer pr-2"
-            >
-              <option value="all" className="dark:bg-slate-900 text-slate-800 dark:text-white">All Batches (Global View)</option>
-              {batchesList.map(b => (
-                <option key={b._id} value={b._id} className="dark:bg-slate-900 text-slate-800 dark:text-white">
-                  Batch: {b.batchName}
-                </option>
-              ))}
-            </select>
+        {/* Actions & Active Scope Indicator */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="hidden sm:flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 px-3.5 py-2 rounded-2xl shadow-xs">
+            <BookOpen size={15} className="text-indigo-500 shrink-0" />
+            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Scope:</span>
+            <span className="text-xs font-black text-slate-800 dark:text-white">
+              {selectedBatchName || batchesList.find(b => b._id === selectedBatchId)?.batchName || 'All Batches'}
+            </span>
           </div>
 
           <button
@@ -174,7 +193,7 @@ const AdminDashboard = () => {
               particleSize={0.022}
               holdDuration={2.2}
               sequence={[
-                { type: 'text', text: customPanelName || 'SSMS 3.0', offset: [0, 0, 0] },
+                { type: 'text', text: customPanelName || 'SSMS 2.0', offset: [0, 0, 0] },
                 { type: 'shape', shape: 'torus', offset: [0, 0, 0] },
                 { type: 'text', text: user?.role === 'mentor' ? 'MENTOR' : 'SYSTEMS', offset: [0, 0, 0] },
                 { type: 'shape', shape: 'sphere', offset: [0, 0, 0] }
@@ -188,14 +207,14 @@ const AdminDashboard = () => {
                 {user?.role === 'mentor' ? 'Mentor Portal Active' : 'System Core Online'}
               </span>
               <h2 className="text-2xl font-black text-white mt-2 drop-shadow-md">
-                {customPanelName 
-                  ? `${customPanelName} - ${user?.role === 'mentor' ? 'Mentor Portal' : 'Admin Console'}` 
-                  : (user?.role === 'mentor' ? 'SSMS 3.0 Mentor Portal' : 'SSMS 3.0 Supercharged Admin Console')}
+                {user?.role === 'mentor' 
+                  ? 'SSMS - Saran Students Management System' 
+                  : (customPanelName ? `${customPanelName} - Admin Console` : 'SSMS 2.0 Supercharged Admin Console')}
               </h2>
               <p className="text-xs text-slate-400 mt-1 font-medium max-w-md drop-shadow">
-                {customPanelSubheading || (user?.role === 'mentor' 
-                  ? 'Assigned batch monitoring, task evaluations, student attendance and mentorship controls active.' 
-                  : 'Live database monitoring, socket streams, and gamification controls active.')}
+                {user?.role === 'mentor'
+                  ? 'Mentor Portal Active • Assigned batch monitoring, task evaluations, student attendance and mentorship controls active.'
+                  : (customPanelSubheading || 'Live database monitoring, socket streams, and gamification controls active.')}
               </p>
             </div>
             <div className="hidden md:flex items-center gap-2 bg-slate-900/90 backdrop-blur-md px-4 py-2 rounded-2xl border border-slate-700/80 text-xs font-extrabold text-white shadow-lg">
@@ -223,7 +242,7 @@ const AdminDashboard = () => {
               {/* Left Donut Column (5 cols) */}
               <div className="md:col-span-5 flex flex-col items-center border-r border-slate-100 dark:border-slate-800 pr-0 md:pr-6">
                 <div className="relative w-36 h-36 shrink-0">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <PieChart>
                       <Pie
                         data={reviewData}
@@ -419,83 +438,85 @@ const AdminDashboard = () => {
           </CardContainer>
         </div>
 
-        {/* Row: Traffic Control & Server Cluster Health */}
-        <CardContainer className="relative overflow-hidden group border border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-white via-slate-50/50 to-indigo-50/20 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/20">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center border border-indigo-500/20 shadow-sm">
-                <Network size={22} className="animate-pulse" />
+        {/* Row: Traffic Control & Server Cluster Health (Admin Only) */}
+        {user?.role === 'admin' && (
+          <CardContainer className="relative overflow-hidden group border border-indigo-100 dark:border-indigo-900/50 bg-gradient-to-br from-white via-slate-50/50 to-indigo-50/20 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/20">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center border border-indigo-500/20 shadow-sm">
+                  <Network size={22} className="animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-extrabold text-slate-800 dark:text-white uppercase tracking-wider">Traffic Control & Backend Cluster</h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live Cluster
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                    Active Routing Strategy: <strong className="text-indigo-600 dark:text-indigo-400 capitalize">{trafficPolicy.replace('-', ' ')}</strong>
+                  </p>
+                </div>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-extrabold text-slate-800 dark:text-white uppercase tracking-wider">Traffic Control & Backend Cluster</h3>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live Cluster
+
+              <Link to="/traffic" className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 hover:-translate-y-0.5 shrink-0">
+                <Network size={15} /> Manage Traffic Control <ChevronRight size={14} />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+              {/* Primary Server Node Status */}
+              <div className="bg-white dark:bg-slate-800/80 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Globe size={16} className="text-indigo-500 shrink-0" />
+                    <span className="text-xs font-black text-slate-800 dark:text-white truncate">Primary Server (.env)</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">PRIMARY</span>
+                </div>
+                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate mb-3">https://ssms3-0-be.onrender.com</p>
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                  <span className="text-slate-400 font-semibold">Node Status</span>
+                  <span className="font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> ONLINE
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                  Active Routing Strategy: <strong className="text-indigo-600 dark:text-indigo-400 capitalize">{trafficPolicy.replace('-', ' ')}</strong>
-                </p>
               </div>
-            </div>
 
-            <Link to="/traffic" className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-indigo-500/20 hover:-translate-y-0.5 shrink-0">
-              <Network size={15} /> Manage Traffic Control <ChevronRight size={14} />
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
-            {/* Primary Server Node Status */}
-            <div className="bg-white dark:bg-slate-800/80 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Globe size={16} className="text-indigo-500 shrink-0" />
-                  <span className="text-xs font-black text-slate-800 dark:text-white truncate">Primary Server (.env)</span>
+              {/* Cluster Health & Policy Metric */}
+              <div className="bg-white dark:bg-slate-800/80 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Activity size={16} className="text-emerald-500 shrink-0" />
+                    <span className="text-xs font-black text-slate-800 dark:text-white">Traffic Health</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">100% HEALTHY</span>
                 </div>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">PRIMARY</span>
-              </div>
-              <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate mb-3">https://ssms3-0-be.onrender.com</p>
-              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-700/50">
-                <span className="text-slate-400 font-semibold">Node Status</span>
-                <span className="font-extrabold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span> ONLINE
-                </span>
-              </div>
-            </div>
-
-            {/* Cluster Health & Policy Metric */}
-            <div className="bg-white dark:bg-slate-800/80 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Activity size={16} className="text-emerald-500 shrink-0" />
-                  <span className="text-xs font-black text-slate-800 dark:text-white">Traffic Health</span>
+                <p className="text-xs text-slate-600 dark:text-slate-300 font-medium mb-3">All API requests protected by automatic failover & node health monitoring.</p>
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                  <span className="text-slate-400 font-semibold">Active Cluster Nodes</span>
+                  <span className="font-extrabold text-slate-800 dark:text-white">{trafficServers.length || 1} Registered</span>
                 </div>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">100% HEALTHY</span>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium mb-3">All API requests protected by automatic failover & node health monitoring.</p>
-              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-700/50">
-                <span className="text-slate-400 font-semibold">Active Cluster Nodes</span>
-                <span className="font-extrabold text-slate-800 dark:text-white">{trafficServers.length || 1} Registered</span>
-              </div>
-            </div>
 
-            {/* Load Balancing Policy Info */}
-            <div className="bg-white dark:bg-slate-800/80 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <ShieldCheck size={16} className="text-violet-500 shrink-0" />
-                  <span className="text-xs font-black text-slate-800 dark:text-white">Routing Strategy</span>
+              {/* Load Balancing Policy Info */}
+              <div className="bg-white dark:bg-slate-800/80 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs flex flex-col justify-between">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ShieldCheck size={16} className="text-violet-500 shrink-0" />
+                    <span className="text-xs font-black text-slate-800 dark:text-white">Routing Strategy</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">ENFORCED</span>
                 </div>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-violet-50 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">ENFORCED</span>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 font-medium mb-3">Primary node prioritized. Auto-switch backup nodes if primary drops.</p>
-              <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-700/50">
-                <span className="text-slate-400 font-semibold">Traffic Manager</span>
-                <Link to="/traffic" className="font-extrabold text-indigo-500 hover:underline">Configure Settings →</Link>
+                <p className="text-xs text-slate-600 dark:text-slate-300 font-medium mb-3">Primary node prioritized. Auto-switch backup nodes if primary drops.</p>
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-700/50">
+                  <span className="text-slate-400 font-semibold">Traffic Manager</span>
+                  <Link to="/traffic" className="font-extrabold text-indigo-500 hover:underline">Configure Settings →</Link>
+                </div>
               </div>
             </div>
-          </div>
-        </CardContainer>
+          </CardContainer>
+        )}
 
         {/* Row 3: Classroom Attendance & Matrix Tracker (Asymmetric 7:5 Grid) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
@@ -620,7 +641,7 @@ const AdminDashboard = () => {
             </div>
 
             {/* Chat & Traffic Channels Dock */}
-            <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className={`grid ${user?.role === 'admin' ? 'grid-cols-2' : 'grid-cols-1'} gap-3 pt-4 border-t border-slate-100 dark:border-slate-800`}>
               <Link to="/chat" className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-800 transition-all group">
                 <div className="flex items-center gap-2">
                   <MessageCircle size={15} className="text-pink-500" />
@@ -628,13 +649,15 @@ const AdminDashboard = () => {
                 </div>
                 <ChevronRight size={12} className="text-slate-450 group-hover:translate-x-0.5 transition-transform" />
               </Link>
-              <Link to="/traffic" className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-800 transition-all group">
-                <div className="flex items-center gap-2">
-                  <Network size={15} className="text-violet-500" />
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Traffic Log</span>
-                </div>
-                <ChevronRight size={12} className="text-slate-455 group-hover:translate-x-0.5 transition-transform" />
-              </Link>
+              {user?.role === 'admin' && (
+                <Link to="/traffic" className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-100 dark:border-slate-800 transition-all group">
+                  <div className="flex items-center gap-2">
+                    <Network size={15} className="text-violet-500" />
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Traffic Log</span>
+                  </div>
+                  <ChevronRight size={12} className="text-slate-455 group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+              )}
             </div>
           </CardContainer>
         </div>

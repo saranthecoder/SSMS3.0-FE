@@ -5,6 +5,7 @@ import { Plus, Code, Link as LinkIcon, Loader2, RefreshCw, Search, Clock, Edit, 
 import Loader from '../../components/Loader';
 
 import { useAuth } from '../../context/AuthContext';
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
 
 const formatLocalISO = (dateStr) => {
   if (!dateStr) return '';
@@ -16,7 +17,7 @@ const formatLocalISO = (dateStr) => {
 };
 
 const AdminLeetcode = () => {
-  const { selectedBatchId, batchesList } = useAuth();
+  const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -192,9 +193,9 @@ const AdminLeetcode = () => {
             <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">Allocate Problem</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Target Batch</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Target Batch (Active Scope)</label>
                 <div className="px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-xl font-bold text-sm text-indigo-700 dark:text-indigo-300">
-                  {batches.find(b => b._id === formData.batchId)?.batchName || 'Selected Batch'}
+                  {selectedBatchName || batches.find(b => b._id === formData.batchId)?.batchName || 'Selected Batch'}
                 </div>
               </div>
               <div>

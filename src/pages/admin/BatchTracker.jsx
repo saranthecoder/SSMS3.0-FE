@@ -4,9 +4,11 @@ import Loader from '../../components/Loader';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { Check, Clock, X, XCircle, Filter, ArrowUpDown, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useGlobalBatch } from '../../context/GlobalBatchContext';
 
 const BatchTracker = () => {
-  const { user, selectedBatchId, batchesList } = useAuth();
+  const { user } = useAuth();
+  const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
   const [loading, setLoading] = useState(true);
   const [trackerData, setTrackerData] = useState({ 
     students: [], 
@@ -16,7 +18,7 @@ const BatchTracker = () => {
     leetcodeSubmissions: [] 
   });
 
-  const activeBatchId = selectedBatchId !== 'all' ? selectedBatchId : (batchesList[0]?._id || '');
+  const activeBatchId = selectedBatchId || batchesList[0]?._id || '';
   
   const [filterDate, setFilterDate] = useState(''); // YYYY-MM-DD
   
@@ -287,8 +289,9 @@ const BatchTracker = () => {
             </div>
             
             <div className="px-3 py-1.5 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-bold border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 whitespace-nowrap">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span>Scope:</span>
-              <span className="text-slate-800 dark:text-white font-extrabold">{batchesList.find(b => b._id === activeBatchId)?.batchName || 'Active Batch'}</span>
+              <span className="text-slate-800 dark:text-white font-extrabold">{selectedBatchName || batchesList.find(b => b._id === activeBatchId)?.batchName || 'Active Batch'}</span>
             </div>
           </div>
         </div>
