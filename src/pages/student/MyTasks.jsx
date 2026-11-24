@@ -4,8 +4,9 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { Loader2, Upload, ExternalLink, Lock, Calendar, FileText as FileTextIcon, UploadCloud, Link as LinkIcon, AlignLeft, Download, CheckCircle, ChevronDown, ChevronUp, Clock, AlertTriangle } from 'lucide-react';
+import { Loader2, Upload, ExternalLink, Lock, Calendar, FileText as FileTextIcon, UploadCloud, Link as LinkIcon, AlignLeft, Download, CheckCircle, ChevronDown, ChevronUp, Clock, AlertTriangle, X, Award, Eye } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
+import { soundManager } from '../../utils/soundManager';
 
 const formatDateTime = (dateString) => {
   if (!dateString) return '';
@@ -105,9 +106,10 @@ const MyTasks = () => {
   const [loading, setLoading] = useState(true);
   const [isEnrolled, setIsEnrolled] = useState(true); // default to true until checked
   const [activeTask, setActiveTask] = useState(null);
+  const [selectedTaskForDetails, setSelectedTaskForDetails] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [studentSubmittedLinks, setStudentSubmittedLinks] = useState([]);
-  const { themeColor, activeTheme } = useOutletContext();
+  const { themeColor, activeTheme, fetchCounts } = useOutletContext() || {};
   
   const [subData, setSubData] = useState({ 
     submissionType: 'text', 
@@ -181,7 +183,7 @@ const MyTasks = () => {
     try {
       let fileUrl = null;
 
-      await axios.post('/submissions', {
+      const { data: resData } = await axios.post('/submissions', {
         taskId: activeTask._id,
         submissionType: subData.submissionType,
         textContent: subData.textContent,
@@ -191,11 +193,42 @@ const MyTasks = () => {
         submittedLinks: studentSubmittedLinks
       });
 
+      const coinsAwarded = resData?.coinsAwarded;
+      const allocatedMarks = resData?.taskMarks || activeTask.maxMarks || 0;
+
       setActiveTask(null);
       setSubData({ submissionType: 'text', textContent: '', linkUrl: '', remarks: '' });
       setStudentSubmittedLinks([]);
       fetchTasks();
-      Swal.fire({ title: 'Success', text: 'Task submitted successfully!', icon: 'success' });
+      if (typeof fetchCounts === 'function') {
+        fetchCounts();
+      }
+
+      if (coinsAwarded > 0) {
+        try {
+          soundManager.playSuccess();
+        } catch (_) {}
+
+        Swal.fire({
+          title: '🎉 Task Submitted!',
+          html: `
+            <div class="space-y-3 py-2 text-center">
+              <div class="text-4xl animate-bounce">🪙</div>
+              <p class="text-base font-bold text-slate-800 dark:text-slate-100">
+                You earned <span class="text-amber-500 font-extrabold text-xl">+${coinsAwarded} Coins</span>!
+              </p>
+              <p class="text-xs text-slate-500 dark:text-slate-400">
+                10x multiplier awarded into your gamification balance based on ${allocatedMarks} allocated task marks.
+              </p>
+            </div>
+          `,
+          icon: 'success',
+          confirmButtonText: 'Awesome!',
+          confirmButtonColor: '#6366f1'
+        });
+      } else {
+        Swal.fire({ title: 'Success', text: 'Task submitted successfully!', icon: 'success' });
+      }
     } catch (error) {
       Swal.fire({ title: 'Error', text: error.response?.data?.message || 'Error submitting task', icon: 'error' });
     } finally {
@@ -271,151 +304,7 @@ const MyTasks = () => {
   };
 
   const handleViewTaskText = (task) => {
-    const newWin = window.open('', '_blank');
-    if (newWin) {
-      const typeLabel = task.category === 'Project' ? 'Project' : 'Task';
-      const formattedDate = task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      }) : 'N/A';
-
-      newWin.document.write(`
-        <!DOCTYPE html>
-        <html lang="en">
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>${task.title}</title>
-          <style>
-            * {
-              box-sizing: border-box;
-            }
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-              line-height: 1.6;
-              color: #334155;
-              background-color: #fafafa;
-              margin: 0;
-              padding: 2rem;
-              display: flex;
-              justify-content: center;
-            }
-            .container {
-              max-width: 800px;
-              width: 100%;
-              background-color: #ffffff;
-              padding: 2.5rem;
-              border-radius: 1rem;
-              box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
-              border: 1px solid #e2e8f0;
-            }
-            h1 {
-              color: #0f172a;
-              margin-top: 0;
-              font-size: 1.875rem;
-              font-weight: 800;
-              border-bottom: 2px solid #ea580c;
-              padding-bottom: 0.75rem;
-              margin-bottom: 1rem;
-            }
-            .meta-info {
-              display: flex;
-              flex-wrap: wrap;
-              gap: 1rem;
-              margin-bottom: 2rem;
-              font-size: 0.875rem;
-              color: #64748b;
-            }
-            .meta-item {
-              background-color: #f8fafc;
-              padding: 0.25rem 0.75rem;
-              border-radius: 0.375rem;
-              border: 1px solid #e2e8f0;
-            }
-            .meta-item strong {
-              color: #ea580c;
-            }
-            .content {
-              color: #1e293b;
-              font-size: 1rem;
-              overflow-wrap: break-word;
-              word-break: break-word;
-            }
-            .content * {
-              max-width: 100%;
-              overflow-wrap: break-word;
-              word-break: break-word;
-            }
-            img {
-              max-width: 100%;
-              height: auto;
-              border-radius: 0.5rem;
-              margin: 1.5rem 0;
-              box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
-            }
-            pre {
-              background-color: #f8fafc;
-              padding: 1.25rem;
-              border-radius: 0.5rem;
-              overflow-x: auto;
-              border: 1px solid #e2e8f0;
-              max-width: 100%;
-            }
-            code {
-              font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-              color: #ea580c;
-              background-color: #f1f5f9;
-              padding: 0.2rem 0.4rem;
-              border-radius: 0.25rem;
-              font-size: 0.875rem;
-            }
-            pre code {
-              color: inherit;
-              background-color: transparent;
-              padding: 0;
-              border-radius: 0;
-              font-size: 0.875rem;
-            }
-            a {
-              color: #ea580c;
-              text-decoration: none;
-            }
-            a:hover {
-              text-decoration: underline;
-            }
-            p {
-              margin-top: 0;
-              margin-bottom: 1rem;
-            }
-            ul, ol {
-              margin-top: 0;
-              margin-bottom: 1rem;
-              padding-left: 1.5rem;
-            }
-            li {
-              margin-bottom: 0.25rem;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>${task.title}</h1>
-            <div class="meta-info">
-              <div class="meta-item">Type: <strong>${typeLabel}</strong></div>
-              <div class="meta-item">Batch: <strong>${task.batchId?.batchName || 'N/A'}</strong></div>
-              ${task.dueDate ? `<div class="meta-item">Deadline: <strong>${formattedDate}</strong></div>` : ''}
-              ${task.maxMarks !== undefined ? `<div class="meta-item">Marks: <strong>${task.maxMarks}</strong></div>` : ''}
-            </div>
-            <div class="content">
-              ${task.description || '<p>No instructions provided.</p>'}
-            </div>
-          </div>
-        </body>
-        </html>
-      `);
-      newWin.document.close();
-    }
+    setSelectedTaskForDetails(task);
   };
 
   if (loading) return <SkeletonLoader type="table" />;
@@ -499,6 +388,14 @@ const MyTasks = () => {
                     <span className="text-[10px] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">{task.batchId?.batchName}</span>
                     <TaskCountdownTimer dueDate={task.dueDate} isSubmitted={isSubmitted} submission={submission} />
                   </div>
+                  <div className="flex items-center gap-2 flex-wrap mt-1">
+                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-2.5 py-0.5 rounded-md border border-slate-200/60 dark:border-slate-700/60">
+                      🎯 {task.maxMarks} Marks
+                    </span>
+                    <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/20 flex items-center gap-1 shadow-2xs">
+                      🪙 +{(Number(task.maxMarks) || 0) * 10} Coins on Submit
+                    </span>
+                  </div>
                 </div>
               </div>
               
@@ -578,7 +475,15 @@ const MyTasks = () => {
             </div>
             
             <div className="p-4 bg-primary-50/50 dark:bg-primary-900/10 border-b border-primary-100 dark:border-primary-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <p className="font-semibold text-primary-900 dark:text-primary-300">{activeTask.title}</p>
+              <div>
+                <p className="font-semibold text-primary-900 dark:text-primary-300">{activeTask.title}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Marks: {activeTask.maxMarks}</span>
+                  <span className="text-xs font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 flex items-center gap-1">
+                    🪙 Earn +{(Number(activeTask.maxMarks) || 0) * 10} Gamification Coins
+                  </span>
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Deadline: {formatDateTime(activeTask.dueDate)}</span>
                 <TaskCountdownTimer dueDate={activeTask.dueDate} isSubmitted={false} />
@@ -687,6 +592,163 @@ const MyTasks = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Task Details Modal (In-App Rich View) */}
+      {selectedTaskForDetails && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200 dark:border-slate-800 my-auto flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start gap-4 bg-gradient-to-r from-slate-50 via-slate-50 to-indigo-50/30 dark:from-slate-850 dark:via-slate-850 dark:to-indigo-950/20">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                    {selectedTaskForDetails.batchId?.batchName || 'Active Batch'}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    {selectedTaskForDetails.category || 'General'}
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-tight">
+                  {selectedTaskForDetails.title}
+                </h2>
+              </div>
+              <button 
+                onClick={() => setSelectedTaskForDetails(null)} 
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Meta Highlights Banner */}
+            <div className="px-6 py-3.5 bg-slate-100/60 dark:bg-slate-800/40 border-b border-slate-200/60 dark:border-slate-800/60 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300">
+                  <Calendar size={14} className="text-indigo-500" />
+                  <span>Deadline: <strong className="text-slate-900 dark:text-white font-mono">{formatDateTime(selectedTaskForDetails.dueDate)}</strong></span>
+                </div>
+                <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block" />
+                <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300">
+                  <Award size={14} className="text-amber-500" />
+                  <span>Marks: <strong className="text-emerald-600 dark:text-emerald-400">{selectedTaskForDetails.maxMarks}</strong></span>
+                </div>
+                <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block" />
+                <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20">
+                  <span>🪙 Reward: <strong className="font-mono text-amber-500 dark:text-amber-300">+{(Number(selectedTaskForDetails.maxMarks) || 0) * 10} Coins</strong></span>
+                </div>
+              </div>
+              <TaskCountdownTimer 
+                dueDate={selectedTaskForDetails.dueDate} 
+                isSubmitted={!!submissions.find(s => (s.taskId?._id === selectedTaskForDetails._id || s.taskId === selectedTaskForDetails._id))}
+                submission={submissions.find(s => (s.taskId?._id === selectedTaskForDetails._id || s.taskId === selectedTaskForDetails._id))}
+              />
+            </div>
+
+            {/* Scrollable Content Body */}
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+              
+              {/* Attached External Links / Files if any */}
+              {selectedTaskForDetails.taskType === 'file' && selectedTaskForDetails.fileUrl && (
+                <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 rounded-2xl flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                      <FileTextIcon size={20} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Attached Task File</p>
+                      <p className="text-[11px] text-slate-500">Download the reference or assignment file</p>
+                    </div>
+                  </div>
+                  <a
+                    href={selectedTaskForDetails.fileUrl.startsWith('http') ? selectedTaskForDetails.fileUrl : `${import.meta.env.VITE_API_URL}${selectedTaskForDetails.fileUrl}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 shrink-0"
+                  >
+                    <Download size={14} /> Download File
+                  </a>
+                </div>
+              )}
+
+              {selectedTaskForDetails.taskType === 'link' && selectedTaskForDetails.linkUrl && (
+                <div className="p-4 bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/40 rounded-2xl flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                      <LinkIcon size={20} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Task Reference Link</p>
+                      <p className="text-[11px] text-slate-500 truncate max-w-md">{selectedTaskForDetails.linkUrl}</p>
+                    </div>
+                  </div>
+                  <a
+                    href={selectedTaskForDetails.linkUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 shrink-0"
+                  >
+                    <ExternalLink size={14} /> Open Link
+                  </a>
+                </div>
+              )}
+
+              {/* Task Instructions */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Task Instructions & Details
+                </h4>
+                <div className="bg-slate-50/80 dark:bg-slate-850/60 p-6 rounded-2xl border border-slate-200/70 dark:border-slate-800 shadow-2xs">
+                  <div 
+                    className="prose dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 text-sm sm:text-base leading-relaxed ql-editor !p-0"
+                    dangerouslySetInnerHTML={{ __html: selectedTaskForDetails.description || '<p class="text-slate-400 italic">No instructions provided.</p>' }}
+                  />
+                </div>
+              </div>
+
+              {/* Requested Student Submission Fields / Links */}
+              {selectedTaskForDetails.requiredLinks && selectedTaskForDetails.requiredLinks.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    Required Submission Links
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {selectedTaskForDetails.requiredLinks.map((reqLink, idx) => (
+                      <div key={idx} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{reqLink.label}</span>
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${reqLink.isMandatory ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' : 'bg-slate-100 text-slate-500'}`}>
+                          {reqLink.isMandatory ? 'Mandatory' : 'Optional'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex items-center justify-between">
+              <button
+                onClick={() => setSelectedTaskForDetails(null)}
+                className="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  const taskToSubmit = selectedTaskForDetails;
+                  setSelectedTaskForDetails(null);
+                  handleOpenSubmitModal(taskToSubmit);
+                }}
+                className="px-5 py-2.5 bg-gradient-to-r from-primary-500 to-theme-accent hover:from-primary-600 hover:to-theme-accent text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Upload size={14} /> Proceed to Submit
+              </button>
+            </div>
           </div>
         </div>
       )}
