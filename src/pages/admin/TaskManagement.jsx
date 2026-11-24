@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { BookOpen, Plus, FileText as FileTextIcon, Edit, Trash2, Link as LinkIcon, RefreshCw, Search, RotateCcw, CheckCircle, Clock, Calendar } from 'lucide-react';
+import { BookOpen, Plus, FileText as FileTextIcon, Edit, Trash2, Link as LinkIcon, RefreshCw, Search, RotateCcw, CheckCircle, Clock, Calendar, Award, Tag } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { useAuth } from '../../context/AuthContext';
 import { useGlobalBatch } from '../../context/GlobalBatchContext';
@@ -352,114 +352,156 @@ const TaskManagement = () => {
             const isOverdue = new Date() > new Date(task.dueDate).setHours(23, 59, 59, 999);
             const isScheduled = task.scheduledAt && new Date(task.scheduledAt) > new Date();
             return (
-              <div key={task._id} className={`glass-panel p-6 card-hover border-l-4 flex flex-col ${isScheduled ? 'border-l-amber-500' : isOverdue ? 'border-l-red-500' : 'border-l-primary-500'}`}>
-                <div className="flex justify-between items-start mb-4 gap-4">
-                  <div className="flex items-center gap-3 flex-wrap flex-1">
-                    <h3 className="font-bold text-base text-slate-800 dark:text-slate-100">{task.title}</h3>
-                    {isOverdue && (
-                      <span className="bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-widest border border-red-200 dark:border-red-800/50">Overdue</span>
-                    )}
-                    {isScheduled && (
-                      <span className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-widest border border-amber-200 dark:border-amber-800/50">Scheduled</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider">{task.batchId?.batchName}</span>
-                    <button onClick={() => handleEdit(task)} className="p-1.5 text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-md transition-colors bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 cursor-pointer" title="Edit Task">
-                      <Edit size={16} />
-                    </button>
-                    <button onClick={() => handleDelete(task._id)} className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 rounded-md transition-colors bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 cursor-pointer" title="Delete Task">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-                
-                {task.taskType === 'file' && task.fileUrl ? (
-                  <div className="mb-6 flex flex-col gap-2 flex-1">
-                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Please download the instructions file below:</p>
-                    <a 
-                      href={task.fileUrl.startsWith('http') ? task.fileUrl : `${import.meta.env.VITE_API_URL}${task.fileUrl}`} 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2 text-sm rounded-lg w-max hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors font-bold shadow-sm cursor-pointer"
-                    >
-                      <FileTextIcon size={16} />
-                      Download Instructions
-                    </a>
-                  </div>
-                ) : task.taskType === 'link' ? (
-                  <div className="mb-6 flex flex-col gap-2 flex-1">
-                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Please visit the following link to view the task:</p>
-                    <a 
-                      href={task.linkUrl} 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-3 py-2 text-sm rounded-lg w-max hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors font-bold shadow-sm cursor-pointer"
-                    >
-                      <LinkIcon size={16} /> Open Task Link
-                    </a>
-                  </div>
-                ) : (
-                  <div className="mb-6 flex flex-col gap-2 flex-1">
-                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Click below to view the full text instructions:</p>
-                    <button 
-                      onClick={() => handleViewTaskText(task)}
-                      className="flex items-center gap-2 text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 px-3 py-2 text-sm rounded-lg w-max hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors font-bold shadow-sm cursor-pointer"
-                    >
-                      <FileTextIcon size={16} /> View Task Details
-                    </button>
-                  </div>
-                )}
-
-                {isScheduled && (
-                  <div className="mb-4 p-4 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 rounded-xl space-y-3">
-                    <div className="flex items-start gap-2.5 text-amber-800 dark:text-amber-300">
-                      <Clock size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                      <div className="flex-1">
-                        <span className="text-xs font-bold block uppercase tracking-wider text-amber-600 dark:text-amber-500">Scheduled Release</span>
-                        <span className="text-sm font-semibold block mt-0.5">
-                          {new Date(task.scheduledAt).toLocaleString('en-US', {
-                            weekday: 'short',
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+              <div 
+                key={task._id} 
+                className={`rounded-2xl bg-white dark:bg-slate-800/90 border border-slate-200/90 dark:border-slate-700/80 p-5 sm:p-6 shadow-xs hover:shadow-md transition-all flex flex-col justify-between border-l-4 ${
+                  isScheduled ? 'border-l-amber-500' : isOverdue ? 'border-l-rose-500' : 'border-l-indigo-500'
+                }`}
+              >
+                <div>
+                  {/* Top Meta & Action Bar */}
+                  <div className="flex items-center justify-between gap-2 mb-3 pb-2.5 border-b border-slate-100 dark:border-slate-700/50">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      {task.batchId?.batchName && (
+                        <span 
+                          className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50 truncate max-w-[220px]" 
+                          title={task.batchId.batchName}
+                        >
+                          {task.batchId.batchName}
                         </span>
-                      </div>
+                      )}
+                      {isOverdue && (
+                        <span className="bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider border border-rose-200 dark:border-rose-800/50">
+                          Overdue
+                        </span>
+                      )}
+                      {isScheduled && (
+                        <span className="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider border border-amber-200 dark:border-amber-800/50">
+                          Scheduled
+                        </span>
+                      )}
                     </div>
-                    
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        onClick={() => handleAssignNow(task)}
-                        className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:-translate-y-0.5"
-                      >
-                        <CheckCircle size={14} />
-                        Assign Now
-                      </button>
-                      <button
-                        onClick={() => handleEdit(task)}
-                        className="flex-1 py-2 px-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-lg shadow-sm hover:shadow transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:-translate-y-0.5"
+
+                    {/* Quick Actions */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button 
+                        onClick={() => handleEdit(task)} 
+                        className="p-1.5 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 rounded-lg transition-colors hover:bg-indigo-50 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700 cursor-pointer" 
+                        title="Edit Task"
                       >
                         <Edit size={14} />
-                        Edit Schedule
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(task._id)} 
+                        className="p-1.5 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 rounded-lg transition-colors hover:bg-rose-50 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700 cursor-pointer" 
+                        title="Delete Task"
+                      >
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   </div>
-                )}
 
-                <div className="flex flex-col gap-2.5 text-sm font-medium mt-auto border-t border-slate-100 dark:border-slate-800/60 pt-4">
-                  <div className="flex items-center gap-4 flex-wrap">
-                    <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded">Max Marks: {task.maxMarks}</span>
-                    <span className="text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded font-bold">{task.category || 'General'}</span>
-                    <span className={`px-2 py-1 rounded ${isOverdue ? 'text-red-600 bg-red-50 dark:bg-red-900/30 dark:text-red-400' : 'text-amber-600 bg-amber-50 dark:bg-amber-900/30'}`}>Due: {new Date(task.dueDate).toLocaleDateString()}</span>
-                  </div>
-                  {task.scheduledAt && (
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
-                      {isScheduled ? 'Release Schedule' : 'Released'}: <span className="font-semibold text-slate-700 dark:text-slate-200">{new Date(task.scheduledAt).toLocaleString()}</span>
+                  {/* Task Title (Full Width) */}
+                  <h3 className="font-bold text-base sm:text-lg text-slate-900 dark:text-white leading-snug mb-3.5 break-words">
+                    {task.title}
+                  </h3>
+
+                  {/* Instructions / Resource Access */}
+                  {task.taskType === 'file' && task.fileUrl ? (
+                    <div className="mb-4 p-3 bg-slate-50/80 dark:bg-slate-900/50 rounded-xl border border-slate-200/60 dark:border-slate-700/50 space-y-2">
+                      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Attached instructions file:</p>
+                      <a 
+                        href={task.fileUrl.startsWith('http') ? task.fileUrl : `${import.meta.env.VITE_API_URL}${task.fileUrl}`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="inline-flex items-center gap-2 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 text-xs rounded-lg font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors border border-emerald-200 dark:border-emerald-800/50 cursor-pointer shadow-2xs"
+                      >
+                        <FileTextIcon size={14} /> Download Instructions
+                      </a>
+                    </div>
+                  ) : task.taskType === 'link' ? (
+                    <div className="mb-4 p-3 bg-slate-50/80 dark:bg-slate-900/50 rounded-xl border border-slate-200/60 dark:border-slate-700/50 space-y-2">
+                      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Task external reference:</p>
+                      <a 
+                        href={task.linkUrl} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="inline-flex items-center gap-2 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1.5 text-xs rounded-lg font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors border border-indigo-200 dark:border-indigo-800/50 cursor-pointer shadow-2xs"
+                      >
+                        <LinkIcon size={14} /> Open Task Link
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="mb-4 p-3 bg-slate-50/80 dark:bg-slate-900/50 rounded-xl border border-slate-200/60 dark:border-slate-700/50 space-y-2">
+                      <p className="text-xs font-medium text-slate-500 dark:text-slate-400 line-clamp-2">
+                        {task.description ? task.description.replace(/<[^>]*>/g, '') : 'Text instructions provided for this task.'}
+                      </p>
+                      <button 
+                        onClick={() => handleViewTaskText(task)}
+                        className="inline-flex items-center gap-2 text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-3 py-1.5 text-xs rounded-lg font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors border border-indigo-200 dark:border-indigo-800/50 cursor-pointer shadow-2xs"
+                      >
+                        <FileTextIcon size={14} /> View Task Details
+                      </button>
                     </div>
                   )}
+
+                  {/* Scheduled Release Box */}
+                  {isScheduled && (
+                    <div className="mb-4 p-3.5 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/70 dark:border-amber-900/40 rounded-xl space-y-2.5">
+                      <div className="flex items-start gap-2 text-amber-800 dark:text-amber-300">
+                        <Clock size={15} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                        <div className="flex-1 text-xs">
+                          <span className="font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-500 block">Scheduled Release</span>
+                          <span className="font-semibold block mt-0.5">
+                            {new Date(task.scheduledAt).toLocaleString('en-US', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => handleAssignNow(task)}
+                          className="flex-1 py-1.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <CheckCircle size={13} />
+                          Assign Now
+                        </button>
+                        <button
+                          onClick={() => handleEdit(task)}
+                          className="flex-1 py-1.5 px-3 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit size={13} />
+                          Edit Schedule
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Metadata Badges */}
+                <div className="pt-3.5 mt-2 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-2 flex-wrap text-xs">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1 font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-lg border border-emerald-200/60 dark:border-emerald-800/40">
+                      <Award size={12} /> {task.maxMarks} Marks
+                    </span>
+                    <span className="inline-flex items-center gap-1 font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded-lg border border-indigo-200/60 dark:border-indigo-800/40">
+                      <Tag size={12} /> {task.category || 'General'}
+                    </span>
+                  </div>
+                  <span className={`inline-flex items-center gap-1 font-bold px-2.5 py-1 rounded-lg border ${
+                    isOverdue 
+                      ? 'text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 border-rose-200/60 dark:border-rose-800/40' 
+                      : 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border-amber-200/60 dark:border-amber-800/40'
+                  }`}>
+                    <Calendar size={12} /> Due: {new Date(task.dueDate).toLocaleDateString()}
+                  </span>
                 </div>
               </div>
             );
