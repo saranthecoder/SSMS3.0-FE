@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import Loader from '../../components/Loader';
 import { 
   User as UserIcon, Mail, Phone, GitBranch, Briefcase, Globe, Save, Loader2, Code, Terminal, Eye, EyeOff, Camera,
-  ShieldCheck, ShieldAlert, Clock, Ban, AlertTriangle, CheckCircle2
+  ShieldCheck, ShieldAlert, Clock, Ban, AlertTriangle, CheckCircle2, Hash, Lock
 } from 'lucide-react';
 
 import ImageCropModal from '../../components/ImageCropModal';
@@ -47,6 +47,7 @@ const UserProfile = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    rollNumber: '',
     phone: '',
     github: '',
     linkedin: '',
@@ -69,6 +70,7 @@ const UserProfile = () => {
         setFormData({
           name: data.name || '',
           email: data.email || '',
+          rollNumber: data.rollNumber || authUser?.rollNumber || '',
           phone: data.phone || '',
           github: data.github || '',
           linkedin: data.linkedin || '',
@@ -150,6 +152,17 @@ const UserProfile = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (formData.email && !formData.email.includes('@')) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Invalid Email',
+        text: 'Please enter a valid email address.',
+        background: document.documentElement.classList.contains('dark') ? '#000000' : '#ffffff',
+        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000',
+      });
+      return;
+    }
     
     if (formData.password && formData.password !== formData.confirmPassword) {
       Swal.fire({
@@ -164,9 +177,10 @@ const UserProfile = () => {
     
     setSaving(true);
     try {
-      // Create payload without confirmPassword
+      // Create payload without confirmPassword and without rollNumber (primary key cannot be modified)
       const payload = { ...formData };
       delete payload.confirmPassword;
+      delete payload.rollNumber;
       if (!payload.password) {
         delete payload.password;
       }
@@ -175,7 +189,7 @@ const UserProfile = () => {
       Swal.fire({
         icon: 'success',
         title: 'Profile Updated',
-        text: 'Your profile information has been successfully updated.',
+        text: 'Your profile information and email have been successfully updated.',
         background: document.documentElement.classList.contains('dark') ? '#000000' : '#ffffff',
         color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000',
         confirmButtonColor: '#0ea5e9'
@@ -329,6 +343,7 @@ const UserProfile = () => {
         <div>
           <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-4 border-b border-slate-200 dark:border-white/10 pb-2">Basic Information</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Full Name */}
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name</label>
               <div className="relative">
@@ -343,21 +358,58 @@ const UserProfile = () => {
                 />
               </div>
             </div>
-            
+
+            {/* Roll Number - Permanent Primary Key */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Address (Read Only)</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Roll Number</label>
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                  <Lock size={10} /> Primary Key (Permanent)
+                </span>
+              </div>
+              <div className="relative">
+                <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input 
+                  type="text" 
+                  value={formData.rollNumber || authUser?.rollNumber || ''}
+                  className="input-field pl-10 opacity-75 cursor-not-allowed bg-slate-100 dark:bg-white/5 font-mono font-bold tracking-wider select-none"
+                  disabled
+                  readOnly
+                  title="Roll Number is your unique primary identifier and cannot be changed"
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Roll number is unique to your identity across all batches and records.
+              </p>
+            </div>
+            
+            {/* Email Address - Editable */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Address</label>
+                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  Editable
+                </span>
+              </div>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input 
                   type="email" 
+                  name="email"
                   value={formData.email}
-                  className="input-field pl-10 opacity-70 cursor-not-allowed bg-slate-100 dark:bg-white/5"
-                  disabled
+                  onChange={handleChange}
+                  placeholder="student@example.com"
+                  className="input-field pl-10"
+                  required
                 />
               </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                You can update your personal or college email for notifications and alerts.
+              </p>
             </div>
 
-            <div className="space-y-1.5 md:col-span-2">
+            {/* Phone Number */}
+            <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Phone Number</label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -370,6 +422,9 @@ const UserProfile = () => {
                   className="input-field pl-10"
                 />
               </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Used for urgent verification and mentor communications.
+              </p>
             </div>
           </div>
         </div>
