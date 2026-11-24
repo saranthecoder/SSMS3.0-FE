@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import axios from 'axios';
-import { Loader2, ShieldCheck, Search, CheckCircle2, XCircle, Users, RefreshCw, Clock } from 'lucide-react';
+import { Loader2, ShieldCheck, Search, CheckCircle2, XCircle, Users, RefreshCw, Clock, Calendar } from 'lucide-react';
 import Swal from 'sweetalert2';
 import Loader from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
@@ -348,7 +348,7 @@ const CheckInPermissions = () => {
               { id: 'all', label: 'All Students' },
               { id: 'on-site', label: 'On-Site' },
               { id: 'wfh', label: 'WFH' },
-              { id: 'leave', label: `On Leave 🌴 (${todayLeaves.length})` },
+              { id: 'leave', label: `On Leave (${todayLeaves.length})` },
               { id: 'none', label: 'No Access' }
             ].map(tab => (
               <button
@@ -519,10 +519,10 @@ const CheckInPermissions = () => {
                           <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">{student.name}</h4>
                           {leave && (
                             <span 
-                              className="px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
                               title={leave.reason || 'On approved leave today'}
                             >
-                              🌴 Leave
+                              <Calendar size={10} className="shrink-0" /> Leave
                             </span>
                           )}
                         </div>

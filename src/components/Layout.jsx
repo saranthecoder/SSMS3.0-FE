@@ -644,6 +644,7 @@ const Layout = () => {
   const [onsiteSeconds, setOnsiteSeconds] = useState(0);
   const [wfhSeconds, setWfhSeconds] = useState(0);
   const [currentAccessType, setCurrentAccessType] = useState('on-site');
+  const [checkInAccess, setCheckInAccess] = useState({ hasAccess: false, accessType: null });
   const currentAccessTypeRef = useRef('on-site');
   useEffect(() => { currentAccessTypeRef.current = currentAccessType; }, [currentAccessType]);
   const [isSyncing, setIsSyncing] = useState(user?.role === 'student');
@@ -1155,6 +1156,7 @@ const Layout = () => {
       });
 
       const grantedAccessType = accessRes.data?.hasAccess ? accessRes.data.accessType : null;
+      setCheckInAccess(accessRes.data);
 
       if (todayRecords.length > 0) {
         const todayRecord = todayRecords[0];
@@ -1649,6 +1651,11 @@ const Layout = () => {
     socket.on('new-task-assigned', handleNewTaskAssigned);
     socket.on('task-graded', handleTaskGraded);
 
+    const handleCheckInAccessUpdated = () => {
+      syncAttendanceSession();
+    };
+    socket.on('checkin-access-updated', handleCheckInAccessUpdated);
+
     return () => {
       socket.off('new-direct-message-notification', handleDirectMessageNotif);
       socket.off('new-group-message-notification', handleGroupMessageNotif);
@@ -1659,6 +1666,7 @@ const Layout = () => {
       socket.off('coins-received', handleCoinsReceived);
       socket.off('new-task-assigned', handleNewTaskAssigned);
       socket.off('task-graded', handleTaskGraded);
+      socket.off('checkin-access-updated', handleCheckInAccessUpdated);
     };
   }, [socket, user, location.pathname, navigate, fetchCounts]);
 
@@ -2823,7 +2831,7 @@ const Layout = () => {
                 </div>
               )}
               <Outlet context={{ 
-                sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus,
+                sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, checkInAccess, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus,
                 themeColor, activeTheme: themes.find(t => t.name === themeColor) || themes[0],
                 userCoins, gamificationData, fetchCounts, showGlossyNotification
               }} />

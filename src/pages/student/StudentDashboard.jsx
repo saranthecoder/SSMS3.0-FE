@@ -3,7 +3,7 @@ import { useOutletContext, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import Swal from 'sweetalert2';
-import { BookOpen, CheckCircle, Clock, Target, Play, Square, Bell, User as UserIcon, CreditCard, ChevronRight, TrendingUp, TrendingDown, Award, Trophy, Users, MessageCircle, FileText, Gamepad2, Code, Calendar, Loader2, ClipboardCheck, Briefcase, Flame, Coins, Sparkles, X, Lock } from 'lucide-react';
+import { BookOpen, CheckCircle, CheckCircle2, Clock, Target, Play, Square, Bell, User as UserIcon, CreditCard, ChevronRight, TrendingUp, TrendingDown, Award, Trophy, Users, MessageCircle, FileText, Gamepad2, Code, Calendar, Loader2, ClipboardCheck, Briefcase, Flame, Coins, Sparkles, X, Lock, Building2, Home, AlertTriangle, Crown, Camera, Palette } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell } from 'recharts';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { MagicDust } from '../../components/ui/magic-dust-shader';
@@ -81,7 +81,7 @@ const getNamecolorClass = (value) => {
 const StudentDashboard = () => {
   const { user, customPanelName, customPanelSubheading } = useAuth();
   const { 
-    sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus,
+    sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, checkInAccess: contextCheckInAccess, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus,
     themeColor, activeTheme, userCoins, gamificationData, fetchCounts
   } = useOutletContext();
   const [analytics, setAnalytics] = useState(null);
@@ -115,13 +115,30 @@ const StudentDashboard = () => {
     if (fetchCounts) fetchCounts();
   };
   const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, leave: 0, inProgress: 0, invalid: 0, total: 0, percentage: 0 });
-  const [checkInAccess, setCheckInAccess] = useState({ hasAccess: false, accessType: null });
+  const [localCheckInAccess, setLocalCheckInAccess] = useState({ hasAccess: false, accessType: null });
+
+  // Prefer context-synced access from Layout socket listener, fallback to local state
+  const checkInAccess = (contextCheckInAccess && contextCheckInAccess.hasAccess !== undefined)
+    ? contextCheckInAccess
+    : localCheckInAccess;
 
   const [activeLeetcode, setActiveLeetcode] = useState([]);
   const [mockScores, setMockScores] = useState([]);
   const [leetcodeLinks, setLeetcodeLinks] = useState({});
   const [submittingLeetcode, setSubmittingLeetcode] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  // Auto-refresh access on window focus
+  useEffect(() => {
+    const handleFocus = () => {
+      axios.get('/checkin-access/my-status')
+        .then(res => setLocalCheckInAccess(res.data))
+        .catch(() => {});
+      if (syncAttendanceSession) syncAttendanceSession();
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [syncAttendanceSession]);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
@@ -134,7 +151,7 @@ const StudentDashboard = () => {
         ]);
         setAnalytics(analyticsRes.data);
         setActiveLeetcode(leetcodeRes.data);
-        setCheckInAccess(accessRes.data);
+        setLocalCheckInAccess(accessRes.data);
         setMockScores(mockRes.data || []);
 
         if (analyticsRes.data.attendanceStats) {
@@ -173,7 +190,7 @@ const StudentDashboard = () => {
     setSubmittingLeetcode(true);
     try {
       await axios.post(`/leetcode/${problemId}/submit`, { solutionLink: linkToSubmit });
-      Swal.fire('Success', 'LeetCode solution submitted! Streak updated. 🔥', 'success');
+      Swal.fire('Success', 'LeetCode solution submitted! Streak updated.', 'success');
       // Update UI state
       setActiveLeetcode(prev => prev.map(p => p._id === problemId ? { ...p, isSubmitted: true } : p));
       setLeetcodeLinks(prev => ({ ...prev, [problemId]: '' }));
@@ -259,8 +276,9 @@ const StudentDashboard = () => {
               <div className="flex flex-wrap items-center gap-2 text-slate-400">
                 <p className="text-xs font-semibold">{customPanelSubheading || 'Great, your learning is on track'}</p>
                 {(gamificationData?.equippedTitle || gamificationData?.currentTitle || user?.equippedTitle || user?.currentTitle) && (
-                  <span className="inline-flex items-center text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded bg-amber-500/10 text-amber-450 border border-amber-500/20 shadow-sm">
-                    🏆 {gamificationData?.equippedTitle || gamificationData?.currentTitle || user?.equippedTitle || user?.currentTitle}
+                  <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 rounded bg-amber-500/10 text-amber-450 border border-amber-500/20 shadow-sm">
+                    <Trophy size={11} className="text-amber-400 shrink-0" />
+                    <span>{gamificationData?.equippedTitle || gamificationData?.currentTitle || user?.equippedTitle || user?.currentTitle}</span>
                   </span>
                 )}
               </div>
@@ -313,8 +331,8 @@ const StudentDashboard = () => {
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-500/20 via-yellow-500/10 to-amber-600/20 border border-amber-500/30 p-6 md:p-8 shadow-xl shadow-amber-500/5 mb-6 group animate-in slide-in-from-top-4 duration-300 text-left">
           <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none group-hover:bg-amber-500/20 transition-all duration-700"></div>
           <div className="flex flex-col md:flex-row items-start md:items-center gap-6 relative z-10">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 flex items-center justify-center text-4xl shadow-lg shadow-amber-500/20 shrink-0 animate-bounce">
-              👑
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-yellow-500 flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0">
+              <Crown size={32} className="text-slate-900" />
             </div>
             <div className="flex-1 space-y-2">
               <h2 className="text-xl font-extrabold text-amber-500 dark:text-amber-400 flex items-center gap-2">
@@ -326,28 +344,36 @@ const StudentDashboard = () => {
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                 <div className="flex items-start gap-3 bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/10 rounded-2xl p-3.5 hover:bg-amber-500/10 transition-colors">
-                  <div className="text-xl mt-0.5">📸</div>
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Camera size={16} className="text-amber-500" />
+                  </div>
                   <div>
                     <h4 className="text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">Custom Profile Photo</h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5">Upload any custom photo from your device. Go to <Link to="/student/profile" className="underline font-bold text-amber-500">My Profile</Link> and click your picture to upload!</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/10 rounded-2xl p-3.5 hover:bg-amber-500/10 transition-colors">
-                  <div className="text-xl mt-0.5">🎨</div>
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Palette size={16} className="text-amber-500" />
+                  </div>
                   <div>
                     <h4 className="text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">Workspace Color Theme Customizer</h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5">Style your workspace by picking a custom hex color from the palette menu in the top navbar header.</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/10 rounded-2xl p-3.5 hover:bg-amber-500/10 transition-colors">
-                  <div className="text-xl mt-0.5">✨</div>
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Sparkles size={16} className="text-amber-500" />
+                  </div>
                   <div>
                     <h4 className="text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">Pulsing Profile Glow</h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5">Your profile image has a glowing ring aura highlighting your top rank in lists, chats, and rankings.</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3 bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/10 rounded-2xl p-3.5 hover:bg-amber-500/10 transition-colors">
-                  <div className="text-xl mt-0.5">🔥</div>
+                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                    <Flame size={16} className="text-amber-500" />
+                  </div>
                   <div>
                     <h4 className="text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">Reigning Champion Prestige</h4>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5">Showcase your rank position badge across the learning board and earn admiration from peers.</p>
@@ -359,334 +385,341 @@ const StudentDashboard = () => {
         </div>
       )}
 
-      {/* Row 1: Task Completion (3), ID Card (6), Leaderboard (3) */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch mb-6">
+      {/* Row 1: 2-Column Bento Grid: Left (Task Completion & Your Rank) | Right (Student ID & CheckIN) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch mb-6">
         
-        {/* Top Left: Task Completion Donut */}
-        <Link to="/student/tasks" className={`md:col-span-4 lg:col-span-3 p-6 rounded-3xl border-t border-white/40 border-b-[3px] border-black/20 flex flex-col justify-between hover:-translate-y-1 active:translate-y-1 active:border-b-0 transition-all cursor-pointer block relative overflow-hidden group text-white ${
-          themeColor === 'Emerald'
-            ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/40 hover:shadow-[0_12px_20px_-6px_rgba(16,185,129,0.5)]'
-            : 'bg-gradient-to-br from-primary-400 to-primary-600 shadow-lg shadow-theme-primary/40 hover:shadow-[0_12px_20px_-6px_var(--color-theme-primary)]'
-        }`}>
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
-          <div className="relative z-10">
-            <h3 className="text-sm font-bold text-white mb-0.5 drop-shadow-sm">Task Completion</h3>
-            <p className={`text-xs font-medium drop-shadow-sm ${themeColor === 'Emerald' ? 'text-emerald-50' : 'text-primary-50'}`}>Your progress overview</p>
-          </div>
-          
-          <div className="flex flex-col items-center w-full my-auto py-2 relative z-10">
-            <div className="relative w-28 h-28 shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={completionData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={56}
-                    paddingAngle={2}
-                    dataKey="value"
-                    stroke="none"
-                    cornerRadius={4}
-                  >
-                    {completionData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={index === 0 ? '#ffffff' : 'rgba(255,255,255,0.25)'} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-[10px] text-white/80 font-semibold uppercase tracking-wider drop-shadow-sm">Done</span>
-                <span className="text-xl font-bold text-white leading-none mt-1 drop-shadow-md">{analytics?.taskCompletionRate || 0}%</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="relative z-10 bg-black/10 rounded-xl p-2.5 backdrop-blur-xs border border-white/10 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-white shadow-sm"></div>
-                <span className="text-white font-semibold drop-shadow-sm">Completed</span>
-              </div>
-              <span className="font-bold text-white drop-shadow-sm">{analytics?.completedTasks || 0}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-white/30"></div>
-                <span className="text-white font-semibold drop-shadow-sm">Pending</span>
-              </div>
-              <span className="font-bold text-white drop-shadow-sm">{analytics?.pendingTasks || 0}</span>
-            </div>
-          </div>
-        </Link>
-
-        {/* Center: The "Credit Card" Widget (ID Card / Timer) */}
-        <div className={`md:col-span-8 lg:col-span-6 relative overflow-hidden rounded-3xl p-6 text-white border-t border-white/40 border-b-[3px] border-black/20 flex flex-col group ${
-          themeColor === 'Emerald'
-            ? 'bg-gradient-to-br from-emerald-400 to-teal-600 shadow-lg shadow-emerald-500/40'
-            : 'bg-gradient-to-br from-primary-400 to-theme-accent shadow-lg shadow-theme-accent/40'
-        }`}>
-          {/* Card Decorations */}
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
-          <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full -ml-8 -mb-8 blur-xl"></div>
-          
-          <div className="relative z-10 flex justify-between items-start mb-4">
-            <Link to="/student/attendance" className="group flex flex-col hover:opacity-80 transition-opacity">
-              <p className="text-emerald-50 text-xs font-medium uppercase tracking-wider mb-1 flex items-center gap-1">
-                Student ID Card <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity translate-x-[-5px] group-hover:translate-x-0" />
-              </p>
-              <h3 className="font-bold text-lg leading-none flex items-center gap-2">
-                SSMS Base
-                {checkInAccess.hasAccess && (
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                    checkInAccess.accessType === 'wfh' 
-                      ? 'bg-sky-400 text-slate-950 border border-sky-300 animate-pulse' 
-                      : 'bg-emerald-400 text-slate-950 border border-emerald-300'
-                  }`}>
-                    {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'} ({checkInAccess.workHours || 8}h)
-                  </span>
-                )}
-              </h3>
-            </Link>
-            <Link to="/student/profile" className="hover:opacity-80 transition-opacity" title="My Profile">
-              <UserIcon size={24} className="opacity-80" />
-            </Link>
-          </div>
-
-          <div className="relative z-10 grid grid-cols-2 gap-2.5 my-3">
-            <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
-              <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Student Name</p>
-              <p className="font-bold text-base leading-tight truncate">{user?.name || 'NOT SET'}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
-              <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Roll Number</p>
-              <p className="font-mono font-bold text-base tracking-wider leading-tight truncate">{user?.rollNumber || 'NOT SET'}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
-              <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Email Address</p>
-              <p className="font-medium text-xs truncate opacity-90">{user?.email || 'NOT SET'}</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
-              <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Phone Number</p>
-              <p className="font-mono font-medium text-xs opacity-90">{user?.phone || 'NOT SET'}</p>
-            </div>
-          </div>
-
-          {/* Workload Requirements for Present Status - Only shown when access is granted */}
-          {checkInAccess.hasAccess ? (
-            <div className="relative z-10 bg-black/25 backdrop-blur-md rounded-2xl p-3 my-2 border border-white/15 text-white">
-              <div className="flex items-center justify-between text-xs mb-2 flex-wrap gap-1">
-                <span className="font-extrabold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                  <Clock size={14} className="text-amber-300" /> Attendance Requirements (Present Criteria)
-                </span>
-                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 border border-white/20">
-                  {checkInAccess.accessType === 'wfh' ? '🏠 WFH Mode' : '🏢 On-Site Mode'}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
-                  <p className="text-[10px] uppercase font-bold text-emerald-200">Minimum Hours (Present)</p>
-                  <div className="flex items-baseline gap-1 mt-0.5">
-                    <span className="font-black text-lg text-white">
-                      {checkInAccess.minHours || checkInAccess.workHours || 4}h
-                    </span>
-                    <span className="text-[11px] text-white/80">min required</span>
-                  </div>
-                  <p className="text-[10px] text-emerald-100/70 mt-1">Must maintain at least {checkInAccess.minHours || checkInAccess.workHours || 4} hours to get Present</p>
-                </div>
-
-                <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
-                  <p className="text-[10px] uppercase font-bold text-amber-200">Maximum Valid Hours</p>
-                  <div className="flex items-baseline gap-1 mt-0.5">
-                    <span className="font-black text-lg text-white">
-                      {checkInAccess.maxHours || 10}h
-                    </span>
-                    <span className="text-[11px] text-white/80">max allowed</span>
-                  </div>
-                  <p className="text-[10px] text-amber-100/70 mt-1">Hours above {checkInAccess.maxHours || 10}h are marked as Invalid</p>
-                </div>
-              </div>
-
-              {/* Dual Mode Note if student worked On-Site and is now in WFH mode */}
-              {checkInAccess.accessType === 'wfh' && (onsiteSeconds > 0) && (
-                <div className="mt-2.5 p-2 rounded-xl bg-white/10 border border-white/15 text-[11px] text-white/90 flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 truncate">
-                    🏢 On-Site Stored: <strong className="text-emerald-300 font-mono">{formatTime(onsiteSeconds)}</strong>
-                  </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-300/30 text-emerald-100 shrink-0">
-                    Dual Mode Load
-                  </span>
-                </div>
-              )}
-
-              {/* Live Session Progress & Milestone Feedback */}
-              {sessionActive && (() => {
-                const reqHours = Number(checkInAccess.minHours || checkInAccess.workHours || 4);
-                const maxHours = Number(checkInAccess.maxHours || 10);
-                const minSecs = reqHours * 3600;
-                const maxSecs = maxHours * 3600;
-
-                if (sessionSeconds > maxSecs) {
-                  return (
-                    <div className="mt-2.5 p-2 rounded-xl bg-rose-500/30 border border-rose-300/40 text-xs font-bold text-rose-100 flex items-center gap-2">
-                      <span className="text-base">⚠️</span>
-                      <span>Session exceeded {maxHours}h max limit! Marked as Invalid overtime. Check out now.</span>
-                    </div>
-                  );
-                }
-                if (sessionSeconds >= minSecs) {
-                  return (
-                    <div className="mt-2.5 p-2 rounded-xl bg-emerald-500/30 border border-emerald-300/40 text-xs font-bold text-emerald-100 flex items-center gap-2">
-                      <span className="text-base">🎉</span>
-                      <span>Present Criteria Met for {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'}! You have logged {Math.floor(sessionSeconds / 3600)}h {Math.floor((sessionSeconds % 3600) / 60)}m.</span>
-                    </div>
-                  );
-                }
-                const remSecs = Math.max(0, minSecs - sessionSeconds);
-                const remH = Math.floor(remSecs / 3600);
-                const remM = Math.ceil((remSecs % 3600) / 60);
-                return (
-                  <div className="mt-2.5 p-2 rounded-xl bg-amber-500/25 border border-amber-300/40 text-xs font-bold text-amber-100 flex items-center gap-2">
-                    <span className="text-base">⏳</span>
-                    <span>{remH > 0 ? `${remH}h ` : ''}{remM}m more needed to qualify as Present in {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'} mode (Min {reqHours}h required).</span>
-                  </div>
-                );
-              })()}
-            </div>
-          ) : (
-            <div className="relative z-10 bg-black/20 backdrop-blur-md rounded-2xl p-3 my-2 border border-white/15 text-white flex items-center justify-between gap-3 shadow-inner">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-white/80 shrink-0">
-                  <Lock size={15} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-bold text-white leading-tight">Check-In Access Not Granted Today</p>
-                  <p className="text-[11px] text-white/70 truncate mt-0.5">Please contact your mentor to authorize attendance.</p>
-                </div>
-              </div>
-              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/15 border border-white/20 text-white/80 shrink-0">
-                No Access
-              </span>
-            </div>
-          )}
-
-          {/* Separated Record Badges */}
-          {(onsiteSeconds > 0 || wfhSeconds > 0) && (
-            <div className="relative z-10 flex items-center gap-2 my-2 text-[11px] flex-wrap">
-              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border ${
-                checkInAccess.accessType === 'on-site' 
-                  ? 'bg-white/20 border-white/30 font-bold text-white shadow-xs' 
-                  : 'bg-black/20 border-white/10 text-white/80'
-              }`}>
-                <span>🏢 On-Site:</span>
-                <span className="font-mono font-bold text-white">{formatTime(onsiteSeconds || 0)}</span>
-                {onsiteSeconds > 0 && !sessionActive && checkInAccess.accessType !== 'on-site' && (
-                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/30 text-emerald-200 font-bold border border-emerald-400/30">Stored</span>
-                )}
-              </div>
-
-              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border ${
-                checkInAccess.accessType === 'wfh' 
-                  ? 'bg-white/20 border-white/30 font-bold text-white shadow-xs' 
-                  : 'bg-black/20 border-white/10 text-white/80'
-              }`}>
-                <span>🏠 WFH:</span>
-                <span className="font-mono font-bold text-white">{formatTime(wfhSeconds || 0)}</span>
-                {wfhSeconds > 0 && !sessionActive && checkInAccess.accessType !== 'wfh' && (
-                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-sky-500/30 text-sky-200 font-bold border border-sky-400/30">Stored</span>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className={`relative z-10 flex items-center justify-between mt-auto pt-4 border-t ${
-            themeColor === 'Emerald' ? 'border-emerald-400/30' : 'border-primary-400/30'
+        {/* Left Column: Top = Task Completion, Bottom = Your Rank */}
+        <div className="lg:col-span-4 flex flex-col gap-6">
+          {/* Left Top: Task Completion */}
+          <Link to="/student/tasks" className={`flex-1 p-5 md:p-6 rounded-3xl border-t border-white/40 border-b-[3px] border-black/20 flex flex-col justify-between hover:-translate-y-1 active:translate-y-1 active:border-b-0 transition-all cursor-pointer block relative overflow-hidden group text-white ${
+            themeColor === 'Emerald'
+              ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/40 hover:shadow-[0_12px_20px_-6px_rgba(16,185,129,0.5)]'
+              : 'bg-gradient-to-br from-primary-400 to-primary-600 shadow-lg shadow-theme-primary/40 hover:shadow-[0_12px_20px_-6px_var(--color-theme-primary)]'
           }`}>
-            <div>
-              <p className={`text-xs mb-1 ${themeColor === 'Emerald' ? 'text-emerald-100' : 'text-primary-100'}`}>
-                Session Duration {checkInAccess.hasAccess ? `(${checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'})` : ''}
-              </p>
-              <p className="font-mono font-bold text-2xl">{formatTime(sessionSeconds)}</p>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+            <div className="relative z-10 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white mb-0.5 drop-shadow-sm">Task Completion</h3>
+                <p className={`text-xs font-medium drop-shadow-sm ${themeColor === 'Emerald' ? 'text-emerald-50' : 'text-primary-50'}`}>Your progress overview</p>
+              </div>
+              <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center backdrop-blur-xs">
+                <CheckCircle2 size={16} className="text-white" />
+              </div>
             </div>
+            
+            <div className="flex flex-col items-center w-full my-auto py-2 relative z-10">
+              <div className="relative w-28 h-28 shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={completionData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={56}
+                      paddingAngle={2}
+                      dataKey="value"
+                      stroke="none"
+                      cornerRadius={4}
+                    >
+                      {completionData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={index === 0 ? '#ffffff' : 'rgba(255,255,255,0.25)'} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-[10px] text-white/80 font-semibold uppercase tracking-wider drop-shadow-sm">Done</span>
+                  <span className="text-xl font-bold text-white leading-none mt-1 drop-shadow-md">{analytics?.taskCompletionRate || 0}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="relative z-10 bg-black/10 rounded-xl p-2.5 backdrop-blur-xs border border-white/10 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-white shadow-sm"></div>
+                  <span className="text-white font-semibold drop-shadow-sm">Completed</span>
+                </div>
+                <span className="font-bold text-white drop-shadow-sm">{analytics?.completedTasks || 0}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-white/30"></div>
+                  <span className="text-white font-semibold drop-shadow-sm">Pending</span>
+                </div>
+                <span className="font-bold text-white drop-shadow-sm">{analytics?.pendingTasks || 0}</span>
+              </div>
+            </div>
+          </Link>
+
+          {/* Left Bottom: Your Rank (Leaderboard) */}
+          <Link to="/student/leaderboard" className={`flex-1 relative overflow-hidden rounded-3xl p-5 md:p-6 text-white border-t border-white/40 border-b-[3px] border-black/20 flex flex-col justify-between hover:-translate-y-1 active:translate-y-1 active:border-b-0 transition-all cursor-pointer group ${
+            themeColor === 'Emerald'
+              ? 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg shadow-orange-500/40'
+              : 'bg-gradient-to-br from-primary-500 to-theme-accent shadow-lg shadow-theme-primary/40'
+          }`}>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full blur-2xl -mr-10 -mt-10"></div>
             <div>
-              {sessionActive ? (
-                <button 
-                  onClick={() => endSession()} 
-                  disabled={isCheckingIn}
-                  className={`bg-rose-500 hover:bg-rose-600 text-white px-8 py-3 rounded-xl text-base font-black transition-all shadow-lg shadow-rose-500/40 flex items-center gap-2 cursor-pointer ${isCheckingIn ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-xl hover:-translate-y-1 active:translate-y-0.5'}`}
-                >
-                  {isCheckingIn ? <Loader2 size={16} className="animate-spin" /> : <Square size={16} fill="currentColor" />} 
-                  Check Out
-                </button>
-              ) : activeLeaveStatus?.isOnLeave ? (
-                <div className="flex flex-col items-end">
-                  <span className="text-xs font-bold text-amber-200 mb-2 max-w-[180px] text-right">
-                    {activeLeaveStatus.message}
+              <div className="flex items-center justify-between mb-3">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm group-hover:scale-110 transition-transform shadow-inner">
+                  <Trophy size={20} className={themeColor === 'Emerald' ? 'text-amber-100' : 'text-primary-100'} />
+                </div>
+                <span className={`text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded-full bg-white/15 border border-white/20 ${themeColor === 'Emerald' ? 'text-amber-100' : 'text-primary-100'}`}>
+                  Leaderboard
+                </span>
+              </div>
+              <p className="text-2xl font-black leading-tight">
+                {analytics?.rank && analytics.rank !== 'N/A' ? `Your Rank: #${analytics.rank}` : 'View Your Ranking'}
+              </p>
+              {analytics?.rank && analytics.rank !== 'N/A' && (
+                <p className={`text-xs font-semibold mt-2 leading-relaxed drop-shadow-sm transition-all duration-300 ${themeColor === 'Emerald' ? 'text-amber-50/90' : 'text-primary-50/90'}`}>
+                  {analytics.rank === 1 && "You're leading the pack! Outstanding job!"}
+                  {analytics.rank > 1 && analytics.rank <= 3 && "So close to the top! Keep pushing!"}
+                  {analytics.rank > 3 && analytics.rank <= 10 && "Amazing! You are in the top 10!"}
+                  {analytics.rank > 10 && "Keep climbing! Daily consistency pays off!"}
+                </p>
+              )}
+            </div>
+            <div className="mt-4 flex items-center justify-between bg-black/10 rounded-xl p-3 backdrop-blur-sm border border-white/10 group-hover:bg-black/20 transition-colors">
+              <span className={`text-xs font-bold ${themeColor === 'Emerald' ? 'text-amber-50' : 'text-primary-50'}`}>Compare with peers</span>
+              <ChevronRight size={16} />
+            </div>
+          </Link>
+        </div>
+
+        {/* Right Column: Top = Student ID, Bottom = CheckIN */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
+          {/* Right Top: Student ID Card */}
+          <div className={`relative overflow-hidden rounded-3xl p-5 md:p-6 text-white border-t border-white/40 border-b-[3px] border-black/20 flex flex-col group ${
+            themeColor === 'Emerald'
+              ? 'bg-gradient-to-br from-emerald-400 to-teal-600 shadow-lg shadow-emerald-500/40'
+              : 'bg-gradient-to-br from-primary-400 to-theme-accent shadow-lg shadow-theme-accent/40'
+          }`}>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
+            <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full -ml-8 -mb-8 blur-xl"></div>
+            
+            <div className="relative z-10 flex justify-between items-start mb-3">
+              <Link to="/student/attendance" className="group flex flex-col hover:opacity-80 transition-opacity">
+                <p className="text-emerald-50 text-xs font-medium uppercase tracking-wider mb-1 flex items-center gap-1">
+                  Student ID Card <ChevronRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity translate-x-[-5px] group-hover:translate-x-0" />
+                </p>
+                <h3 className="font-bold text-lg leading-none flex items-center gap-2">
+                  SSMS Base
+                  {checkInAccess.hasAccess && (
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                      checkInAccess.accessType === 'wfh' 
+                        ? 'bg-sky-400 text-slate-950 border border-sky-300' 
+                        : 'bg-emerald-400 text-slate-950 border border-emerald-300'
+                    }`}>
+                      {checkInAccess.accessType === 'wfh' ? <Home size={11} className="shrink-0" /> : <Building2 size={11} className="shrink-0" />}
+                      {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'} ({checkInAccess.minHours || checkInAccess.workHours || 3}h)
+                    </span>
+                  )}
+                </h3>
+              </Link>
+              <Link to="/student/profile" className="hover:opacity-80 transition-opacity p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10" title="My Profile">
+                <UserIcon size={20} className="opacity-90" />
+              </Link>
+            </div>
+
+            <div className="relative z-10 grid grid-cols-2 md:grid-cols-4 gap-2.5 my-1">
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
+                <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Student Name</p>
+                <p className="font-bold text-sm leading-tight truncate">{user?.name || 'NOT SET'}</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
+                <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Roll Number</p>
+                <p className="font-mono font-bold text-sm tracking-wider leading-tight truncate">{user?.rollNumber || 'NOT SET'}</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
+                <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Email Address</p>
+                <p className="font-medium text-xs truncate opacity-90">{user?.email || 'NOT SET'}</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
+                <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Phone Number</p>
+                <p className="font-mono font-medium text-xs opacity-90">{user?.phone || 'NOT SET'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Bottom: CheckIN (Requirements + Stored/Badges + Timer + Check In Action) */}
+          <div className={`relative overflow-hidden rounded-3xl p-5 md:p-6 text-white border-t border-white/40 border-b-[3px] border-black/20 flex-1 flex flex-col justify-between group ${
+            themeColor === 'Emerald'
+              ? 'bg-gradient-to-br from-emerald-500 to-teal-700 shadow-lg shadow-emerald-600/40'
+              : 'bg-gradient-to-br from-primary-500 to-theme-accent shadow-lg shadow-theme-accent/40'
+          }`}>
+            {/* Card Decorations */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
+            <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full -ml-8 -mb-8 blur-xl"></div>
+
+            {/* Attendance Requirements Card (Matching User Specification) */}
+            {checkInAccess.hasAccess ? (
+              <div className="relative z-10 bg-black/25 backdrop-blur-md rounded-2xl p-3 mb-3 border border-white/15 text-white">
+                {/* Card Header */}
+                <div className="flex items-center justify-between text-xs mb-2 flex-wrap gap-1">
+                  <span className="font-extrabold uppercase tracking-wider text-[11px] flex items-center gap-1.5 text-white">
+                    <Clock size={14} className="text-amber-300" /> Attendance Requirements (Present Criteria)
                   </span>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 border border-white/20 text-white flex items-center gap-1">
+                    {checkInAccess.accessType === 'wfh' ? <Home size={10} /> : <Building2 size={10} />}
+                    {checkInAccess.accessType === 'wfh' ? 'WFH Mode' : 'On-Site Mode'}
+                  </span>
+                </div>
+
+                {/* Two Criteria Boxes: Minimum Hours & Maximum Valid Hours */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
+                    <p className="text-[10px] uppercase font-bold text-emerald-200">Minimum Hours (Present)</p>
+                    <div className="flex items-baseline gap-1 mt-0.5">
+                      <span className="font-black text-lg text-white">
+                        {checkInAccess.minHours || checkInAccess.workHours || 3}h
+                      </span>
+                      <span className="text-[11px] text-white/80">min required</span>
+                    </div>
+                    <p className="text-[10px] text-emerald-100/70 mt-1">Must maintain at least {checkInAccess.minHours || checkInAccess.workHours || 3} hours to get Present</p>
+                  </div>
+
+                  <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
+                    <p className="text-[10px] uppercase font-bold text-amber-200">Maximum Valid Hours</p>
+                    <div className="flex items-baseline gap-1 mt-0.5">
+                      <span className="font-black text-lg text-white">
+                        {checkInAccess.maxHours || 10}h
+                      </span>
+                      <span className="text-[11px] text-white/80">max allowed</span>
+                    </div>
+                    <p className="text-[10px] text-amber-100/70 mt-1">Hours above {checkInAccess.maxHours || 10}h are marked as Invalid</p>
+                  </div>
+                </div>
+
+
+                {/* Live Session Progress Feedback Banner */}
+                {(() => {
+                  const reqHours = Number(checkInAccess.minHours || checkInAccess.workHours || 3);
+                  const maxHours = Number(checkInAccess.maxHours || 10);
+                  const minSecs = reqHours * 3600;
+                  const maxSecs = maxHours * 3600;
+
+                  if (sessionSeconds > maxSecs) {
+                    return (
+                      <div className="mt-2.5 p-2 rounded-xl bg-rose-500/30 border border-rose-300/40 text-xs font-bold text-rose-100 flex items-center gap-2">
+                        <AlertTriangle size={15} className="text-rose-300 shrink-0" />
+                        <span>Session exceeded {maxHours}h max limit! Marked as Invalid overtime. Check out now.</span>
+                      </div>
+                    );
+                  }
+                  if (sessionSeconds >= minSecs) {
+                    return (
+                      <div className="mt-2.5 p-2 rounded-xl bg-emerald-500/30 border border-emerald-300/40 text-xs font-bold text-emerald-100 flex items-center gap-2">
+                        <CheckCircle2 size={15} className="text-emerald-300 shrink-0" />
+                        <span>Present Criteria Met for {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'}! You have logged {Math.floor(sessionSeconds / 3600)}h {Math.floor((sessionSeconds % 3600) / 60)}m.</span>
+                      </div>
+                    );
+                  }
+                  const remSecs = Math.max(0, minSecs - sessionSeconds);
+                  const remH = Math.floor(remSecs / 3600);
+                  const remM = Math.ceil((remSecs % 3600) / 60);
+                  return (
+                    <div className="mt-2.5 p-2 rounded-xl bg-amber-500/25 border border-amber-300/40 text-xs font-bold text-amber-100 flex items-center gap-2">
+                      <Clock size={15} className="text-amber-200 shrink-0" />
+                      <span>{remH > 0 ? `${remH}h ` : ''}{remM}m more needed to qualify as Present in {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'} mode (Min {reqHours}h required).</span>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <div className="relative z-10 bg-black/20 backdrop-blur-md rounded-2xl p-3 mb-3 border border-white/15 text-white flex items-center justify-between gap-3 shadow-inner">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-white/80 shrink-0">
+                    <Lock size={15} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white leading-tight">Check-In Access Not Granted Today</p>
+                    <p className="text-[11px] text-white/70 truncate mt-0.5">Please contact your mentor to authorize attendance.</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/15 border border-white/20 text-white/80 shrink-0">
+                  No Access
+                </span>
+              </div>
+            )}
+
+            {/* Separated Record Badges (Pills from Reference Photo) */}
+            {(onsiteSeconds > 0 || wfhSeconds > 0) && (
+              <div className="relative z-10 flex items-center gap-2 mb-3 text-[11px] flex-wrap">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-black/25 border-white/15 text-white shadow-xs">
+                  <Building2 size={12} className="text-emerald-300 shrink-0" />
+                  <span className="font-medium text-white/90">On-Site:</span>
+                  <span className="font-mono font-bold text-white">{formatTime(onsiteSeconds || 0)}</span>
+                </div>
+
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-black/25 border-white/15 text-white shadow-xs">
+                  <Home size={12} className="text-sky-300 shrink-0" />
+                  <span className="font-medium text-white/90">WFH:</span>
+                  <span className="font-mono font-bold text-white">{formatTime(wfhSeconds || 0)}</span>
+                </div>
+              </div>
+            )}
+
+            <div className={`relative z-10 flex items-center justify-between mt-auto pt-3 border-t ${
+              themeColor === 'Emerald' ? 'border-emerald-400/30' : 'border-primary-400/30'
+            }`}>
+              <div>
+                <p className={`text-xs mb-1 flex items-center gap-1.5 ${themeColor === 'Emerald' ? 'text-emerald-100' : 'text-primary-100'}`}>
+                  {checkInAccess.accessType === 'wfh' ? <Home size={12} className="shrink-0 text-sky-200" /> : <Building2 size={12} className="shrink-0 text-emerald-200" />}
+                  <span>Active Timer ({checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'})</span>
+                </p>
+                <p className="font-mono font-bold text-2xl">{formatTime(sessionSeconds)}</p>
+              </div>
+              <div>
+                {sessionActive ? (
+                  <button 
+                    onClick={() => endSession()} 
+                    disabled={isCheckingIn}
+                    className={`bg-rose-500 hover:bg-rose-600 text-white px-8 py-3 rounded-xl text-base font-black transition-all shadow-lg shadow-rose-500/40 flex items-center gap-2 cursor-pointer ${isCheckingIn ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-xl hover:-translate-y-1 active:translate-y-0.5'}`}
+                  >
+                    {isCheckingIn ? <Loader2 size={16} className="animate-spin" /> : <Square size={16} fill="currentColor" />} 
+                    Check Out
+                  </button>
+                ) : activeLeaveStatus?.isOnLeave ? (
+                  <div className="flex flex-col items-end">
+                    <span className="text-xs font-bold text-amber-200 mb-2 max-w-[180px] text-right">
+                      {activeLeaveStatus.message}
+                    </span>
+                    <button 
+                      disabled
+                      className="bg-white/50 text-slate-800/50 px-8 py-3 rounded-xl text-base font-black flex items-center gap-2 cursor-not-allowed"
+                    >
+                      <Calendar size={16} /> 
+                      On Leave
+                    </button>
+                  </div>
+                ) : !checkInAccess.hasAccess ? (
                   <button 
                     disabled
-                    className="bg-white/50 text-slate-800/50 px-8 py-3 rounded-xl text-base font-black flex items-center gap-2 cursor-not-allowed"
+                    className="bg-white/20 hover:bg-white/20 text-white/70 px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 border border-white/15 cursor-not-allowed shadow-inner"
                   >
-                    <Calendar size={16} /> 
-                    On Leave
+                    <Lock size={15} /> 
+                    Check-In Locked
                   </button>
-                </div>
-              ) : !checkInAccess.hasAccess ? (
-                <button 
-                  disabled
-                  className="bg-white/20 hover:bg-white/20 text-white/70 px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 border border-white/15 cursor-not-allowed shadow-inner"
-                >
-                  <Lock size={15} /> 
-                  Check-In Locked
-                </button>
-              ) : (
-                <button 
-                  onClick={() => startSession()} 
-                  disabled={isCheckingIn}
-                  className={`px-8 py-3 rounded-xl text-base font-black transition-all shadow-lg shadow-black/10 flex items-center gap-2 cursor-pointer ${
-                    themeColor === 'Emerald'
-                      ? 'bg-white text-emerald-600 hover:bg-emerald-50'
-                      : 'bg-white text-theme-primary hover:bg-primary-50'
-                  } ${isCheckingIn ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-xl hover:-translate-y-1 active:translate-y-0.5'}`}
-                >
-                  {isCheckingIn ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} fill="currentColor" />} 
-                  Check In {checkInAccess.accessType === 'wfh' ? '(WFH)' : ''}
-                </button>
-              )}
+                ) : (
+                  <button 
+                    onClick={() => startSession()} 
+                    disabled={isCheckingIn}
+                    className={`px-8 py-3 rounded-xl text-base font-black transition-all shadow-lg shadow-black/10 flex items-center gap-2 cursor-pointer ${
+                      themeColor === 'Emerald'
+                        ? 'bg-white text-emerald-600 hover:bg-emerald-50'
+                        : 'bg-white text-theme-primary hover:bg-primary-50'
+                    } ${isCheckingIn ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-xl hover:-translate-y-1 active:translate-y-0.5'}`}
+                  >
+                    {isCheckingIn ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} fill="currentColor" />} 
+                    Check In {checkInAccess.accessType === 'wfh' ? '(WFH)' : ''}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Top Right: Leaderboard Bento */}
-        <Link to="/student/leaderboard" className={`md:col-span-12 lg:col-span-3 relative overflow-hidden rounded-3xl p-6 text-white border-t border-white/40 border-b-[3px] border-black/20 flex flex-col justify-between hover:-translate-y-1 active:translate-y-1 active:border-b-0 transition-all cursor-pointer group ${
-          themeColor === 'Emerald'
-            ? 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg shadow-orange-500/40'
-            : 'bg-gradient-to-br from-primary-500 to-theme-accent shadow-lg shadow-theme-primary/40'
-        }`}>
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full blur-2xl -mr-10 -mt-10"></div>
-          <div>
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm mb-4 group-hover:scale-110 transition-transform shadow-inner">
-              <Trophy size={20} className={themeColor === 'Emerald' ? 'text-amber-100' : 'text-primary-100'} />
-            </div>
-            <h3 className={`text-[10px] font-bold tracking-widest uppercase mb-1 ${themeColor === 'Emerald' ? 'text-amber-100' : 'text-primary-100'}`}>Leaderboard</h3>
-            <p className="text-2xl font-black leading-tight">
-              {analytics?.rank && analytics.rank !== 'N/A' ? `Your Rank: #${analytics.rank}` : 'View Your Ranking'}
-            </p>
-            {analytics?.rank && analytics.rank !== 'N/A' && (
-              <p className={`text-xs font-semibold mt-2 leading-relaxed drop-shadow-sm transition-all duration-300 ${themeColor === 'Emerald' ? 'text-amber-50/90' : 'text-primary-50/90'}`}>
-                {analytics.rank === 1 && "You're leading the pack! Outstanding job! 👑"}
-                {analytics.rank > 1 && analytics.rank <= 3 && "So close to the top! Keep pushing! 🚀"}
-                {analytics.rank > 3 && analytics.rank <= 10 && "Amazing! You are in the top 10! 🌟"}
-                {analytics.rank > 10 && "Keep climbing! Daily consistency pays off! 💪"}
-              </p>
-            )}
-          </div>
-          <div className="mt-4 flex items-center justify-between bg-black/10 rounded-xl p-3 backdrop-blur-sm border border-white/10 group-hover:bg-black/20 transition-colors">
-            <span className={`text-xs font-bold ${themeColor === 'Emerald' ? 'text-amber-50' : 'text-primary-50'}`}>Compare with peers</span>
-            <ChevronRight size={16} />
-          </div>
-        </Link>
       </div>
 
       {/* Row 2: Performance Insights (4) + Mock Drives (4) + Attendance (4) */}
@@ -997,8 +1030,8 @@ const StudentDashboard = () => {
                         </div>
                       </div>
                       <p className="text-slate-400 text-xs mb-4">This challenge is scheduled and locked.</p>
-                      <span className="text-xl font-bold text-slate-400 block mb-6 leading-tight">
-                        🔒 Scheduled Challenge
+                      <span className="text-xl font-bold text-slate-400 flex items-center gap-2 mb-6 leading-tight">
+                        <Lock size={20} className="text-slate-400" /> Scheduled Challenge
                       </span>
                     </div>
                     
