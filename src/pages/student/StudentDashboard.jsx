@@ -472,6 +472,76 @@ const StudentDashboard = () => {
             </div>
           </div>
 
+          {/* Workload Requirements for Present Status */}
+          <div className="relative z-10 bg-black/25 backdrop-blur-md rounded-2xl p-3 my-2 border border-white/15 text-white">
+            <div className="flex items-center justify-between text-xs mb-2 flex-wrap gap-1">
+              <span className="font-extrabold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <Clock size={14} className="text-amber-300" /> Attendance Requirements (Present Criteria)
+              </span>
+              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 border border-white/20">
+                {checkInAccess.accessType === 'wfh' ? '🏠 WFH Mode' : '🏢 On-Site Mode'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
+                <p className="text-[10px] uppercase font-bold text-emerald-200">Minimum Hours (Present)</p>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="font-black text-lg text-white">
+                    {checkInAccess.minHours || checkInAccess.workHours || 4}h
+                  </span>
+                  <span className="text-[11px] text-white/80">min required</span>
+                </div>
+                <p className="text-[10px] text-emerald-100/70 mt-1">Must maintain at least {checkInAccess.minHours || checkInAccess.workHours || 4} hours to get Present</p>
+              </div>
+
+              <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
+                <p className="text-[10px] uppercase font-bold text-amber-200">Maximum Valid Hours</p>
+                <div className="flex items-baseline gap-1 mt-0.5">
+                  <span className="font-black text-lg text-white">
+                    {checkInAccess.maxHours || 10}h
+                  </span>
+                  <span className="text-[11px] text-white/80">max allowed</span>
+                </div>
+                <p className="text-[10px] text-amber-100/70 mt-1">Hours above {checkInAccess.maxHours || 10}h are marked as Invalid</p>
+              </div>
+            </div>
+
+            {/* Live Session Progress & Milestone Feedback */}
+            {sessionActive && (() => {
+              const reqHours = Number(checkInAccess.minHours || checkInAccess.workHours || 4);
+              const maxHours = Number(checkInAccess.maxHours || 10);
+              const minSecs = reqHours * 3600;
+              const maxSecs = maxHours * 3600;
+
+              if (sessionSeconds > maxSecs) {
+                return (
+                  <div className="mt-2.5 p-2 rounded-xl bg-rose-500/30 border border-rose-300/40 text-xs font-bold text-rose-100 flex items-center gap-2">
+                    <span className="text-base">⚠️</span>
+                    <span>Session exceeded {maxHours}h max limit! Marked as Invalid overtime. Check out now.</span>
+                  </div>
+                );
+              }
+              if (sessionSeconds >= minSecs) {
+                return (
+                  <div className="mt-2.5 p-2 rounded-xl bg-emerald-500/30 border border-emerald-300/40 text-xs font-bold text-emerald-100 flex items-center gap-2">
+                    <span className="text-base">🎉</span>
+                    <span>Present Criteria Met! You have logged {Math.floor(sessionSeconds / 3600)}h {Math.floor((sessionSeconds % 3600) / 60)}m. You will be marked Present upon checkout.</span>
+                  </div>
+                );
+              }
+              const remSecs = Math.max(0, minSecs - sessionSeconds);
+              const remH = Math.floor(remSecs / 3600);
+              const remM = Math.ceil((remSecs % 3600) / 60);
+              return (
+                <div className="mt-2.5 p-2 rounded-xl bg-amber-500/25 border border-amber-300/40 text-xs font-bold text-amber-100 flex items-center gap-2">
+                  <span className="text-base">⏳</span>
+                  <span>{remH > 0 ? `${remH}h ` : ''}{remM}m more needed to qualify as Present (Min {reqHours}h required).</span>
+                </div>
+              );
+            })()}
+          </div>
+
           <div className={`relative z-10 flex items-center justify-between mt-auto pt-4 border-t ${
             themeColor === 'Emerald' ? 'border-emerald-400/30' : 'border-primary-400/30'
           }`}>

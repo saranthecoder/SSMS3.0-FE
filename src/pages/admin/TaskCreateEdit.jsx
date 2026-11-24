@@ -145,9 +145,22 @@ const TaskCreateEdit = () => {
       }
 
       // 2. Save/Update task with timezone-safe ISO dates
+      let isoDueDate = null;
+      if (formData.dueDate) {
+        const d = new Date(formData.dueDate);
+        isoDueDate = !isNaN(d.getTime()) ? d.toISOString() : formData.dueDate;
+      }
+
+      let isoScheduledAt = null;
+      if (formData.scheduledAt) {
+        const d = new Date(formData.scheduledAt);
+        isoScheduledAt = !isNaN(d.getTime()) ? d.toISOString() : null;
+      }
+
       const payload = {
         ...formData,
-        scheduledAt: formData.scheduledAt ? new Date(formData.scheduledAt).toISOString() : null,
+        dueDate: isoDueDate,
+        scheduledAt: isoScheduledAt,
         fileUrl,
         requiredLinks
       };

@@ -13,7 +13,7 @@ import SkeletonLoader from '../components/SkeletonLoader';
 
 const SyllabusTracker = () => {
   const { user } = useAuth();
-  const { selectedBatchId, batchesList } = useGlobalBatch();
+  const { selectedBatchId, selectedBatchName, batchesList, selectBatch } = useGlobalBatch();
 
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +21,7 @@ const SyllabusTracker = () => {
   
   // Filtering & Search
   const [searchTerm, setSearchTerm] = useState('');
-  const [batchFilter, setBatchFilter] = useState('');
+  const [batchFilter, setBatchFilter] = useState(() => (selectedBatchId && selectedBatchId !== 'all') ? selectedBatchId : '');
   const [statusFilter, setStatusFilter] = useState('all');
 
   // Modal State for Create / Edit
@@ -48,12 +48,17 @@ const SyllabusTracker = () => {
   const isAdmin = user?.role === 'admin';
   const canManage = isMentor || isAdmin;
 
-  // Set initial batch filter based on global batch if present
+  // Sync batchFilter with global batch when selectedBatchId or batchesList updates
   useEffect(() => {
     if (selectedBatchId && selectedBatchId !== 'all') {
       setBatchFilter(selectedBatchId);
+    } else if (!batchFilter && batchesList.length > 0) {
+      setBatchFilter(batchesList[0]._id);
     }
-  }, [selectedBatchId]);
+  }, [selectedBatchId, batchesList]);
+
+  const effectiveBatchId = batchFilter || (selectedBatchId && selectedBatchId !== 'all' ? selectedBatchId : (batchesList[0]?._id || ''));
+  const activeBatchObj = batchesList.find(b => b._id === effectiveBatchId) || null;
 
   const fetchSyllabus = async (isManual = false) => {
     if (isManual) setRefreshing(true);
@@ -61,7 +66,7 @@ const SyllabusTracker = () => {
 
     try {
       const params = {};
-      if (batchFilter && !isStudent) params.batchId = batchFilter;
+      if (effectiveBatchId && !isStudent) params.batchId = effectiveBatchId;
       const { data } = await axios.get('/syllabus', { params });
       setEntries(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -74,13 +79,21 @@ const SyllabusTracker = () => {
 
   useEffect(() => {
     fetchSyllabus();
-  }, [batchFilter]);
+  }, [effectiveBatchId]);
+
+  const handleBatchChange = (newBatchId) => {
+    setBatchFilter(newBatchId);
+    const matched = batchesList.find(b => b._id === newBatchId);
+    if (matched && selectBatch) {
+      selectBatch(matched._id, matched.batchName);
+    }
+  };
 
   // Open Add Modal
   const handleOpenAddModal = () => {
     setEditingEntry(null);
     setFormData({
-      batchId: batchFilter || selectedBatchId || batchesList[0]?._id || '',
+      batchId: effectiveBatchId || batchesList[0]?._id || '',
       date: new Date().toISOString().split('T')[0],
       title: '',
       subtopics: '',
@@ -227,13 +240,19 @@ const SyllabusTracker = () => {
     XLSX.writeFile(workbook, `SSMS_Syllabus_Tracker_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  // Filtered entries
-  const filteredEntries = useMemo(() => {
+  // Entries strictly scoped to the active batch
+  const currentBatchEntries = useMemo(() => {
+    if (!effectiveBatchId || isStudent) return entries;
     return entries.filter(e => {
-      const matchesStatus = statusFilter === 'all' || e.status === statusFilter;
       const bId = (e.batchId?._id || e.batchId)?.toString();
-      const matchesBatch = !batchFilter || (bId && bId === batchFilter);
+      return bId === effectiveBatchId;
+    });
+  }, [entries, effectiveBatchId, isStudent]);
 
+  // Filtered entries for search & status filter
+  const filteredEntries = useMemo(() => {
+    return currentBatchEntries.filter(e => {
+      const matchesStatus = statusFilter === 'all' || e.status === statusFilter;
       const q = searchTerm.trim().toLowerCase();
       const matchesSearch = !q || 
         (e.title && e.title.toLowerCase().includes(q)) ||
@@ -242,15 +261,15 @@ const SyllabusTracker = () => {
         (e.mentorName && e.mentorName.toLowerCase().includes(q)) ||
         (e.batchName && e.batchName.toLowerCase().includes(q));
 
-      return matchesStatus && matchesBatch && matchesSearch;
+      return matchesStatus && matchesSearch;
     });
-  }, [entries, statusFilter, batchFilter, searchTerm]);
+  }, [currentBatchEntries, statusFilter, searchTerm]);
 
-  // Aggregate Metrics
-  const totalTopics = entries.length;
-  const totalHours = Math.round(entries.reduce((acc, curr) => acc + (Number(curr.hoursSpent) || 0), 0) * 10) / 10;
-  const completedTopics = entries.filter(e => e.status === 'completed').length;
-  const latestEntry = entries[0];
+  // Aggregate Metrics - CALCULATED STRICTLY ON CURRENT BATCH ENTRIES
+  const totalTopics = currentBatchEntries.length;
+  const totalHours = Math.round(currentBatchEntries.reduce((acc, curr) => acc + (Number(curr.hoursSpent) || 0), 0) * 10) / 10;
+  const completedTopics = currentBatchEntries.filter(e => e.status === 'completed').length;
+  const latestEntry = currentBatchEntries[0];
 
   if (loading && !refreshing) {
     return <SkeletonLoader type="tasks" />;
@@ -274,6 +293,14 @@ const SyllabusTracker = () => {
               ? 'Stay updated on daily lessons, chapters completed, subtopics taught, and course reference materials.'
               : 'Log daily syllabus coverage, chapters taught, subtopics, and assignments published across student and monitoring portals.'}
           </p>
+          {!isStudent && activeBatchObj && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold border border-indigo-200/60 dark:border-indigo-800/50">
+                <BookOpen size={13} />
+                <span>Scope: {activeBatchObj.batchName}</span>
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
@@ -367,11 +394,10 @@ const SyllabusTracker = () => {
         <div className="flex flex-wrap items-center gap-2.5">
           {!isStudent && (
             <select
-              value={batchFilter}
-              onChange={(e) => setBatchFilter(e.target.value)}
+              value={effectiveBatchId}
+              onChange={(e) => handleBatchChange(e.target.value)}
               className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-2xl py-2.5 px-3.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
-              <option value="">All Batches</option>
               {batchesList.map(b => (
                 <option key={b._id} value={b._id}>{b.batchName}</option>
               ))}
@@ -578,8 +604,11 @@ const SyllabusTracker = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Batch Selector */}
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Select Batch *
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                    <span>Select Batch *</span>
+                    {activeBatchObj && (
+                      <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">Scope: {activeBatchObj.batchName}</span>
+                    )}
                   </label>
                   <select
                     value={formData.batchId}

@@ -56,6 +56,8 @@ const MyAttendance = () => {
         dailyMap[dailyKey] = { ...log, date: logDate };
       } else {
         dailyMap[dailyKey].totalSeconds += (log.totalSeconds || 0);
+        dailyMap[dailyKey].onsiteSeconds = (dailyMap[dailyKey].onsiteSeconds || 0) + (log.onsiteSeconds || 0);
+        dailyMap[dailyKey].wfhSeconds = (dailyMap[dailyKey].wfhSeconds || 0) + (log.wfhSeconds || 0);
         if (new Date(log.firstCheckIn) < new Date(dailyMap[dailyKey].firstCheckIn)) {
           dailyMap[dailyKey].firstCheckIn = log.firstCheckIn;
         }
@@ -71,19 +73,17 @@ const MyAttendance = () => {
 
     // 2. Calculate the finalized status for each DAY
     Object.values(dailyMap).forEach(day => {
-      if ((day.status === 'Leave' || day.isLeave) && (day.leaveHours || 0) === 0) {
-        day.status = 'Leave';
-        return;
-      }
-      const reqHours = day.requiredPresentHours !== undefined ? day.requiredPresentHours : 8;
+      const reqHours = day.requiredPresentHours !== undefined ? day.requiredPresentHours : (day.workHours || 4);
       const maxHours = day.maxValidHours !== undefined ? day.maxValidHours : 10;
       const hours = day.totalSeconds / 3600;
-      const minRequired = reqHours - (day.leaveHours || 0);
+      const minRequired = (day.isLeave && day.leaveHours > 0)
+        ? Math.max(1, reqHours - day.leaveHours)
+        : reqHours;
       
       if (hours >= minRequired && hours <= maxHours) day.status = 'Present';
       else if (hours > maxHours) day.status = 'Invalid';
       else if (day.isActive) day.status = 'In Progress';
-      else day.status = 'Absent';
+      else day.status = day.isLeave ? 'Leave' : 'Absent';
     });
 
     // 3. If viewMode === 'Day', return the sorted daily results
@@ -189,15 +189,20 @@ const MyAttendance = () => {
         </div>
       </div>
 
-      {/* Info Banner */}
+      {/* Attendance Criteria & Policy Banner */}
       <div className="bg-emerald-500/10 dark:bg-primary-500/10 border border-emerald-500/30 dark:border-primary-500/20 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-start md:items-center text-sm shadow-inner relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-primary-500/10 rounded-full blur-3xl pointer-events-none -mt-10 -mr-10"></div>
         <div className="flex items-center gap-2 text-emerald-700 dark:text-theme-primary font-bold bg-emerald-500/20 dark:bg-primary-500/20 border border-emerald-500/30 dark:border-primary-500/30 px-3 py-1.5 rounded-lg shrink-0 shadow-sm relative z-10">
-          <CheckCircle size={16} /> Present
+          <CheckCircle size={16} /> Present Criteria
         </div>
-        <p className="text-slate-800 dark:text-primary-100 relative z-10 font-medium">
-          You must log between <strong className="text-emerald-800 dark:text-emerald-300 font-extrabold">{logs[0]?.requiredPresentHours !== undefined ? logs[0].requiredPresentHours : 8} hours</strong> and <strong className="text-emerald-800 dark:text-emerald-300 font-extrabold">{logs[0]?.maxValidHours !== undefined ? logs[0].maxValidHours : 10} hours</strong> of session time in a single day to be marked as Present.
-        </p>
+        <div className="text-slate-800 dark:text-primary-100 relative z-10 font-medium space-y-1">
+          <p>
+            To be marked as <strong className="text-emerald-700 dark:text-emerald-300 font-extrabold">Present</strong>, you must maintain between <strong className="text-emerald-700 dark:text-emerald-300 font-extrabold">{logs[0]?.requiredPresentHours !== undefined ? logs[0].requiredPresentHours : 4} hours (minimum)</strong> and <strong className="text-amber-700 dark:text-amber-300 font-extrabold">{logs[0]?.maxValidHours !== undefined ? logs[0].maxValidHours : 10} hours (maximum)</strong> of logged time in a day (On-Site and WFH).
+          </p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            • Check-in window: <strong>09:00 AM – 11:59 PM</strong> daily. Under minimum hours is marked Absent (or Leave if approved). Over 10 hours is marked Invalid.
+          </p>
+        </div>
       </div>
 
       <div className="bg-gradient-to-br from-slate-800 to-slate-900 p-1 rounded-3xl border-t border-white/20 border-b-[3px] border-black/40 shadow-xl shadow-black/30 relative overflow-hidden group">
@@ -254,7 +259,14 @@ const MyAttendance = () => {
                         </>
                       )}
                       <td className="p-4 font-mono font-bold text-primary-100 bg-white/5 group-hover:bg-white/10 rounded-xl m-1 transition-colors">
-                        {formatDuration(log.totalSeconds)}
+                        <div>{formatDuration(log.totalSeconds)}</div>
+                        {viewMode === 'Day' && (log.onsiteSeconds > 0 || log.wfhSeconds > 0) && (
+                          <div className="text-[10px] text-slate-300 font-sans font-normal mt-0.5 whitespace-nowrap">
+                            {log.onsiteSeconds > 0 && `On-Site: ${formatDuration(log.onsiteSeconds)}`}
+                            {log.onsiteSeconds > 0 && log.wfhSeconds > 0 && ' • '}
+                            {log.wfhSeconds > 0 && `WFH: ${formatDuration(log.wfhSeconds)}`}
+                          </div>
+                        )}
                       </td>
                     {viewMode === 'Day' ? (
                       <td className="p-4">
@@ -262,7 +274,7 @@ const MyAttendance = () => {
                           {renderStatusBadge(log.status)}
                           {log.accessType && (
                             <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-white/10 text-slate-300">
-                              {log.accessType === 'wfh' ? 'WFH' : 'On-Site'} ({log.workHours || log.requiredPresentHours || 8}h)
+                              {log.accessType === 'wfh' ? 'WFH' : 'On-Site'} ({log.minHours || log.onsiteMinHours || log.wfhMinHours || 4}h - {log.maxHours || log.onsiteMaxHours || log.wfhMaxHours || 10}h)
                             </span>
                           )}
                         </div>

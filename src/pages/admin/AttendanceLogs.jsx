@@ -99,6 +99,8 @@ const AttendanceLogs = () => {
           groupedMap[key] = { ...log, date: logDate, period: logDate };
         } else {
           groupedMap[key].totalSeconds += (log.totalSeconds || 0);
+          groupedMap[key].onsiteSeconds = (groupedMap[key].onsiteSeconds || 0) + (log.onsiteSeconds || 0);
+          groupedMap[key].wfhSeconds = (groupedMap[key].wfhSeconds || 0) + (log.wfhSeconds || 0);
           if (new Date(log.firstCheckIn) < new Date(groupedMap[key].firstCheckIn)) {
             groupedMap[key].firstCheckIn = log.firstCheckIn;
           }
@@ -173,6 +175,8 @@ const AttendanceLogs = () => {
             date: selectedDate,
             period: selectedDate,
             totalSeconds: 0,
+            onsiteSeconds: 0,
+            wfhSeconds: 0,
             firstCheckIn: null,
             lastCheckOut: null,
             isActive: false,
@@ -649,9 +653,18 @@ const AttendanceLogs = () => {
                         </>
                       )}
                       <td className="p-4">
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                          {log.status === 'Leave' ? '—' : log.status === 'Waiting' ? '---' : formatTime(log.totalSeconds)}
-                        </span>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                            {log.status === 'Leave' ? '—' : log.status === 'Waiting' ? '---' : formatTime(log.totalSeconds)}
+                          </span>
+                          {viewMode === 'Day' && log.status !== 'Leave' && log.status !== 'Waiting' && (log.onsiteSeconds > 0 || log.wfhSeconds > 0) && (
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold mt-0.5 whitespace-nowrap">
+                              {log.onsiteSeconds > 0 && `On-Site: ${formatTime(log.onsiteSeconds)}`}
+                              {log.onsiteSeconds > 0 && log.wfhSeconds > 0 && ' • '}
+                              {log.wfhSeconds > 0 && `WFH: ${formatTime(log.wfhSeconds)}`}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       {viewMode === 'Day' ? (
                         <>

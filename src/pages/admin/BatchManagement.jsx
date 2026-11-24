@@ -18,10 +18,10 @@ const BatchManagement = () => {
   const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
-    batchName: '', description: '', startDate: '', endDate: '', status: 'Upcoming', checkInTime: '', checkOutTime: '', mentorId: '',
-    requiredPresentHours: 8, maxValidHours: 10,
-    onsiteMinHours: 8, onsiteMaxHours: 10,
-    wfhMinHours: 8, wfhMaxHours: 10
+    batchName: '', description: '', startDate: '', endDate: '', status: 'Upcoming', checkInTime: '09:00', checkOutTime: '23:59', mentorId: '',
+    requiredPresentHours: 4, maxValidHours: 10,
+    onsiteMinHours: 4, onsiteMaxHours: 10,
+    wfhMinHours: 4, wfhMaxHours: 10
   });
   const [editingId, setEditingId] = useState(null);
 
@@ -96,16 +96,16 @@ const BatchManagement = () => {
       startDate: formattedStartDate,
       endDate: formattedEndDate,
       status: batch.status || 'Upcoming',
-      checkInTime: batch.checkInTime || '',
-      checkOutTime: batch.checkOutTime || '',
-      autoCheckOutTime: batch.autoCheckOutTime || '21:00',
+      checkInTime: batch.checkInTime || '09:00',
+      checkOutTime: batch.checkOutTime || '23:59',
+      autoCheckOutTime: batch.autoCheckOutTime || '23:59',
       autoCheckOutEnabled: batch.autoCheckOutEnabled !== undefined ? batch.autoCheckOutEnabled : true,
       mentorId: batch.mentorId?._id || batch.mentorId || '',
-      requiredPresentHours: batch.requiredPresentHours !== undefined ? batch.requiredPresentHours : 8,
+      requiredPresentHours: batch.requiredPresentHours !== undefined ? batch.requiredPresentHours : 4,
       maxValidHours: batch.maxValidHours !== undefined ? batch.maxValidHours : 10,
-      onsiteMinHours: batch.onsiteMinHours !== undefined ? batch.onsiteMinHours : (batch.requiredPresentHours !== undefined ? batch.requiredPresentHours : 8),
+      onsiteMinHours: batch.onsiteMinHours !== undefined ? batch.onsiteMinHours : (batch.requiredPresentHours !== undefined ? batch.requiredPresentHours : 4),
       onsiteMaxHours: batch.onsiteMaxHours !== undefined ? batch.onsiteMaxHours : (batch.maxValidHours !== undefined ? batch.maxValidHours : 10),
-      wfhMinHours: batch.wfhMinHours !== undefined ? batch.wfhMinHours : 8,
+      wfhMinHours: batch.wfhMinHours !== undefined ? batch.wfhMinHours : 4,
       wfhMaxHours: batch.wfhMaxHours !== undefined ? batch.wfhMaxHours : 10
     });
     setEditingId(batch._id);
@@ -129,10 +129,10 @@ const BatchManagement = () => {
       setShowModal(false);
       setFormData({
         batchName: '', panelName: '', panelSubheading: '', description: '', startDate: '', endDate: '', status: 'Upcoming',
-        checkInTime: '', checkOutTime: '', autoCheckOutTime: '21:00', autoCheckOutEnabled: true, mentorId: '',
-        requiredPresentHours: 8, maxValidHours: 10,
-        onsiteMinHours: 8, onsiteMaxHours: 10,
-        wfhMinHours: 8, wfhMaxHours: 10
+        checkInTime: '09:00', checkOutTime: '23:59', autoCheckOutTime: '23:59', autoCheckOutEnabled: true, mentorId: '',
+        requiredPresentHours: 4, maxValidHours: 10,
+        onsiteMinHours: 4, onsiteMaxHours: 10,
+        wfhMinHours: 4, wfhMaxHours: 10
       });
       setEditingId(null);
       fetchBatches();
@@ -613,10 +613,10 @@ const BatchManagement = () => {
           {user?.role === 'admin' && (
             <button onClick={() => {
               setFormData({
-                batchName: '', description: '', startDate: '', endDate: '', status: 'Upcoming', checkInTime: '', checkOutTime: '', mentorId: '',
-                requiredPresentHours: 8, maxValidHours: 10,
-                onsiteMinHours: 8, onsiteMaxHours: 10,
-                wfhMinHours: 8, wfhMaxHours: 10
+                batchName: '', description: '', startDate: '', endDate: '', status: 'Upcoming', checkInTime: '09:00', checkOutTime: '23:59', autoCheckOutTime: '23:59', autoCheckOutEnabled: true, mentorId: '',
+                requiredPresentHours: 4, maxValidHours: 10,
+                onsiteMinHours: 4, onsiteMaxHours: 10,
+                wfhMinHours: 4, wfhMaxHours: 10
               });
               setEditingId(null);
               setShowModal(true);
@@ -982,7 +982,7 @@ const BatchManagement = () => {
                         <input 
                           type="time" 
                           className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-800 dark:text-white outline-none focus:border-amber-500 font-bold" 
-                          value={formData.autoCheckOutTime || '21:00'} 
+                          value={formData.autoCheckOutTime || '23:59'} 
                           onChange={e => setFormData({ ...formData, autoCheckOutTime: e.target.value })} 
                         />
                       </div>
@@ -1015,9 +1015,9 @@ const BatchManagement = () => {
                         onsiteMinHours: Number(e.target.value),
                         requiredPresentHours: Number(e.target.value)
                       })} 
-                      placeholder="8"
+                      placeholder="4"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">Min physical office hours for Present (default: 8)</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Min physical office hours for Present (default: 4)</p>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-amber-700 dark:text-amber-400 mb-1">On-Site Max Valid Hours *</label>
@@ -1050,9 +1050,9 @@ const BatchManagement = () => {
                       className="w-full px-4 py-2.5 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:border-indigo-500 outline-none text-sm text-slate-800 dark:text-white font-bold" 
                       value={formData.wfhMinHours} 
                       onChange={e => setFormData({...formData, wfhMinHours: Number(e.target.value)})} 
-                      placeholder="8"
+                      placeholder="4"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">Min remote work hours for Present (default: 8)</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Min remote work hours for Present (default: 4)</p>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-amber-700 dark:text-amber-400 mb-1">WFH Max Valid Hours *</label>

@@ -12,14 +12,16 @@ const CheckInPermissions = () => {
   const [batches, setBatches] = useState([]);
   const [allStudents, setAllStudents] = useState([]);
   const [accessGrants, setAccessGrants] = useState([]);
+  const [todayLeaves, setTodayLeaves] = useState([]);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [grantingAccess, setGrantingAccess] = useState(false);
-  const [workHours, setWorkHours] = useState(8);
+  const [minHours, setMinHours] = useState(4);
+  const [maxHours, setMaxHours] = useState(10);
 
   // Filters and Sorting
   const [searchTerm, setSearchTerm] = useState('');
-  const [accessFilter, setAccessFilter] = useState('all'); // all, on-site, wfh, none
+  const [accessFilter, setAccessFilter] = useState('all'); // all, on-site, wfh, leave, none
   const [sortBy, setSortBy] = useState('name-asc'); // name-asc, name-desc, roll-asc, roll-desc
 
   const fetchData = async () => {
@@ -49,8 +51,11 @@ const CheckInPermissions = () => {
         axios.get(`/auth/students?batchId=${bId}`),
         axios.get(`/checkin-access/today?batchId=${bId}`).catch(() => ({ data: [] }))
       ]);
+      const grants = Array.isArray(accessRes.data) ? accessRes.data : (accessRes.data?.grants || []);
+      const leaves = Array.isArray(accessRes.data?.leaves) ? accessRes.data.leaves : [];
       setAllStudents(studentsRes.data);
-      setAccessGrants(accessRes.data);
+      setAccessGrants(grants);
+      setTodayLeaves(leaves);
       setSelectedStudents([]);
     } catch (error) {
       console.error('Error fetching students and access grants:', error);
@@ -69,22 +74,44 @@ const CheckInPermissions = () => {
     }
   }, [effectiveBatchId]);
 
+  const getStudentLeave = (studentId) => {
+    return todayLeaves.find(l => {
+      const sId = typeof l.studentId === 'object' && l.studentId !== null ? l.studentId._id : l.studentId;
+      return sId === studentId;
+    });
+  };
+
   const handleGrantAccess = async (accessType) => {
     if (selectedStudents.length === 0) {
       Swal.fire('No Selection', 'Please select at least one student first.', 'warning');
       return;
     }
+
+    const leaveStudents = selectedStudents.filter(id => Boolean(getStudentLeave(id)));
+    if (accessType === 'on-site' && leaveStudents.length > 0) {
+      Swal.fire({
+        title: 'On-Site Restricted',
+        text: `${leaveStudents.length} selected student(s) are on approved leave today. On-site access is not permitted for students on leave; please allocate WFH access instead.`,
+        icon: 'warning'
+      });
+      return;
+    }
+
     setGrantingAccess(true);
+    const effMin = Number(minHours) || 4;
+    const effMax = Number(maxHours) || 10;
     try {
       await axios.post('/checkin-access/grant', {
         studentIds: selectedStudents,
         accessType,
         batchId: effectiveBatchId,
-        workHours: Number(workHours) || 8
+        workHours: effMin,
+        minHours: effMin,
+        maxHours: effMax
       });
       Swal.fire({
         title: 'Access Granted',
-        text: `Granted ${accessType === 'wfh' ? 'Work From Home' : 'On-Site'} access (${Number(workHours) || 8}h work time) for selected students.`,
+        text: `Granted ${accessType === 'wfh' ? 'Work From Home' : 'On-Site'} access (${effMin}h min - ${effMax}h max) for selected students.`,
         icon: 'success',
         timer: 1500,
         showConfirmButton: false
@@ -94,6 +121,35 @@ const CheckInPermissions = () => {
     } catch (error) {
       console.error('Failed to grant access:', error);
       Swal.fire('Error', error.response?.data?.message || 'Failed to grant check-in access.', 'error');
+    } finally {
+      setGrantingAccess(false);
+    }
+  };
+
+  const handleAllocateLeaveWFH = async (studentId, studentName) => {
+    const effMin = Number(minHours) || 4;
+    const effMax = Number(maxHours) || 10;
+    setGrantingAccess(true);
+    try {
+      await axios.post('/checkin-access/grant', {
+        studentIds: [studentId],
+        accessType: 'wfh',
+        batchId: effectiveBatchId,
+        workHours: effMin,
+        minHours: effMin,
+        maxHours: effMax
+      });
+      Swal.fire({
+        title: 'WFH Access Allocated',
+        text: `Allocated ${effMin}h - ${effMax}h WFH workload for ${studentName} (On Leave). They will be marked Present upon fulfilling this workload.`,
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      });
+      refreshAccessGrants();
+    } catch (error) {
+      console.error('Failed to allocate leave WFH:', error);
+      Swal.fire('Error', error.response?.data?.message || 'Failed to allocate WFH access.', 'error');
     } finally {
       setGrantingAccess(false);
     }
@@ -128,23 +184,36 @@ const CheckInPermissions = () => {
   };
 
   const handleGrantAll = async (accessType) => {
-    const targetStudents = filteredStudents.map(s => s._id);
+    let targetList = filteredStudents;
+    if (accessType === 'on-site') {
+      targetList = targetList.filter(s => !getStudentLeave(s._id));
+      if (targetList.length === 0) {
+        Swal.fire('On-Site Restricted', 'All filtered students are on approved leave today. Allocate WFH access for students on leave.', 'warning');
+        return;
+      }
+    }
+
+    const targetStudents = targetList.map(s => s._id);
     if (targetStudents.length === 0) {
       Swal.fire('No Students', 'No students match the current filters.', 'warning');
       return;
     }
     
     setGrantingAccess(true);
+    const effMin = Number(minHours) || 4;
+    const effMax = Number(maxHours) || 10;
     try {
       await axios.post('/checkin-access/grant', {
         studentIds: targetStudents,
         accessType,
         batchId: effectiveBatchId,
-        workHours: Number(workHours) || 8
+        workHours: effMin,
+        minHours: effMin,
+        maxHours: effMax
       });
       Swal.fire({
         title: 'Bulk Access Granted',
-        text: `Granted ${accessType === 'wfh' ? 'WFH' : 'On-Site'} access (${Number(workHours) || 8}h work time) to all ${targetStudents.length} filtered students.`,
+        text: `Granted ${accessType === 'wfh' ? 'WFH' : 'On-Site'} access (${effMin}h min - ${effMax}h max) to all ${targetStudents.length} eligible students.`,
         icon: 'success',
         timer: 1500,
         showConfirmButton: false
@@ -163,7 +232,10 @@ const CheckInPermissions = () => {
     if (!effectiveBatchId) return;
     try {
       const accessRes = await axios.get(`/checkin-access/today?batchId=${effectiveBatchId}`).catch(() => ({ data: [] }));
-      setAccessGrants(accessRes.data);
+      const grants = Array.isArray(accessRes.data) ? accessRes.data : (accessRes.data?.grants || []);
+      const leaves = Array.isArray(accessRes.data?.leaves) ? accessRes.data.leaves : [];
+      setAccessGrants(grants);
+      setTodayLeaves(leaves);
     } catch (err) {
       console.error('Error refreshing access grants:', err);
     }
@@ -200,11 +272,13 @@ const CheckInPermissions = () => {
                           (student.rollNumber && student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const access = getStudentAccess(student._id);
+    const leave = getStudentLeave(student._id);
     const type = access ? access.accessType : 'none'; // 'on-site', 'wfh', 'none'
     
     let matchesAccess = true;
     if (accessFilter === 'on-site') matchesAccess = type === 'on-site';
     else if (accessFilter === 'wfh') matchesAccess = type === 'wfh';
+    else if (accessFilter === 'leave') matchesAccess = Boolean(leave);
     else if (accessFilter === 'none') matchesAccess = type === 'none';
 
     return matchesSearch && matchesAccess;
@@ -274,6 +348,7 @@ const CheckInPermissions = () => {
               { id: 'all', label: 'All Students' },
               { id: 'on-site', label: 'On-Site' },
               { id: 'wfh', label: 'WFH' },
+              { id: 'leave', label: `On Leave 🌴 (${todayLeaves.length})` },
               { id: 'none', label: 'No Access' }
             ].map(tab => (
               <button
@@ -308,18 +383,33 @@ const CheckInPermissions = () => {
           </div>
           
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 bg-white dark:bg-slate-850 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
-              <Clock size={15} className="text-emerald-500" />
-              <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Daily Work Hours:</span>
-              <input
-                type="number"
-                min="1"
-                max="24"
-                value={workHours}
-                onChange={e => setWorkHours(e.target.value)}
-                className="w-12 px-1.5 py-0.5 text-xs font-black text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500 text-emerald-600 dark:text-emerald-400"
-              />
-              <span className="text-xs font-semibold text-slate-400">h</span>
+            <div className="flex items-center gap-2.5 bg-white dark:bg-slate-850 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+              <Clock size={15} className="text-emerald-500 shrink-0" />
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Min:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="24"
+                  value={minHours}
+                  onChange={e => setMinHours(e.target.value)}
+                  className="w-11 px-1 py-0.5 text-xs font-black text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                />
+                <span className="text-xs font-semibold text-slate-400">h</span>
+              </div>
+              <div className="h-3.5 w-px bg-slate-200 dark:bg-slate-700" />
+              <div className="flex items-center gap-1">
+                <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Max:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="24"
+                  value={maxHours}
+                  onChange={e => setMaxHours(e.target.value)}
+                  className="w-11 px-1 py-0.5 text-xs font-black text-center bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                />
+                <span className="text-xs font-semibold text-slate-400">h</span>
+              </div>
             </div>
 
             {selectedStudents.length === 0 ? (
@@ -402,6 +492,7 @@ const CheckInPermissions = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredStudents.map(student => {
                 const access = getStudentAccess(student._id);
+                const leave = getStudentLeave(student._id);
                 const isSelected = selectedStudents.includes(student._id);
                 
                 return (
@@ -411,6 +502,8 @@ const CheckInPermissions = () => {
                     className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between group select-none ${
                       isSelected
                         ? 'bg-emerald-500/10 border-emerald-500 shadow-sm shadow-emerald-500/5'
+                        : leave
+                        ? 'bg-amber-500/5 dark:bg-amber-500/10 border-amber-300 dark:border-amber-700/50 hover:bg-amber-50 dark:hover:bg-amber-900/20 shadow-sm'
                         : 'bg-white dark:bg-slate-800/40 border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-800/80 shadow-sm'
                     }`}
                   >
@@ -422,13 +515,23 @@ const CheckInPermissions = () => {
                         className="rounded border-slate-300 dark:border-slate-700 text-emerald-500 focus:ring-emerald-500 cursor-pointer h-4 w-4"
                       />
                       <div>
-                        <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">{student.name}</h4>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">{student.name}</h4>
+                          {leave && (
+                            <span 
+                              className="px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                              title={leave.reason || 'On approved leave today'}
+                            >
+                              🌴 Leave
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{student.rollNumber || 'N/A'}</p>
                       </div>
                     </div>
 
-                    {/* Status Badge */}
-                    <div>
+                    {/* Status Badge & Action */}
+                    <div className="flex flex-col items-end gap-1.5">
                       {access ? (
                         <div className="flex flex-col items-end gap-1">
                           <span className={`text-[10px] uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full border ${
@@ -439,13 +542,27 @@ const CheckInPermissions = () => {
                             {access.accessType === 'wfh' ? 'WFH' : 'ON-SITE'}
                           </span>
                           <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                            {access.workHours || 8}h Work Time
+                            Min: {access.minHours || access.workHours || 4}h • Max: {access.maxHours || 10}h
                           </span>
                         </div>
                       ) : (
                         <span className="text-[10px] uppercase font-extrabold tracking-wider px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700">
                           NO ACCESS
                         </span>
+                      )}
+
+                      {leave && (!access || access.accessType !== 'wfh') && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAllocateLeaveWFH(student._id, student.name);
+                          }}
+                          disabled={grantingAccess}
+                          className="px-2 py-0.5 text-[10px] font-bold bg-amber-500 text-white hover:bg-amber-600 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          title="Allocate specific WFH work hours for student on leave"
+                        >
+                          Allocate WFH
+                        </button>
                       )}
                     </div>
                   </div>

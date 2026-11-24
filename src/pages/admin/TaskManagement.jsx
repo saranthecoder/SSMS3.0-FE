@@ -7,6 +7,22 @@ import SkeletonLoader from '../../components/SkeletonLoader';
 import { useAuth } from '../../context/AuthContext';
 import { useGlobalBatch } from '../../context/GlobalBatchContext';
 
+const formatDateTime = (dateString) => {
+  if (!dateString) return 'N/A';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return 'N/A';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const timeStr = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+  return `${dd}/${mm}/${yyyy}, ${timeStr}`;
+};
+
 const TaskManagement = () => {
   const navigate = useNavigate();
   const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
@@ -118,11 +134,7 @@ const TaskManagement = () => {
     const newWin = window.open('', '_blank');
     if (newWin) {
       const typeLabel = task.category === 'Project' ? 'Project' : 'Task';
-      const formattedDate = task.dueDate ? new Date(task.dueDate).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      }) : 'N/A';
+      const formattedDate = formatDateTime(task.dueDate);
 
       newWin.document.write(`
         <!DOCTYPE html>
@@ -349,7 +361,7 @@ const TaskManagement = () => {
           </div>
         ) : (
           filteredTasks.map(task => {
-            const isOverdue = new Date() > new Date(task.dueDate).setHours(23, 59, 59, 999);
+            const isOverdue = task.dueDate && new Date() > new Date(task.dueDate);
             const isScheduled = task.scheduledAt && new Date(task.scheduledAt) > new Date();
             return (
               <div 
@@ -495,12 +507,12 @@ const TaskManagement = () => {
                       <Tag size={12} /> {task.category || 'General'}
                     </span>
                   </div>
-                  <span className={`inline-flex items-center gap-1 font-bold px-2.5 py-1 rounded-lg border ${
+                  <span className={`inline-flex items-center gap-1.5 font-bold px-2.5 py-1 rounded-lg border ${
                     isOverdue 
                       ? 'text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 border-rose-200/60 dark:border-rose-800/40' 
                       : 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border-amber-200/60 dark:border-amber-800/40'
                   }`}>
-                    <Calendar size={12} /> Due: {new Date(task.dueDate).toLocaleDateString()}
+                    <Clock size={12} /> Due: {formatDateTime(task.dueDate)}
                   </span>
                 </div>
               </div>

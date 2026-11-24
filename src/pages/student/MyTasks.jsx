@@ -459,7 +459,7 @@ const MyTasks = () => {
             </div>
             
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
-              <span className="flex items-center gap-1.5"><Calendar size={13} className="text-slate-400" /> Due: {new Date(nextLockedTask.dueDate).toLocaleDateString()}</span>
+              <span className="flex items-center gap-1.5"><Calendar size={13} className="text-slate-400" /> Due: {formatDateTime(nextLockedTask.dueDate)}</span>
               {nextLockedTask.maxMarks !== undefined && <span>Marks: {nextLockedTask.maxMarks}</span>}
               <span className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5">
                 <Lock size={12} /> Unlocks: {new Date(nextLockedTask.scheduledAt).toLocaleString()}
