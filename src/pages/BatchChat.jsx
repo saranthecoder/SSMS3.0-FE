@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { useGlobalBatch } from '../context/GlobalBatchContext';
 import Swal from 'sweetalert2';
 import { 
   Send, Hash, Users, Megaphone, UserCheck, Mail, Phone, Bell, Sparkles, Pin, 
@@ -129,6 +130,7 @@ const FormattedMessageText = ({ text, isMe, attachmentType }) => {
 
 const BatchChat = () => {
   const { user, socket } = useAuth();
+  const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
   
   // Navigation & Data States
   const [batches, setBatches] = useState([]);
@@ -222,6 +224,8 @@ const BatchChat = () => {
   // ─── 1. Load Primary Chat Data (Optimized Parallel Requests) ───
   const loadChatData = useCallback(async () => {
     try {
+      const batchParam = (selectedBatchId && selectedBatchId !== 'all') ? { params: { batchId: selectedBatchId } } : {};
+
       // Fetch batches, groups, contacts, announcements, and friends in parallel
       const batchesReq = (user.role === 'admin' || user.role === 'mentor')
         ? axios.get('/batches').then(res => Array.isArray(res.data) ? res.data : []).catch(() => [])
@@ -230,8 +234,8 @@ const BatchChat = () => {
             return approved.map(e => e.batchId).filter(Boolean);
           }).catch(() => []);
 
-      const groupsReq = axios.get('/chat/groups').then(res => Array.isArray(res.data) ? res.data : []).catch(() => []);
-      const contactsReq = axios.get('/chat/contacts').then(res => Array.isArray(res.data) ? res.data : []).catch(() => []);
+      const groupsReq = axios.get('/chat/groups', batchParam).then(res => Array.isArray(res.data) ? res.data : []).catch(() => []);
+      const contactsReq = axios.get('/chat/contacts', batchParam).then(res => Array.isArray(res.data) ? res.data : []).catch(() => []);
       const announcementsReq = Promise.all([
         axios.get('/announcements').catch(() => ({ data: [] })),
         axios.get('/announcements/unread-count').catch(() => ({ data: { count: 0 } }))
@@ -267,7 +271,7 @@ const BatchChat = () => {
     } finally {
       setLoading(false);
     }
-  }, [user.role]);
+  }, [user.role, selectedBatchId]);
 
   const fetchFriendsData = useCallback(async () => {
     if (user.role !== 'student') return;
@@ -379,7 +383,7 @@ const BatchChat = () => {
 
   useEffect(() => {
     loadChatData();
-  }, [loadChatData]);
+  }, [loadChatData, selectedBatchId]);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -412,7 +416,26 @@ const BatchChat = () => {
     if (searchParams.get('userId')) return; // Prioritize explicit userId in URL
 
     if (!activeChat && !loading) {
-      if (batches.length > 0) {
+      // 1. Prioritize official classroom group of the selected/active batch
+      const officialGroup = customGroups.find(g => 
+        g.isBatchCommon && (
+          !selectedBatchId || 
+          selectedBatchId === 'all' || 
+          (g.batchId?._id || g.batchId)?.toString() === selectedBatchId?.toString()
+        )
+      ) || customGroups.find(g => g.isBatchCommon);
+
+      if (officialGroup) {
+        setActiveChat({
+          id: officialGroup._id,
+          type: 'group',
+          name: officialGroup.name,
+          subheading: `${officialGroup.memberCount || 0} members • Official Classroom Group`,
+          avatar: officialGroup.avatar,
+          role: 'OFFICIAL GROUP',
+          isBatchCommon: true
+        });
+      } else if (batches.length > 0) {
         const b = batches[0];
         setActiveChat({
           id: b._id,
@@ -438,15 +461,15 @@ const BatchChat = () => {
           id: c._id,
           type: 'direct',
           name: c.name,
-          subheading: c.role.toUpperCase(),
+          subheading: c.role ? c.role.toUpperCase() : 'STUDENT',
           avatar: c.equippedAvatar || c.profileImage,
-          role: c.role.toUpperCase(),
+          role: c.role ? c.role.toUpperCase() : 'STUDENT',
           isOnline: c.isOnline,
           lastSeen: c.lastSeen
         });
       }
     }
-  }, [batches, customGroups, directContacts, activeChat, loading]);
+  }, [batches, customGroups, directContacts, activeChat, loading, selectedBatchId, location.search]);
 
   // ─── 2. Real-Time Online Status & Group Events ───
   useEffect(() => {
@@ -1226,6 +1249,10 @@ const BatchChat = () => {
   };
 
   const handleLeaveGroup = async () => {
+    if (activeChat?.isBatchCommon || groupDetails?.isBatchCommon) {
+      return Swal.fire('Protected Group', 'You cannot leave an official batch classroom group.', 'info');
+    }
+
     const result = await Swal.fire({
       title: 'Leave Group?',
       text: `Are you sure you want to leave "${activeChat?.name}"?`,
@@ -1369,6 +1396,14 @@ const BatchChat = () => {
     !q || g.name.toLowerCase().includes(q) || (g.description && g.description.toLowerCase().includes(q))
   );
 
+  const officialBatchGroups = filteredCustomGroups.filter(g => g.isBatchCommon);
+  const customOnlyGroups = filteredCustomGroups.filter(g => !g.isBatchCommon);
+
+  const commonGroupBatchIds = new Set(
+    officialBatchGroups.map(g => (g.batchId?._id || g.batchId)?.toString()).filter(Boolean)
+  );
+  const filteredBatchesDisplay = filteredBatches.filter(b => !commonGroupBatchIds.has(b._id.toString()));
+
   const filteredContacts = directContacts.filter(c =>
     !q || c.name.toLowerCase().includes(q) || c.role.toLowerCase().includes(q) || (c.email && c.email.toLowerCase().includes(q))
   );
@@ -1441,6 +1476,21 @@ const BatchChat = () => {
             )}
           </div>
 
+          {/* Active Batch Scope Pill */}
+          {selectedBatchName && (
+            <div className="flex items-center justify-between px-2.5 py-1.5 bg-gradient-to-r from-indigo-50/90 to-blue-50/90 dark:from-indigo-950/40 dark:to-slate-900/40 rounded-xl border border-indigo-200/80 dark:border-indigo-800/60 text-[11px] shadow-2xs">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300 truncate">
+                  Scope: <strong className="text-indigo-600 dark:text-indigo-400 font-extrabold">{selectedBatchName}</strong>
+                </span>
+              </div>
+              <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-lg border border-indigo-200/60 dark:border-indigo-800/60 shrink-0">
+                {sortedContacts.length} contacts
+              </span>
+            </div>
+          )}
+
           {/* Filter Tabs (Segmented Controller) */}
           <div className="flex gap-1 bg-slate-200/60 dark:bg-slate-950/70 p-1 rounded-xl border border-slate-200/70 dark:border-slate-800/80 text-[11px] font-bold">
             <button 
@@ -1481,14 +1531,128 @@ const BatchChat = () => {
           {/* ─── GROUPS (BATCHES & CUSTOM GROUPS) ─── */}
           {(activeTab === 'all' || activeTab === 'groups') && (
             <div>
-              {/* Academic Batch Channels */}
-              {filteredBatches.length > 0 && (
+              {/* Official Academic Common Groups */}
+              {officialBatchGroups.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 bg-emerald-50/70 dark:bg-emerald-950/40 text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider flex items-center justify-between border-y border-emerald-100 dark:border-emerald-900/40">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck size={12} className="text-emerald-500" />
+                      Official Batch Classrooms ({officialBatchGroups.length})
+                    </span>
+                    <span className="text-[9px] text-emerald-600/80 dark:text-emerald-400/80 font-bold lowercase">all members</span>
+                  </div>
+                  {officialBatchGroups.map(g => {
+                    const isSelected = activeChat?.type === 'group' && activeChat?.id === g._id;
+                    return (
+                      <div
+                        key={g._id}
+                        onClick={() => {
+                          setActiveChat({
+                            id: g._id,
+                            type: 'group',
+                            name: g.name,
+                            subheading: `${g.memberCount || 0} members • Official Classroom Group`,
+                            avatar: g.avatar,
+                            role: 'OFFICIAL GROUP',
+                            isBatchCommon: true
+                          });
+                        }}
+                        className={`p-3.5 flex items-center gap-3 cursor-pointer transition-all ${
+                          isSelected 
+                            ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-l-4 border-emerald-600 shadow-xs' 
+                            : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
+                        }`}
+                      >
+                        <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 dark:bg-emerald-600/20 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-black text-base shrink-0 overflow-hidden">
+                          {g.avatar ? <img src={g.avatar} alt="Avatar" className="w-full h-full object-cover" /> : <ShieldCheck size={20} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-baseline">
+                            <h4 className="text-xs font-black text-slate-900 dark:text-white truncate">{g.name}</h4>
+                            <div className="flex items-center gap-1">
+                              {g.unreadCount > 0 && (
+                                <span className="w-4 h-4 rounded-full bg-emerald-600 text-[9px] font-black text-white flex items-center justify-center">
+                                  {g.unreadCount}
+                                </span>
+                              )}
+                              <span className="text-[9px] bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 font-extrabold px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 uppercase tracking-tight">
+                                Official
+                              </span>
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5 font-medium flex items-center gap-1">
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">• {g.memberCount || 0} members</span>
+                            <span className="truncate">{g.lastMessage?.text || g.description || 'Official batch classroom group'}</span>
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Custom Groups (Study Groups, Teams) */}
+              {customOnlyGroups.length > 0 && (
+                <div>
+                  <div className="px-4 py-2 bg-slate-100/70 dark:bg-slate-950/60 text-[10px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider flex items-center justify-between">
+                    <span>Chat Groups ({customOnlyGroups.length})</span>
+                    <span className="text-[9px] text-slate-500 lowercase">custom</span>
+                  </div>
+                  {customOnlyGroups.map(g => {
+                    const isSelected = activeChat?.type === 'group' && activeChat?.id === g._id;
+                    return (
+                      <div
+                        key={g._id}
+                        onClick={() => {
+                          setActiveChat({
+                            id: g._id,
+                            type: 'group',
+                            name: g.name,
+                            subheading: `${g.memberCount || 0} members`,
+                            avatar: g.avatar,
+                            role: 'CHAT GROUP',
+                            isBatchCommon: false
+                          });
+                        }}
+                        className={`p-3.5 flex items-center gap-3 cursor-pointer transition-all ${
+                          isSelected 
+                            ? 'bg-purple-50/90 dark:bg-purple-950/40 border-l-4 border-purple-600 shadow-xs' 
+                            : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
+                        }`}
+                      >
+                        <div className="w-10 h-10 rounded-2xl bg-purple-500/10 dark:bg-purple-600/20 border border-purple-500/20 dark:border-purple-500/30 text-purple-600 dark:text-purple-400 flex items-center justify-center font-black text-base shrink-0 overflow-hidden">
+                          {g.avatar ? <img src={g.avatar} alt="Avatar" className="w-full h-full object-cover" /> : <Users size={18} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-baseline">
+                            <h4 className="text-xs font-black text-slate-900 dark:text-white truncate">{g.name}</h4>
+                            <div className="flex items-center gap-1">
+                              {g.unreadCount > 0 && (
+                                <span className="w-4 h-4 rounded-full bg-purple-600 text-[9px] font-black text-white flex items-center justify-center">
+                                  {g.unreadCount}
+                                </span>
+                              )}
+                              <span className="text-[9px] text-purple-700 dark:text-purple-300 font-bold uppercase">{g.memberCount || 1}m</span>
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5 font-medium">
+                            {g.lastMessage?.text || g.description || 'Open group chat'}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Academic Batch Channels (Fallback for any batch without ChatGroup) */}
+              {filteredBatchesDisplay.length > 0 && (
                 <div>
                   <div className="px-4 py-2 bg-slate-100/70 dark:bg-slate-950/60 text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider flex items-center justify-between">
-                    <span>Batch Channels ({filteredBatches.length})</span>
-                    <span className="text-[9px] text-slate-500 lowercase">official</span>
+                    <span>Batch Channels ({filteredBatchesDisplay.length})</span>
+                    <span className="text-[9px] text-slate-500 lowercase">channel</span>
                   </div>
-                  {filteredBatches.map(b => {
+                  {filteredBatchesDisplay.map(b => {
                     const isSelected = activeChat?.type === 'batch' && activeChat?.id === b._id;
                     return (
                       <div
@@ -1521,59 +1685,6 @@ const BatchChat = () => {
                           </div>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5 font-medium">
                             {b.panelName ? `${b.panelName} • Academic Channel` : 'Click to open batch channel'}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Custom Groups (Study Groups, Teams) */}
-              {filteredCustomGroups.length > 0 && (
-                <div>
-                  <div className="px-4 py-2 bg-slate-100/70 dark:bg-slate-950/60 text-[10px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider flex items-center justify-between">
-                    <span>Chat Groups ({filteredCustomGroups.length})</span>
-                    <span className="text-[9px] text-slate-500 lowercase">custom</span>
-                  </div>
-                  {filteredCustomGroups.map(g => {
-                    const isSelected = activeChat?.type === 'group' && activeChat?.id === g._id;
-                    return (
-                      <div
-                        key={g._id}
-                        onClick={() => {
-                          setActiveChat({
-                            id: g._id,
-                            type: 'group',
-                            name: g.name,
-                            subheading: `${g.memberCount || 0} members`,
-                            avatar: g.avatar,
-                            role: 'CHAT GROUP'
-                          });
-                        }}
-                        className={`p-3.5 flex items-center gap-3 cursor-pointer transition-all ${
-                          isSelected 
-                            ? 'bg-purple-50/90 dark:bg-purple-950/40 border-l-4 border-purple-600 shadow-xs' 
-                            : 'hover:bg-slate-100/80 dark:hover:bg-slate-800/60'
-                        }`}
-                      >
-                        <div className="w-10 h-10 rounded-2xl bg-purple-500/10 dark:bg-purple-600/20 border border-purple-500/20 dark:border-purple-500/30 text-purple-600 dark:text-purple-400 flex items-center justify-center font-black text-base shrink-0 overflow-hidden">
-                          {g.avatar ? <img src={g.avatar} alt="Avatar" className="w-full h-full object-cover" /> : <Users size={18} />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-baseline">
-                            <h4 className="text-xs font-black text-slate-900 dark:text-white truncate">{g.name}</h4>
-                            <div className="flex items-center gap-1">
-                              {g.unreadCount > 0 && (
-                                <span className="w-4 h-4 rounded-full bg-purple-600 text-[9px] font-black text-white flex items-center justify-center">
-                                  {g.unreadCount}
-                                </span>
-                              )}
-                              <span className="text-[9px] text-purple-700 dark:text-purple-300 font-bold uppercase">{g.memberCount || 1}m</span>
-                            </div>
-                          </div>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5 font-medium">
-                            {g.lastMessage?.text || g.description || 'Open group chat'}
                           </p>
                         </div>
                       </div>
@@ -1796,7 +1907,11 @@ const BatchChat = () => {
                   <ArrowLeft size={20} />
                 </button>
 
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-indigo-500/10 dark:bg-indigo-600/20 border border-indigo-500/20 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold overflow-hidden shrink-0">
+                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl border flex items-center justify-center font-bold overflow-hidden shrink-0 ${
+                  activeChat.isBatchCommon 
+                    ? 'bg-emerald-500/10 dark:bg-emerald-600/20 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-indigo-500/10 dark:bg-indigo-600/20 border-indigo-500/20 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-400'
+                }`}>
                   {activeChat.avatar ? (
                     <img 
                       src={activeChat.avatar.startsWith('/uploads') ? `${import.meta.env.VITE_API_URL || ''}${activeChat.avatar}` : activeChat.avatar} 
@@ -1804,9 +1919,13 @@ const BatchChat = () => {
                       className="w-full h-full object-cover" 
                       onError={(e) => { e.target.src = '/logo.png'; }}
                     />
+                  ) : activeChat.isBatchCommon ? (
+                    <ShieldCheck size={20} className="text-emerald-600 dark:text-emerald-400" />
+                  ) : activeChat.type === 'batch' ? (
+                    <Hash size={18} className="text-indigo-600 dark:text-indigo-400" />
+                  ) : activeChat.type === 'group' ? (
+                    <Users size={18} className="text-purple-600 dark:text-purple-400" />
                   ) : (
-                    activeChat.type === 'batch' ? <Hash size={18} className="text-indigo-600 dark:text-indigo-400" /> :
-                    activeChat.type === 'group' ? <Users size={18} className="text-purple-600 dark:text-purple-400" /> :
                     <User size={18} className="text-emerald-600 dark:text-emerald-400" />
                   )}
                 </div>
@@ -1814,8 +1933,12 @@ const BatchChat = () => {
                 <div className="min-w-0 flex-1">
                   <h3 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5 truncate">
                     <span className="truncate">{activeChat.name}</span>
-                    <span className="text-[8px] sm:text-[9px] uppercase font-black px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-700 shrink-0">
-                      {activeChat.role}
+                    <span className={`text-[8px] sm:text-[9px] uppercase font-black px-2 py-0.5 rounded-full border shrink-0 ${
+                      activeChat.isBatchCommon
+                        ? 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                        : 'bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 border-slate-200 dark:border-slate-700'
+                    }`}>
+                      {activeChat.isBatchCommon ? 'Official Group' : activeChat.role}
                     </span>
                   </h3>
                   <p className="text-[10px] sm:text-[11px] font-semibold flex items-center gap-1">
@@ -1823,6 +1946,10 @@ const BatchChat = () => {
                       <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 truncate">
                         <Circle size={7} className="fill-emerald-500 text-emerald-500 animate-pulse shrink-0" />
                         {`${Object.values(typingUsers).join(', ')} is typing...`}
+                      </span>
+                    ) : activeChat.isBatchCommon ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 truncate">
+                        <Circle size={7} className="fill-emerald-500 text-emerald-500 shrink-0" /> {activeChat.subheading || 'Official Classroom Group'}
                       </span>
                     ) : activeChat.type === 'batch' ? (
                       <span className="text-indigo-600 dark:text-indigo-400 font-medium flex items-center gap-1 truncate">
@@ -2440,8 +2567,17 @@ const BatchChat = () => {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 text-left">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Users size={20} className="text-purple-600 dark:text-purple-400" />
-                {groupDetails.name}
+                {groupDetails.isBatchCommon ? (
+                  <ShieldCheck size={20} className="text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <Users size={20} className="text-purple-600 dark:text-purple-400" />
+                )}
+                <span>{groupDetails.name}</span>
+                {groupDetails.isBatchCommon && (
+                  <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    Official
+                  </span>
+                )}
               </h2>
               <button onClick={() => setIsGroupInfoOpen(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1">
                 <X size={18} />
@@ -2469,7 +2605,11 @@ const BatchChat = () => {
                         <p className="text-[10px] text-slate-500 dark:text-slate-400">{m.user?.email}</p>
                       </div>
                     </div>
-                    <span className="text-[9px] uppercase font-bold px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40">
+                    <span className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded border ${
+                      m.role === 'admin' 
+                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/40' 
+                        : 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40'
+                    }`}>
                       {m.role}
                     </span>
                   </div>
@@ -2478,12 +2618,18 @@ const BatchChat = () => {
             </div>
 
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
-              <button
-                onClick={handleLeaveGroup}
-                className="px-3 py-1.5 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <LogOut size={14} /> Leave Group
-              </button>
+              {!groupDetails.isBatchCommon ? (
+                <button
+                  onClick={handleLeaveGroup}
+                  className="px-3 py-1.5 bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <LogOut size={14} /> Leave Group
+                </button>
+              ) : (
+                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <ShieldCheck size={14} /> Official Classroom Group
+                </span>
+              )}
               <button
                 onClick={() => setIsGroupInfoOpen(false)}
                 className="px-4 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
