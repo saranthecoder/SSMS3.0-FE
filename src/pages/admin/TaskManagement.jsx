@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import { BookOpen, Plus, FileText as FileTextIcon, Edit, Trash2, Link as LinkIcon, RefreshCw, Search, RotateCcw, CheckCircle, Clock, Calendar, Award, Tag, X, ExternalLink, Download, Eye } from 'lucide-react';
@@ -63,6 +63,8 @@ const formatDateTime = (dateString) => {
 
 const TaskManagement = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
   const [tasks, setTasks] = useState([]);
   const [batches, setBatches] = useState([]);
@@ -93,6 +95,23 @@ const TaskManagement = () => {
   useEffect(() => { 
     fetchData(); 
   }, [selectedBatchId]);
+
+  // Auto-open preview modal if navigating from a notification referencing a task
+  useEffect(() => {
+    const targetTaskId = searchParams.get('taskId') || location.state?.taskId;
+    const targetTaskTitle = (searchParams.get('taskTitle') || location.state?.taskTitle || '').trim().toLowerCase();
+    
+    if ((targetTaskId || targetTaskTitle) && tasks.length > 0) {
+      const match = tasks.find(t => 
+        (targetTaskId && t._id === targetTaskId) || 
+        (targetTaskTitle && t.title?.toLowerCase() === targetTaskTitle) ||
+        (targetTaskTitle && t.title?.toLowerCase().includes(targetTaskTitle))
+      );
+      if (match) {
+        setSelectedTaskForView(match);
+      }
+    }
+  }, [tasks, searchParams, location.state]);
 
   // Tab synchronization: Auto-refresh when localStorage change notification triggers
   useEffect(() => {
@@ -431,7 +450,7 @@ const TaskManagement = () => {
           <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200 dark:border-slate-800 my-auto flex flex-col max-h-[90vh]">
             
             {/* Header with Student View Mode Badge */}
-            <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start gap-4 bg-gradient-to-r from-slate-50 via-slate-50 to-indigo-50/30 dark:from-slate-850 dark:via-slate-850 dark:to-indigo-950/20">
+            <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start gap-4 bg-gradient-to-r from-slate-50 via-white to-indigo-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/40">
               <div className="space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 flex items-center gap-1">
@@ -458,7 +477,7 @@ const TaskManagement = () => {
             </div>
 
             {/* Meta Highlights Banner (matching student layout) */}
-            <div className="px-6 py-3.5 bg-slate-100/60 dark:bg-slate-800/40 border-b border-slate-200/60 dark:border-slate-800/60 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="px-6 py-3.5 bg-slate-100/70 dark:bg-slate-800/60 border-b border-slate-200/60 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300">
                   <Calendar size={14} className="text-indigo-500" />
@@ -470,7 +489,7 @@ const TaskManagement = () => {
                   <span>Marks: <strong className="text-emerald-600 dark:text-emerald-400">{selectedTaskForView.maxMarks}</strong></span>
                 </div>
                 <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block" />
-                <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20">
+                <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-lg border border-amber-500/20 dark:border-amber-500/30">
                   <span>🪙 Student Reward: <strong className="font-mono text-amber-500 dark:text-amber-300">+{(Number(selectedTaskForView.maxMarks) || 0) * 10} Coins</strong></span>
                 </div>
               </div>
@@ -478,18 +497,18 @@ const TaskManagement = () => {
             </div>
 
             {/* Scrollable Content Body */}
-            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 bg-white dark:bg-slate-900">
               
               {/* Attached External Links / Files if any */}
               {selectedTaskForView.taskType === 'file' && selectedTaskForView.fileUrl && (
-                <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 rounded-2xl flex items-center justify-between gap-4">
+                <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 rounded-2xl flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                       <FileTextIcon size={20} />
                     </div>
                     <div>
                       <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Attached Task Instructions File</p>
-                      <p className="text-[11px] text-slate-500">Students download this file to complete the assignment</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Students download this file to complete the assignment</p>
                     </div>
                   </div>
                   <a
@@ -504,14 +523,14 @@ const TaskManagement = () => {
               )}
 
               {selectedTaskForView.taskType === 'link' && selectedTaskForView.linkUrl && (
-                <div className="p-4 bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/40 rounded-2xl flex items-center justify-between gap-4">
+                <div className="p-4 bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/50 rounded-2xl flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                       <LinkIcon size={20} />
                     </div>
                     <div>
                       <p className="text-xs font-bold text-slate-700 dark:text-slate-200">External Resource / Task Link</p>
-                      <p className="text-[11px] text-slate-500 truncate max-w-md">{selectedTaskForView.linkUrl}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-md">{selectedTaskForView.linkUrl}</p>
                     </div>
                   </div>
                   <a
@@ -530,9 +549,9 @@ const TaskManagement = () => {
                 <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Task Instructions & Details
                 </h4>
-                <div className="bg-slate-50/80 dark:bg-slate-850/60 p-6 rounded-2xl border border-slate-200/70 dark:border-slate-800 shadow-2xs">
+                <div className="bg-slate-50/90 dark:bg-slate-800/50 p-6 sm:p-7 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
                   <div 
-                    className="prose dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 text-sm sm:text-base leading-relaxed ql-editor !p-0"
+                    className="prose dark:prose-invert max-w-none text-slate-800 dark:text-slate-100 text-sm sm:text-base leading-relaxed ql-editor !p-0"
                     dangerouslySetInnerHTML={{ __html: selectedTaskForView.description || '<p class="text-slate-400 italic">No instructions provided.</p>' }}
                   />
                 </div>
@@ -546,9 +565,9 @@ const TaskManagement = () => {
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {selectedTaskForView.requiredLinks.map((reqLink, idx) => (
-                      <div key={idx} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
+                      <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-xl flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{reqLink.label}</span>
-                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${reqLink.isMandatory ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' : 'bg-slate-100 text-slate-500'}`}>
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${reqLink.isMandatory ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
                           {reqLink.isMandatory ? 'Mandatory' : 'Optional'}
                         </span>
                       </div>
@@ -559,8 +578,8 @@ const TaskManagement = () => {
             </div>
 
             {/* Footer */}
-            <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex items-center justify-between">
-              <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+            <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between">
+              <span className="text-xs text-slate-400 dark:text-slate-500 font-medium hidden sm:inline">
                 Previewing exactly what students see when opening this task
               </span>
               <div className="flex items-center gap-2 ml-auto">
@@ -576,7 +595,7 @@ const TaskManagement = () => {
                 </button>
                 <button
                   onClick={() => setSelectedTaskForView(null)}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition-colors shadow-xs cursor-pointer"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-colors shadow-xs cursor-pointer"
                 >
                   Close Preview
                 </button>

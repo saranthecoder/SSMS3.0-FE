@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useSearchParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import ReactQuill from 'react-quill-new';
@@ -101,6 +101,8 @@ const TaskCountdownTimer = ({ dueDate, isSubmitted, submission }) => {
 };
 
 const MyTasks = () => {
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
   const [tasks, setTasks] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -158,6 +160,23 @@ const MyTasks = () => {
   };
 
   useEffect(() => { fetchTasks(); }, []);
+
+  // Auto-open task details modal if navigating from a notification referencing a task
+  useEffect(() => {
+    const targetTaskId = searchParams.get('taskId') || location.state?.taskId;
+    const targetTaskTitle = (searchParams.get('taskTitle') || location.state?.taskTitle || '').trim().toLowerCase();
+    
+    if ((targetTaskId || targetTaskTitle) && tasks.length > 0) {
+      const match = tasks.find(t => 
+        (targetTaskId && t._id === targetTaskId) || 
+        (targetTaskTitle && t.title?.toLowerCase() === targetTaskTitle) ||
+        (targetTaskTitle && t.title?.toLowerCase().includes(targetTaskTitle))
+      );
+      if (match) {
+        setSelectedTaskForDetails(match);
+      }
+    }
+  }, [tasks, searchParams, location.state]);
 
   const handleOpenSubmitModal = (task) => {
     setActiveTask(task);
@@ -602,7 +621,7 @@ const MyTasks = () => {
           <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200 dark:border-slate-800 my-auto flex flex-col max-h-[90vh]">
             
             {/* Header */}
-            <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start gap-4 bg-gradient-to-r from-slate-50 via-slate-50 to-indigo-50/30 dark:from-slate-850 dark:via-slate-850 dark:to-indigo-950/20">
+            <div className="p-5 sm:p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start gap-4 bg-gradient-to-r from-slate-50 via-white to-indigo-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-indigo-950/40">
               <div className="space-y-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-200/80 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
@@ -626,7 +645,7 @@ const MyTasks = () => {
             </div>
 
             {/* Meta Highlights Banner */}
-            <div className="px-6 py-3.5 bg-slate-100/60 dark:bg-slate-800/40 border-b border-slate-200/60 dark:border-slate-800/60 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="px-6 py-3.5 bg-slate-100/70 dark:bg-slate-800/60 border-b border-slate-200/60 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300">
                   <Calendar size={14} className="text-indigo-500" />
@@ -638,7 +657,7 @@ const MyTasks = () => {
                   <span>Marks: <strong className="text-emerald-600 dark:text-emerald-400">{selectedTaskForDetails.maxMarks}</strong></span>
                 </div>
                 <div className="h-4 w-px bg-slate-300 dark:bg-slate-700 hidden sm:block" />
-                <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20">
+                <div className="flex items-center gap-1.5 font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-lg border border-amber-500/20 dark:border-amber-500/30">
                   <span>🪙 Reward: <strong className="font-mono text-amber-500 dark:text-amber-300">+{(Number(selectedTaskForDetails.maxMarks) || 0) * 10} Coins</strong></span>
                 </div>
               </div>
@@ -650,18 +669,18 @@ const MyTasks = () => {
             </div>
 
             {/* Scrollable Content Body */}
-            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 bg-white dark:bg-slate-900">
               
               {/* Attached External Links / Files if any */}
               {selectedTaskForDetails.taskType === 'file' && selectedTaskForDetails.fileUrl && (
-                <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 rounded-2xl flex items-center justify-between gap-4">
+                <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50 rounded-2xl flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                       <FileTextIcon size={20} />
                     </div>
                     <div>
                       <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Attached Task File</p>
-                      <p className="text-[11px] text-slate-500">Download the reference or assignment file</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Download the reference or assignment file</p>
                     </div>
                   </div>
                   <a
@@ -676,14 +695,14 @@ const MyTasks = () => {
               )}
 
               {selectedTaskForDetails.taskType === 'link' && selectedTaskForDetails.linkUrl && (
-                <div className="p-4 bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/40 rounded-2xl flex items-center justify-between gap-4">
+                <div className="p-4 bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800/50 rounded-2xl flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                       <LinkIcon size={20} />
                     </div>
                     <div>
                       <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Task Reference Link</p>
-                      <p className="text-[11px] text-slate-500 truncate max-w-md">{selectedTaskForDetails.linkUrl}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-md">{selectedTaskForDetails.linkUrl}</p>
                     </div>
                   </div>
                   <a
@@ -702,9 +721,9 @@ const MyTasks = () => {
                 <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Task Instructions & Details
                 </h4>
-                <div className="bg-slate-50/80 dark:bg-slate-850/60 p-6 rounded-2xl border border-slate-200/70 dark:border-slate-800 shadow-2xs">
+                <div className="bg-slate-50/90 dark:bg-slate-800/50 p-6 sm:p-7 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
                   <div 
-                    className="prose dark:prose-invert max-w-none text-slate-800 dark:text-slate-200 text-sm sm:text-base leading-relaxed ql-editor !p-0"
+                    className="prose dark:prose-invert max-w-none text-slate-800 dark:text-slate-100 text-sm sm:text-base leading-relaxed ql-editor !p-0"
                     dangerouslySetInnerHTML={{ __html: selectedTaskForDetails.description || '<p class="text-slate-400 italic">No instructions provided.</p>' }}
                   />
                 </div>
@@ -718,9 +737,9 @@ const MyTasks = () => {
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {selectedTaskForDetails.requiredLinks.map((reqLink, idx) => (
-                      <div key={idx} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between">
+                      <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-xl flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{reqLink.label}</span>
-                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${reqLink.isMandatory ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' : 'bg-slate-100 text-slate-500'}`}>
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${reqLink.isMandatory ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>
                           {reqLink.isMandatory ? 'Mandatory' : 'Optional'}
                         </span>
                       </div>
@@ -731,7 +750,7 @@ const MyTasks = () => {
             </div>
 
             {/* Footer */}
-            <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex items-center justify-between">
+            <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between">
               <button
                 onClick={() => setSelectedTaskForDetails(null)}
                 className="px-4 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"

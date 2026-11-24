@@ -81,7 +81,7 @@ const getNamecolorClass = (value) => {
 const StudentDashboard = () => {
   const { user, customPanelName, customPanelSubheading } = useAuth();
   const { 
-    sessionActive, startSession, endSession, sessionSeconds, formatTime, isCheckingIn, activeLeaveStatus,
+    sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus,
     themeColor, activeTheme, userCoins, gamificationData, fetchCounts
   } = useOutletContext();
   const [analytics, setAnalytics] = useState(null);
@@ -363,18 +363,18 @@ const StudentDashboard = () => {
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch mb-6">
         
         {/* Top Left: Task Completion Donut */}
-        <Link to="/student/tasks" className={`md:col-span-4 lg:col-span-3 p-6 rounded-3xl border-t border-white/40 border-b-[3px] border-black/20 flex flex-col items-center justify-center text-center hover:-translate-y-1 active:translate-y-1 active:border-b-0 transition-all cursor-pointer block relative overflow-hidden group text-white ${
+        <Link to="/student/tasks" className={`md:col-span-4 lg:col-span-3 p-6 rounded-3xl border-t border-white/40 border-b-[3px] border-black/20 flex flex-col justify-between hover:-translate-y-1 active:translate-y-1 active:border-b-0 transition-all cursor-pointer block relative overflow-hidden group text-white ${
           themeColor === 'Emerald'
             ? 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/40 hover:shadow-[0_12px_20px_-6px_rgba(16,185,129,0.5)]'
             : 'bg-gradient-to-br from-primary-400 to-primary-600 shadow-lg shadow-theme-primary/40 hover:shadow-[0_12px_20px_-6px_var(--color-theme-primary)]'
         }`}>
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/20 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
-          <div className="mb-2 relative z-10">
-            <h3 className="text-sm font-bold text-white mb-1 drop-shadow-sm">Task Completion</h3>
+          <div className="relative z-10">
+            <h3 className="text-sm font-bold text-white mb-0.5 drop-shadow-sm">Task Completion</h3>
             <p className={`text-xs font-medium drop-shadow-sm ${themeColor === 'Emerald' ? 'text-emerald-50' : 'text-primary-50'}`}>Your progress overview</p>
           </div>
           
-          <div className="flex flex-col items-center w-full gap-5 mt-2 relative z-10">
+          <div className="flex flex-col items-center w-full my-auto py-2 relative z-10">
             <div className="relative w-28 h-28 shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -400,22 +400,22 @@ const StudentDashboard = () => {
                 <span className="text-xl font-bold text-white leading-none mt-1 drop-shadow-md">{analytics?.taskCompletionRate || 0}%</span>
               </div>
             </div>
+          </div>
 
-            <div className="space-y-3 w-full max-w-[200px]">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-white shadow-sm"></div>
-                  <span className="text-white font-semibold drop-shadow-sm">Completed</span>
-                </div>
-                <span className="font-bold text-white drop-shadow-sm">{analytics?.completedTasks || 0}</span>
+          <div className="relative z-10 bg-black/10 rounded-xl p-2.5 backdrop-blur-xs border border-white/10 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-white shadow-sm"></div>
+                <span className="text-white font-semibold drop-shadow-sm">Completed</span>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-white/30"></div>
-                  <span className="text-white font-semibold drop-shadow-sm">Pending</span>
-                </div>
-                <span className="font-bold text-white drop-shadow-sm">{analytics?.pendingTasks || 0}</span>
+              <span className="font-bold text-white drop-shadow-sm">{analytics?.completedTasks || 0}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-white/30"></div>
+                <span className="text-white font-semibold drop-shadow-sm">Pending</span>
               </div>
+              <span className="font-bold text-white drop-shadow-sm">{analytics?.pendingTasks || 0}</span>
             </div>
           </div>
         </Link>
@@ -453,100 +453,160 @@ const StudentDashboard = () => {
             </Link>
           </div>
 
-          <div className="relative z-10 grid grid-cols-2 gap-y-4 gap-x-6 my-4">
-            <div>
-              <p className={`text-[10px] font-bold uppercase tracking-widest mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/80' : 'text-primary-100/80'}`}>Student Name</p>
-              <p className="font-bold text-lg leading-tight">{user?.name || 'NOT SET'}</p>
+          <div className="relative z-10 grid grid-cols-2 gap-2.5 my-3">
+            <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
+              <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Student Name</p>
+              <p className="font-bold text-base leading-tight truncate">{user?.name || 'NOT SET'}</p>
             </div>
-            <div>
-              <p className={`text-[10px] font-bold uppercase tracking-widest mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/80' : 'text-primary-100/80'}`}>Roll Number</p>
-              <p className="font-mono font-bold text-lg tracking-wider leading-tight">{user?.rollNumber || 'NOT SET'}</p>
+            <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
+              <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Roll Number</p>
+              <p className="font-mono font-bold text-base tracking-wider leading-tight truncate">{user?.rollNumber || 'NOT SET'}</p>
             </div>
-            <div>
-              <p className={`text-[10px] font-bold uppercase tracking-widest mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/80' : 'text-primary-100/80'}`}>Email Address</p>
-              <p className="font-medium text-sm truncate opacity-90">{user?.email || 'NOT SET'}</p>
+            <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
+              <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Email Address</p>
+              <p className="font-medium text-xs truncate opacity-90">{user?.email || 'NOT SET'}</p>
             </div>
-            <div>
-              <p className={`text-[10px] font-bold uppercase tracking-widest mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/80' : 'text-primary-100/80'}`}>Phone Number</p>
-              <p className="font-mono font-medium text-sm opacity-90">{user?.phone || 'NOT SET'}</p>
+            <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 border border-white/10">
+              <p className={`text-[10px] font-bold uppercase tracking-wider mb-0.5 ${themeColor === 'Emerald' ? 'text-emerald-100/75' : 'text-primary-100/75'}`}>Phone Number</p>
+              <p className="font-mono font-medium text-xs opacity-90">{user?.phone || 'NOT SET'}</p>
             </div>
           </div>
 
-          {/* Workload Requirements for Present Status */}
-          <div className="relative z-10 bg-black/25 backdrop-blur-md rounded-2xl p-3 my-2 border border-white/15 text-white">
-            <div className="flex items-center justify-between text-xs mb-2 flex-wrap gap-1">
-              <span className="font-extrabold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                <Clock size={14} className="text-amber-300" /> Attendance Requirements (Present Criteria)
-              </span>
-              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 border border-white/20">
-                {checkInAccess.accessType === 'wfh' ? '🏠 WFH Mode' : '🏢 On-Site Mode'}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
-                <p className="text-[10px] uppercase font-bold text-emerald-200">Minimum Hours (Present)</p>
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="font-black text-lg text-white">
-                    {checkInAccess.minHours || checkInAccess.workHours || 4}h
-                  </span>
-                  <span className="text-[11px] text-white/80">min required</span>
-                </div>
-                <p className="text-[10px] text-emerald-100/70 mt-1">Must maintain at least {checkInAccess.minHours || checkInAccess.workHours || 4} hours to get Present</p>
+          {/* Workload Requirements for Present Status - Only shown when access is granted */}
+          {checkInAccess.hasAccess ? (
+            <div className="relative z-10 bg-black/25 backdrop-blur-md rounded-2xl p-3 my-2 border border-white/15 text-white">
+              <div className="flex items-center justify-between text-xs mb-2 flex-wrap gap-1">
+                <span className="font-extrabold uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <Clock size={14} className="text-amber-300" /> Attendance Requirements (Present Criteria)
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/20 border border-white/20">
+                  {checkInAccess.accessType === 'wfh' ? '🏠 WFH Mode' : '🏢 On-Site Mode'}
+                </span>
               </div>
 
-              <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
-                <p className="text-[10px] uppercase font-bold text-amber-200">Maximum Valid Hours</p>
-                <div className="flex items-baseline gap-1 mt-0.5">
-                  <span className="font-black text-lg text-white">
-                    {checkInAccess.maxHours || 10}h
-                  </span>
-                  <span className="text-[11px] text-white/80">max allowed</span>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
+                  <p className="text-[10px] uppercase font-bold text-emerald-200">Minimum Hours (Present)</p>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="font-black text-lg text-white">
+                      {checkInAccess.minHours || checkInAccess.workHours || 4}h
+                    </span>
+                    <span className="text-[11px] text-white/80">min required</span>
+                  </div>
+                  <p className="text-[10px] text-emerald-100/70 mt-1">Must maintain at least {checkInAccess.minHours || checkInAccess.workHours || 4} hours to get Present</p>
                 </div>
-                <p className="text-[10px] text-amber-100/70 mt-1">Hours above {checkInAccess.maxHours || 10}h are marked as Invalid</p>
+
+                <div className="bg-white/10 rounded-xl p-2.5 border border-white/10">
+                  <p className="text-[10px] uppercase font-bold text-amber-200">Maximum Valid Hours</p>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="font-black text-lg text-white">
+                      {checkInAccess.maxHours || 10}h
+                    </span>
+                    <span className="text-[11px] text-white/80">max allowed</span>
+                  </div>
+                  <p className="text-[10px] text-amber-100/70 mt-1">Hours above {checkInAccess.maxHours || 10}h are marked as Invalid</p>
+                </div>
+              </div>
+
+              {/* Dual Mode Note if student worked On-Site and is now in WFH mode */}
+              {checkInAccess.accessType === 'wfh' && (onsiteSeconds > 0) && (
+                <div className="mt-2.5 p-2 rounded-xl bg-white/10 border border-white/15 text-[11px] text-white/90 flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-1.5 truncate">
+                    🏢 On-Site Stored: <strong className="text-emerald-300 font-mono">{formatTime(onsiteSeconds)}</strong>
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-300/30 text-emerald-100 shrink-0">
+                    Dual Mode Load
+                  </span>
+                </div>
+              )}
+
+              {/* Live Session Progress & Milestone Feedback */}
+              {sessionActive && (() => {
+                const reqHours = Number(checkInAccess.minHours || checkInAccess.workHours || 4);
+                const maxHours = Number(checkInAccess.maxHours || 10);
+                const minSecs = reqHours * 3600;
+                const maxSecs = maxHours * 3600;
+
+                if (sessionSeconds > maxSecs) {
+                  return (
+                    <div className="mt-2.5 p-2 rounded-xl bg-rose-500/30 border border-rose-300/40 text-xs font-bold text-rose-100 flex items-center gap-2">
+                      <span className="text-base">⚠️</span>
+                      <span>Session exceeded {maxHours}h max limit! Marked as Invalid overtime. Check out now.</span>
+                    </div>
+                  );
+                }
+                if (sessionSeconds >= minSecs) {
+                  return (
+                    <div className="mt-2.5 p-2 rounded-xl bg-emerald-500/30 border border-emerald-300/40 text-xs font-bold text-emerald-100 flex items-center gap-2">
+                      <span className="text-base">🎉</span>
+                      <span>Present Criteria Met for {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'}! You have logged {Math.floor(sessionSeconds / 3600)}h {Math.floor((sessionSeconds % 3600) / 60)}m.</span>
+                    </div>
+                  );
+                }
+                const remSecs = Math.max(0, minSecs - sessionSeconds);
+                const remH = Math.floor(remSecs / 3600);
+                const remM = Math.ceil((remSecs % 3600) / 60);
+                return (
+                  <div className="mt-2.5 p-2 rounded-xl bg-amber-500/25 border border-amber-300/40 text-xs font-bold text-amber-100 flex items-center gap-2">
+                    <span className="text-base">⏳</span>
+                    <span>{remH > 0 ? `${remH}h ` : ''}{remM}m more needed to qualify as Present in {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'} mode (Min {reqHours}h required).</span>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <div className="relative z-10 bg-black/20 backdrop-blur-md rounded-2xl p-3 my-2 border border-white/15 text-white flex items-center justify-between gap-3 shadow-inner">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-white/80 shrink-0">
+                  <Lock size={15} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-white leading-tight">Check-In Access Not Granted Today</p>
+                  <p className="text-[11px] text-white/70 truncate mt-0.5">Please contact your mentor to authorize attendance.</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/15 border border-white/20 text-white/80 shrink-0">
+                No Access
+              </span>
+            </div>
+          )}
+
+          {/* Separated Record Badges */}
+          {(onsiteSeconds > 0 || wfhSeconds > 0) && (
+            <div className="relative z-10 flex items-center gap-2 my-2 text-[11px] flex-wrap">
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border ${
+                checkInAccess.accessType === 'on-site' 
+                  ? 'bg-white/20 border-white/30 font-bold text-white shadow-xs' 
+                  : 'bg-black/20 border-white/10 text-white/80'
+              }`}>
+                <span>🏢 On-Site:</span>
+                <span className="font-mono font-bold text-white">{formatTime(onsiteSeconds || 0)}</span>
+                {onsiteSeconds > 0 && !sessionActive && checkInAccess.accessType !== 'on-site' && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/30 text-emerald-200 font-bold border border-emerald-400/30">Stored</span>
+                )}
+              </div>
+
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border ${
+                checkInAccess.accessType === 'wfh' 
+                  ? 'bg-white/20 border-white/30 font-bold text-white shadow-xs' 
+                  : 'bg-black/20 border-white/10 text-white/80'
+              }`}>
+                <span>🏠 WFH:</span>
+                <span className="font-mono font-bold text-white">{formatTime(wfhSeconds || 0)}</span>
+                {wfhSeconds > 0 && !sessionActive && checkInAccess.accessType !== 'wfh' && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-sky-500/30 text-sky-200 font-bold border border-sky-400/30">Stored</span>
+                )}
               </div>
             </div>
-
-            {/* Live Session Progress & Milestone Feedback */}
-            {sessionActive && (() => {
-              const reqHours = Number(checkInAccess.minHours || checkInAccess.workHours || 4);
-              const maxHours = Number(checkInAccess.maxHours || 10);
-              const minSecs = reqHours * 3600;
-              const maxSecs = maxHours * 3600;
-
-              if (sessionSeconds > maxSecs) {
-                return (
-                  <div className="mt-2.5 p-2 rounded-xl bg-rose-500/30 border border-rose-300/40 text-xs font-bold text-rose-100 flex items-center gap-2">
-                    <span className="text-base">⚠️</span>
-                    <span>Session exceeded {maxHours}h max limit! Marked as Invalid overtime. Check out now.</span>
-                  </div>
-                );
-              }
-              if (sessionSeconds >= minSecs) {
-                return (
-                  <div className="mt-2.5 p-2 rounded-xl bg-emerald-500/30 border border-emerald-300/40 text-xs font-bold text-emerald-100 flex items-center gap-2">
-                    <span className="text-base">🎉</span>
-                    <span>Present Criteria Met! You have logged {Math.floor(sessionSeconds / 3600)}h {Math.floor((sessionSeconds % 3600) / 60)}m. You will be marked Present upon checkout.</span>
-                  </div>
-                );
-              }
-              const remSecs = Math.max(0, minSecs - sessionSeconds);
-              const remH = Math.floor(remSecs / 3600);
-              const remM = Math.ceil((remSecs % 3600) / 60);
-              return (
-                <div className="mt-2.5 p-2 rounded-xl bg-amber-500/25 border border-amber-300/40 text-xs font-bold text-amber-100 flex items-center gap-2">
-                  <span className="text-base">⏳</span>
-                  <span>{remH > 0 ? `${remH}h ` : ''}{remM}m more needed to qualify as Present (Min {reqHours}h required).</span>
-                </div>
-              );
-            })()}
-          </div>
+          )}
 
           <div className={`relative z-10 flex items-center justify-between mt-auto pt-4 border-t ${
             themeColor === 'Emerald' ? 'border-emerald-400/30' : 'border-primary-400/30'
           }`}>
             <div>
-              <p className={`text-xs mb-1 ${themeColor === 'Emerald' ? 'text-emerald-100' : 'text-primary-100'}`}>Session Duration</p>
+              <p className={`text-xs mb-1 ${themeColor === 'Emerald' ? 'text-emerald-100' : 'text-primary-100'}`}>
+                Session Duration {checkInAccess.hasAccess ? `(${checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'})` : ''}
+              </p>
               <p className="font-mono font-bold text-2xl">{formatTime(sessionSeconds)}</p>
             </div>
             <div>
@@ -573,18 +633,13 @@ const StudentDashboard = () => {
                   </button>
                 </div>
               ) : !checkInAccess.hasAccess ? (
-                <div className="flex flex-col items-end">
-                  <span className="text-[11px] font-bold text-amber-200 mb-2 max-w-[180px] text-right">
-                    Check-in access not granted today. Please contact admin.
-                  </span>
-                  <button 
-                    disabled
-                    className="bg-white/30 text-slate-800/40 px-8 py-3 rounded-xl text-base font-black flex items-center gap-2 cursor-not-allowed"
-                  >
-                    <Play size={16} className="opacity-40" /> 
-                    Blocked
-                  </button>
-                </div>
+                <button 
+                  disabled
+                  className="bg-white/20 hover:bg-white/20 text-white/70 px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 border border-white/15 cursor-not-allowed shadow-inner"
+                >
+                  <Lock size={15} /> 
+                  Check-In Locked
+                </button>
               ) : (
                 <button 
                   onClick={() => startSession()} 

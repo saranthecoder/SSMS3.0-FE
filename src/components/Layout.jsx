@@ -105,6 +105,17 @@ const getNamecolorClass = (value) => {
   return classes[value] || value || '';
 };
 
+const formatNotifTime = (time) => {
+  if (!time) return 'Just now';
+  const d = new Date(time);
+  if (isNaN(d.getTime())) return 'Just now';
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `${hours}:${minutes} ${ampm}`;
+};
+
 const Layout = () => {
   const { user, logout, socket, customPanelName: authPanelName, customPanelSubheading: authPanelSubheading } = useAuth();
   const { selectedBatchId, selectedBatchName, selectedBatch, batchesList, openBatchModal, isBatchClosed: contextIsBatchClosed } = useGlobalBatch();
@@ -630,6 +641,11 @@ const Layout = () => {
     }
   });
   const [sessionSeconds, setSessionSeconds] = useState(0);
+  const [onsiteSeconds, setOnsiteSeconds] = useState(0);
+  const [wfhSeconds, setWfhSeconds] = useState(0);
+  const [currentAccessType, setCurrentAccessType] = useState('on-site');
+  const currentAccessTypeRef = useRef('on-site');
+  useEffect(() => { currentAccessTypeRef.current = currentAccessType; }, [currentAccessType]);
   const [isSyncing, setIsSyncing] = useState(user?.role === 'student');
   const [userCoins, setUserCoins] = useState(0);
   const [gamificationData, setGamificationData] = useState(null);
@@ -726,6 +742,201 @@ const Layout = () => {
   });
 
   const notifLengthRef = useRef(0);
+  const knownNotifIdsRef = useRef(null);
+  const [toastStack, setToastStack] = useState([]);
+
+  // Centralized Notification Navigation Engine: Opens the exact task, submission, leave, or chat
+  const navigateToNotificationTarget = useCallback((notif) => {
+    if (!notif) return;
+    
+    // Extract metadata
+    const notifType = (notif.type || notif.typeLabel || '').toLowerCase();
+    const title = (notif.title || '').trim();
+    const titleLower = title.toLowerCase();
+    const text = (notif.text || notif.message || '').trim();
+    const textLower = text.toLowerCase();
+
+    // Try extracting quoted task title: e.g. 'Madhankumar S submitted "D2T15"' -> 'D2T15'
+    const quotedMatch = text.match(/"([^"]+)"/) || title.match(/"([^"]+)"/);
+    const extractedTaskTitle = notif.taskTitle || (quotedMatch ? quotedMatch[1] : '');
+
+    // Try extracting student name: e.g. 'Madhankumar S submitted "D2T15"' -> 'Madhankumar S'
+    const studentMatch = text.match(/^(.+?)\s+submitted/i) || text.match(/^(.+?)\s+requested/i);
+    const extractedStudentName = notif.studentName || (studentMatch ? studentMatch[1].trim() : '');
+
+    // 1. SUBMISSION NOTIFICATIONS (Student submitted task -> Mentor/Admin reviews it)
+    if (notifType.includes('submission') || titleLower.includes('submission') || textLower.includes('submitted')) {
+      if (user?.role === 'admin' || user?.role === 'mentor') {
+        const queryTerm = extractedTaskTitle || extractedStudentName || '';
+        const searchParam = queryTerm ? `?search=${encodeURIComponent(queryTerm)}` : '';
+        navigate(`/reviews${searchParam}`, { 
+          state: { 
+            search: queryTerm, 
+            taskTitle: extractedTaskTitle,
+            studentName: extractedStudentName,
+            submissionId: notif.submissionId
+          } 
+        });
+        return;
+      } else {
+        const param = extractedTaskTitle ? `?taskTitle=${encodeURIComponent(extractedTaskTitle)}` : '';
+        navigate(`/student/tasks${param}`, { state: { taskTitle: extractedTaskTitle } });
+        return;
+      }
+    }
+
+    // 2. TASK CREATED / ASSIGNED NOTIFICATIONS
+    if (notifType.includes('task') || titleLower.includes('task')) {
+      if (user?.role === 'student') {
+        const param = notif.taskId ? `?taskId=${notif.taskId}` : (extractedTaskTitle ? `?taskTitle=${encodeURIComponent(extractedTaskTitle)}` : (text ? `?taskTitle=${encodeURIComponent(text)}` : ''));
+        navigate(`/student/tasks${param}`, {
+          state: { taskId: notif.taskId, taskTitle: extractedTaskTitle || text }
+        });
+        return;
+      } else {
+        const param = notif.taskId ? `?taskId=${notif.taskId}` : (extractedTaskTitle ? `?taskTitle=${encodeURIComponent(extractedTaskTitle)}` : '');
+        navigate(`/tasks${param}`, {
+          state: { taskId: notif.taskId, taskTitle: extractedTaskTitle }
+        });
+        return;
+      }
+    }
+
+    // 3. TASK GRADED / SCORED NOTIFICATIONS
+    if (notifType.includes('grade') || titleLower.includes('grade') || titleLower.includes('score')) {
+      if (user?.role === 'student') {
+        navigate('/student/grades');
+        return;
+      }
+    }
+
+    // 4. RE-SUBMISSION REQUESTED
+    if (titleLower.includes('re-submission') || textLower.includes('re-submission') || textLower.includes('resubmit')) {
+      if (user?.role === 'student') {
+        navigate(`/student/tasks?filter=resubmit${extractedTaskTitle ? `&taskTitle=${encodeURIComponent(extractedTaskTitle)}` : ''}`, {
+          state: { filter: 'resubmit', taskTitle: extractedTaskTitle }
+        });
+        return;
+      }
+    }
+
+    // 5. LEAVE REQUESTS
+    if (notifType.includes('leave') || titleLower.includes('leave') || textLower.includes('leave')) {
+      if (user?.role === 'student') {
+        navigate('/student/leave-application');
+      } else {
+        navigate('/leave-requests');
+      }
+      return;
+    }
+
+    // 6. BATCH ENROLLMENT / JOIN REQUESTS
+    if (notifType.includes('enroll') || titleLower.includes('join') || textLower.includes('join') || titleLower.includes('enroll')) {
+      if (user?.role === 'student') {
+        navigate('/student/batches');
+      } else {
+        navigate('/enrollments');
+      }
+      return;
+    }
+
+    // 7. COINS / SHOP / GAMIFICATION
+    if (notifType.includes('coin') || titleLower.includes('coin') || titleLower.includes('achievement') || titleLower.includes('badge') || titleLower.includes('reward')) {
+      if (user?.role === 'student') {
+        navigate('/student/shop');
+      } else {
+        navigate('/gamification');
+      }
+      return;
+    }
+
+    // 8. CHAT / DIRECT / GROUP / BATCH
+    if (notifType.includes('chat') || notifType.includes('message') || titleLower.includes('message') || titleLower.includes('announcement')) {
+      navigate(user?.role === 'student' ? '/student/chat' : '/chat');
+      return;
+    }
+
+    // 9. FRIEND REQUESTS
+    if (notifType.includes('friend') || titleLower.includes('friend')) {
+      navigate(user?.role === 'student' ? '/student/connections' : '/');
+      return;
+    }
+
+    // Default fallback
+    if (user?.role === 'student') {
+      navigate('/student/dashboard');
+    } else {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
+
+  // Native Side Notification Stack Engine (Persistent until X clicked, multi-card stacked, glossy frosted blur)
+  const showGlossyNotification = useCallback(({
+    typeLabel = 'Notification',
+    title = '',
+    subtitle = '',
+    text = '',
+    iconLetter = '🔔',
+    gradient = 'linear-gradient(135deg, #6366f1, #d946ef)',
+    actionText = 'View',
+    confirmButtonText,
+    onConfirm = null,
+    time = new Date(),
+    taskId = null,
+    taskTitle = '',
+    studentName = '',
+    submissionId = null,
+    type = ''
+  }) => {
+    const newId = Date.now() + Math.random().toString(36).substring(2, 7);
+    const item = {
+      id: newId,
+      typeLabel,
+      title,
+      subtitle,
+      text,
+      iconLetter,
+      gradient,
+      actionText: actionText || confirmButtonText || '',
+      onConfirm,
+      time: time || new Date(),
+      taskId,
+      taskTitle,
+      studentName,
+      submissionId,
+      type
+    };
+
+    setToastStack(prev => {
+      // Deduplicate if identical title and text already present
+      const isDup = prev.some(t => (t.id === newId) || (t.title === title && t.text === text));
+      if (isDup) return prev;
+      return [item, ...prev];
+    });
+  }, []);
+
+  const removeToast = useCallback((id) => {
+    setToastStack(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const clearAllToasts = useCallback(() => {
+    setToastStack([]);
+  }, []);
+
+  const handleToastClick = useCallback((toast) => {
+    removeToast(toast.id);
+    if (typeof toast.onConfirm === 'function') {
+      toast.onConfirm();
+    } else {
+      navigateToNotificationTarget(toast);
+    }
+  }, [removeToast, navigateToNotificationTarget]);
+
+  const handleToastClose = useCallback((e, toastId) => {
+    e.stopPropagation();
+    removeToast(toastId);
+  }, [removeToast]);
+
   useEffect(() => {
     notifLengthRef.current = notifications.length;
   }, [notifications.length]);
@@ -896,6 +1107,11 @@ const Layout = () => {
           const delta = Math.floor((now - lastTick) / 1000);
           if (delta > 0) {
             setSessionSeconds(prev => prev + delta);
+            if (currentAccessTypeRef.current === 'wfh') {
+              setWfhSeconds(prev => prev + delta);
+            } else {
+              setOnsiteSeconds(prev => prev + delta);
+            }
             lastTick = now;
           }
         }, 1000);
@@ -926,17 +1142,26 @@ const Layout = () => {
         console.error('Failed to fetch active leave status:', leaveErr);
       }
 
-      // Restore today's attendance session state
-      const summaryRes = await axios.get('/attendance/my-summary');
+      // Restore today's attendance session state and current check-in access mode
+      const [summaryRes, accessRes] = await Promise.all([
+        axios.get('/attendance/my-summary'),
+        axios.get('/checkin-access/my-status').catch(() => ({ data: { hasAccess: false, accessType: null } }))
+      ]);
+
       const todayStr = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
       const todayRecords = summaryRes.data.filter(r => {
         const rDate = r.date || (r.firstCheckIn ? new Date(r.firstCheckIn).toISOString().split('T')[0] : '');
         return rDate === todayStr;
       });
 
+      const grantedAccessType = accessRes.data?.hasAccess ? accessRes.data.accessType : null;
+
       if (todayRecords.length > 0) {
-        const totalTodaySeconds = todayRecords.reduce((acc, curr) => acc + (curr.totalSeconds || 0), 0);
+        const todayRecord = todayRecords[0];
         const activeRecord = todayRecords.find(r => r.isActive);
+
+        let baseOnsite = todayRecord.onsiteSeconds || 0;
+        let baseWfh = todayRecord.wfhSeconds || 0;
 
         let additionalSeconds = 0;
         if (activeRecord && activeRecord.lastCheckInTime) {
@@ -947,9 +1172,12 @@ const Layout = () => {
           }
         }
 
-        setSessionSeconds(totalTodaySeconds + additionalSeconds);
-
         if (activeRecord) {
+          if (activeRecord.accessType === 'wfh') {
+            baseWfh += additionalSeconds;
+          } else {
+            baseOnsite += additionalSeconds;
+          }
           setSessionActive(true);
           setAttendanceId(activeRecord._id);
           attendanceIdRef.current = activeRecord._id;
@@ -959,11 +1187,28 @@ const Layout = () => {
           attendanceIdRef.current = null;
           localStorage.removeItem('sessionActive');
         }
+
+        setOnsiteSeconds(baseOnsite);
+        setWfhSeconds(baseWfh);
+
+        // Active mode: mentor-granted access mode takes priority, fallback to record mode
+        const activeMode = grantedAccessType || activeRecord?.accessType || todayRecord?.accessType || 'on-site';
+        setCurrentAccessType(activeMode);
+
+        // Session timer tracks CURRENT ACTIVE MODE (starts fresh from 0 when switching to fresh WFH!)
+        if (activeMode === 'wfh') {
+          setSessionSeconds(baseWfh);
+        } else {
+          setSessionSeconds(baseOnsite);
+        }
       } else {
         setSessionActive(false);
         setAttendanceId(null);
         attendanceIdRef.current = null;
         setSessionSeconds(0);
+        setOnsiteSeconds(0);
+        setWfhSeconds(0);
+        setCurrentAccessType(grantedAccessType || 'on-site');
       }
     } catch (attErr) {
       console.error('Failed to restore attendance session:', attErr);
@@ -1001,9 +1246,40 @@ const Layout = () => {
           return true;
         });
 
-        if (newNotifs.length > notifLengthRef.current && notifLengthRef.current > 0) {
-          soundManager.playNotification();
+        if (knownNotifIdsRef.current === null) {
+          knownNotifIdsRef.current = new Set(newNotifs.map(n => n.id));
+        } else {
+          const brandNew = newNotifs.filter(n => !knownNotifIdsRef.current.has(n.id));
+          brandNew.forEach(n => knownNotifIdsRef.current.add(n.id));
+
+          if (brandNew.length > 0) {
+            soundManager.playNotification();
+            brandNew.slice(0, 4).forEach((item) => {
+              showGlossyNotification({
+                typeLabel: item.type === 'submission' ? 'New Submission' : item.type === 'task' ? 'Task Notification' : item.type === 'leave' ? 'Leave Request' : item.type === 'grade' ? 'Academic Update' : 'Academic Alert',
+                title: item.title || 'Notification',
+                subtitle: item.time ? new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+                text: item.message || item.text || '',
+                iconLetter: item.type === 'submission' ? '📤' : item.type === 'task' ? '📋' : item.type === 'leave' ? '🏖️' : item.type === 'grade' ? '📝' : '🔔',
+                gradient: item.type === 'submission' 
+                  ? 'linear-gradient(135deg, #8b5cf6, #d946ef)' 
+                  : item.type === 'task' 
+                    ? 'linear-gradient(135deg, #6366f1, #3b82f6)' 
+                    : item.type === 'leave'
+                      ? 'linear-gradient(135deg, #f59e0b, #ef4444)'
+                      : 'linear-gradient(135deg, #6366f1, #a855f7)',
+                actionText: 'View',
+                taskId: item.taskId,
+                taskTitle: item.taskTitle,
+                studentName: item.studentName,
+                submissionId: item.submissionId,
+                type: item.type,
+                onConfirm: () => navigateToNotificationTarget(item)
+              });
+            });
+          }
         }
+
         setNotifications(newNotifs);
         setUserCoins(gamification.coins || 0);
         setGamificationData(gamification);
@@ -1030,9 +1306,33 @@ const Layout = () => {
           return true;
         });
 
-        if (newNotifs.length > notifLengthRef.current && notifLengthRef.current > 0) {
-          soundManager.playNotification();
+        if (knownNotifIdsRef.current === null) {
+          knownNotifIdsRef.current = new Set(newNotifs.map(n => n.id));
+        } else {
+          const brandNew = newNotifs.filter(n => !knownNotifIdsRef.current.has(n.id));
+          brandNew.forEach(n => knownNotifIdsRef.current.add(n.id));
+
+          if (brandNew.length > 0) {
+            soundManager.playNotification();
+            brandNew.slice(0, 4).forEach((item) => {
+              showGlossyNotification({
+                typeLabel: item.type === 'task' ? 'New Task' : item.type === 'grade' ? 'Task Graded' : 'Academic Alert',
+                title: item.title || 'Notification',
+                subtitle: item.time ? new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+                text: item.message || item.text || '',
+                iconLetter: item.type === 'task' ? '📋' : item.type === 'grade' ? '📝' : '🔔',
+                gradient: item.type === 'grade' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #6366f1, #3b82f6)',
+                actionText: 'View',
+                taskId: item.taskId,
+                taskTitle: item.taskTitle,
+                submissionId: item.submissionId,
+                type: item.type,
+                onConfirm: () => navigateToNotificationTarget(item)
+              });
+            });
+          }
         }
+
         setNotifications(newNotifs);
       }
     } catch (e) {
@@ -1139,11 +1439,16 @@ const Layout = () => {
       };
 
       const handleAccessRestored = (data) => {
-        Swal.fire({
-          icon: 'success',
-          title: '✅ Access Restored',
+        soundManager.playSuccess();
+        showGlossyNotification({
+          typeLabel: 'Access Restored',
+          title: 'Panel Access Restored',
+          subtitle: 'Status: Active',
           text: data?.message || 'Your student panel access has been restored!',
-          confirmButtonColor: '#10b981'
+          iconLetter: '✅',
+          gradient: 'linear-gradient(135deg, #10b981, #059669)',
+          confirmButtonText: 'Great!',
+          timer: 6000
         });
       };
 
@@ -1157,63 +1462,28 @@ const Layout = () => {
         socket.off('account-access-restored', handleAccessRestored);
       };
     }
-  }, [socket, user, logout, navigate]);
+  }, [socket, user, logout, navigate, showGlossyNotification]);
 
-  // Real-time Messaging, Announcements & Social Notifications (WhatsApp-style)
+  // Real-time Messaging, Announcements & Social Notifications (WhatsApp-style Top-Right Popup)
   useEffect(() => {
     if (!socket || !user) return;
 
     const chatPath = user.role === 'student' ? '/student/chat' : '/chat';
-
-    const showGlossyChatNotification = ({ typeLabel, title, subtitle, text, iconLetter = '💬', gradient = 'linear-gradient(135deg, #6366f1, #d946ef)' }) => {
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        showConfirmButton: true,
-        confirmButtonText: 'Reply 💬',
-        showCloseButton: true,
-        timer: false, // Remains held on screen indefinitely until user clicks the 'X' close button or 'Reply'
-        customClass: {
-          popup: 'glossy-chat-toast'
-        },
-        html: `
-          <div style="text-align: left; padding-right: 1.5rem; user-select: none; width: 100%; box-sizing: border-box;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-              <div style="display: flex; align-items: center; gap: 6px;">
-                <span style="width: 7px; height: 7px; border-radius: 9999px; background: #34d399; display: inline-block; box-shadow: 0 0 10px #34d399; flex-shrink: 0;"></span>
-                <span style="font-size: 9.5px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: #a5b4fc;">${typeLabel}</span>
-              </div>
-            </div>
-            <div style="display: flex; align-items: flex-start; gap: 11px;">
-              <div style="width: 38px; height: 38px; border-radius: 12px; background: ${gradient}; color: #ffffff; font-weight: 900; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 14px rgba(99,102,241,0.4);">
-                ${iconLetter}
-              </div>
-              <div style="flex: 1; min-width: 0;">
-                <h4 style="margin: 0; font-size: 13px; font-weight: 800; color: #ffffff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${title}</h4>
-                ${subtitle ? `<p style="margin: 1px 0 0 0; font-size: 10px; font-weight: 600; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${subtitle}</p>` : ''}
-                <p style="margin: 3px 0 0 0; font-size: 11px; line-height: 1.4; color: #e2e8f0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word;">${text || 'New message'}</p>
-              </div>
-            </div>
-          </div>
-        `
-      }).then((result) => {
-        if (result.isConfirmed) {
-          navigate(chatPath);
-        }
-      });
-    };
 
     const handleDirectMessageNotif = (data) => {
       soundManager.playWhatsAppIncoming();
       setChatCount(prev => prev + 1);
 
       if (!location.pathname.includes('/chat')) {
-        showGlossyChatNotification({
+        showGlossyNotification({
           typeLabel: 'Direct Message',
           title: data.senderName,
           text: data.text,
           iconLetter: (data.senderName || 'U').charAt(0).toUpperCase(),
-          gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+          gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+          confirmButtonText: 'Reply 💬',
+          timer: false,
+          onConfirm: () => navigate(chatPath)
         });
       }
     };
@@ -1223,13 +1493,16 @@ const Layout = () => {
       setChatCount(prev => prev + 1);
 
       if (!location.pathname.includes('/chat')) {
-        showGlossyChatNotification({
+        showGlossyNotification({
           typeLabel: 'Group Chat',
           title: data.groupName || 'Chat Group',
           subtitle: `Sent by ${data.senderName}`,
           text: data.text,
           iconLetter: (data.groupName || 'G').charAt(0).toUpperCase(),
-          gradient: 'linear-gradient(135deg, #a855f7, #ec4899)'
+          gradient: 'linear-gradient(135deg, #a855f7, #ec4899)',
+          confirmButtonText: 'Reply 💬',
+          timer: false,
+          onConfirm: () => navigate(chatPath)
         });
       }
     };
@@ -1239,64 +1512,64 @@ const Layout = () => {
       setChatCount(prev => prev + 1);
 
       if (!location.pathname.includes('/chat')) {
-        showGlossyChatNotification({
+        showGlossyNotification({
           typeLabel: 'Batch Channel',
           title: data.batchName || 'Academic Batch',
           subtitle: `Sent by ${data.senderName}`,
           text: data.text,
           iconLetter: '#',
-          gradient: 'linear-gradient(135deg, #3b82f6, #06b6d4)'
+          gradient: 'linear-gradient(135deg, #3b82f6, #06b6d4)',
+          confirmButtonText: 'Open Chat 💬',
+          timer: false,
+          onConfirm: () => navigate(chatPath)
         });
       }
     };
 
     const handleAnnouncementNotif = (data) => {
       soundManager.playNotification();
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'warning',
-        title: `📢 Announcement: ${data.title}`,
+      showGlossyNotification({
+        typeLabel: 'Announcement',
+        title: data.title ? `📢 ${data.title}` : '📢 Broadcast Announcement',
+        subtitle: data.senderName ? `By ${data.senderName}` : 'Academic Announcement',
         text: data.text,
-        timer: 6000,
-        background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
-        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
+        iconLetter: '📢',
+        gradient: 'linear-gradient(135deg, #f59e0b, #ef4444)',
+        confirmButtonText: 'View Chat 💬',
+        timer: 8000,
+        onConfirm: () => navigate(chatPath)
       });
     };
 
     const handleFriendRequestReceived = (data) => {
       setFriendRequestsCount(prev => prev + 1);
       soundManager.playNotification();
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: `🤝 Friend Request Received`,
-        text: `${data.requester.name} (${data.requester.rollNumber || 'Student'}) sent you a friend request. Accept in Connections or Chat to unlock private messaging!`,
-        timer: 6000,
-        showConfirmButton: true,
-        confirmButtonText: 'View Connections',
-        background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
-        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          navigate('/student/connections');
-        }
+      showGlossyNotification({
+        typeLabel: 'Friend Request',
+        title: data.requester.name,
+        subtitle: data.requester.rollNumber ? `Roll: ${data.requester.rollNumber}` : 'Student Connection',
+        text: 'Sent you a friend request. Accept in Connections or Chat to unlock private messaging!',
+        iconLetter: '🤝',
+        gradient: 'linear-gradient(135deg, #3b82f6, #10b981)',
+        confirmButtonText: 'View Request 🤝',
+        timer: 8000,
+        onConfirm: () => navigate(user?.role === 'student' ? '/student/connections' : '/')
       });
     };
 
     const handleFriendRequestAccepted = (data) => {
       soundManager.playSuccess();
       setFriendRequestsCount(prev => Math.max(0, prev - 1));
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: `🎉 Friend Request Accepted!`,
-        text: `You and ${data.friend.name} are now friends. Private chat and coin sharing unlocked!`,
-        timer: 6000,
-        background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
-        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
+      showGlossyNotification({
+        typeLabel: 'Friend Connected',
+        title: data.friend.name,
+        subtitle: 'Connection Accepted',
+        text: `You and ${data.friend.name} are now friends! 1-on-1 private messaging and coin sharing are now unlocked.`,
+        iconLetter: '🎉',
+        gradient: 'linear-gradient(135deg, #10b981, #06b6d4)',
+        confirmButtonText: 'Message Friend 💬',
+        timer: 8000,
+        onConfirm: () => navigate(chatPath)
       });
     };
 
@@ -1307,57 +1580,62 @@ const Layout = () => {
       } else if (typeof data.amount === 'number') {
         setUserCoins(prev => prev + data.amount);
       }
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: `🪙 Coins Received!`,
-        text: `${data.sender?.name || 'A friend'} shared ${data.amount} coins with you!`,
-        timer: 6000,
-        background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
-        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
+      showGlossyNotification({
+        typeLabel: 'Coins Received',
+        title: `+${data.amount} Coins 🪙`,
+        subtitle: data.sender?.name || 'SSMS Rewards',
+        text: data.reason || `${data.sender?.name || 'A friend'} shared ${data.amount} gamification coins with you!`,
+        iconLetter: '🪙',
+        gradient: 'linear-gradient(135deg, #f59e0b, #d97706)',
+        confirmButtonText: user?.role === 'student' ? 'Shop Rewards 🛍️' : 'View Coins',
+        timer: 7000,
+        onConfirm: () => navigate(user?.role === 'student' ? '/student/shop' : '/gamification')
       });
     };
 
     const handleNewTaskAssigned = (data) => {
       soundManager.playNotification();
       fetchCounts();
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'info',
-        title: '📋 New Task Assigned',
-        text: data?.title ? `"${data.title}" has been assigned!` : 'A new task has been assigned to your batch.',
-        timer: 7000,
-        showConfirmButton: true,
-        confirmButtonText: 'View Task',
-        background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
-        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          navigate(user?.role === 'student' ? '/student/tasks' : '/tasks');
-        }
+      showGlossyNotification({
+        typeLabel: 'New Task Assigned',
+        title: data?.title || 'Academic Task Assigned',
+        subtitle: data?.batchName || 'Your Batch',
+        text: data?.title ? `"${data.title}" has been published! Complete it to earn 10x marks in coins.` : 'A new task has been assigned to your batch.',
+        iconLetter: '📋',
+        gradient: 'linear-gradient(135deg, #6366f1, #3b82f6)',
+        actionText: 'View Task',
+        taskId: data?._id || data?.taskId,
+        taskTitle: data?.title,
+        type: 'task',
+        onConfirm: () => navigateToNotificationTarget({
+          type: 'task',
+          title: data?.title || 'New Task Assigned',
+          text: data?.title || '',
+          taskId: data?._id || data?.taskId,
+          taskTitle: data?.title
+        })
       });
     };
 
     const handleTaskGraded = (data) => {
       soundManager.playNotification();
       fetchCounts();
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: '✅ Task Graded',
-        text: data?.title ? `Your submission for "${data.title}" was reviewed!` : 'Your task submission was reviewed.',
-        timer: 7000,
-        showConfirmButton: true,
-        confirmButtonText: 'View Grades',
-        background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
-        color: document.documentElement.classList.contains('dark') ? '#ffffff' : '#000000'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          navigate('/student/grades');
-        }
+      showGlossyNotification({
+        typeLabel: 'Task Graded',
+        title: data?.title || 'Task Reviewed',
+        subtitle: data?.marksObtained !== undefined ? `Score: ${data.marksObtained} / ${data.maxMarks || 100}` : 'Evaluated by Mentor',
+        text: data?.title ? `Your submission for "${data.title}" was reviewed by your mentor!` : 'Your task submission was reviewed.',
+        iconLetter: '✅',
+        gradient: 'linear-gradient(135deg, #10b981, #059669)',
+        actionText: 'View Grades',
+        taskId: data?.taskId,
+        taskTitle: data?.title,
+        type: 'grade',
+        onConfirm: () => navigateToNotificationTarget({
+          type: 'grade',
+          title: data?.title || 'Task Graded',
+          taskId: data?.taskId
+        })
       });
     };
 
@@ -2214,10 +2492,20 @@ const Layout = () => {
                   <div className="max-h-72 sm:max-h-80 overflow-y-auto custom-scrollbar">
                     {notifications.length > 0 ? (
                       notifications.map(notif => (
-                        <div key={notif.id} className="p-3 sm:p-4 border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors relative group">
+                        <div 
+                          key={notif.id} 
+                          onClick={() => {
+                            setShowNotifications(false);
+                            navigateToNotificationTarget(notif);
+                          }}
+                          className="p-3 sm:p-4 border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors relative group cursor-pointer"
+                        >
                           <button
-                            onClick={() => clearNotification(notif.id)}
-                            className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 sm:opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              clearNotification(notif.id);
+                            }}
+                            className="absolute top-3 right-3 text-slate-300 hover:text-rose-500 sm:opacity-0 group-hover:opacity-100 transition-opacity p-1 z-10"
                             aria-label="Mark as read"
                           >
                             <X size={14} />
@@ -2496,7 +2784,7 @@ const Layout = () => {
                 </div>
               </div>
               {(gamificationData?.equippedPet || user?.equippedPet) && (
-                <div className="absolute -bottom-1 -right-1 bg-white dark:bg-slate-850 shadow-md border border-slate-200 dark:border-slate-700/60 rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center text-[10px] sm:text-xs animate-bounce" style={{ zIndex: 10 }} title={`Pet: ${gamificationData?.equippedPet || user?.equippedPet}`}>
+                <div className="absolute -bottom-1 -right-1 bg-white dark:bg-slate-800 shadow-md border border-slate-200 dark:border-slate-700/60 rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center text-[10px] sm:text-xs animate-bounce" style={{ zIndex: 10 }} title={`Pet: ${gamificationData?.equippedPet || user?.equippedPet}`}>
                   {PET_EMOJIS[gamificationData?.equippedPet || user?.equippedPet] || '🐾'}
                 </div>
               )}
@@ -2535,9 +2823,9 @@ const Layout = () => {
                 </div>
               )}
               <Outlet context={{ 
-                sessionActive, startSession, endSession, sessionSeconds, formatTime, isCheckingIn, activeLeaveStatus,
+                sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus,
                 themeColor, activeTheme: themes.find(t => t.name === themeColor) || themes[0],
-                userCoins, gamificationData, fetchCounts
+                userCoins, gamificationData, fetchCounts, showGlossyNotification
               }} />
             </div>
           );
@@ -2690,6 +2978,150 @@ const Layout = () => {
       </div>
       {/* Global Academic Batch Selection Modal for Admin & Mentor */}
       {(user?.role === 'admin' || user?.role === 'mentor') && <BatchSelectionModal />}
+
+      {/* Floating Frosted Glass Notification Stack (macOS / iOS Notification Center Style) */}
+      {toastStack.length > 0 && (
+        <aside 
+          aria-label="Notification Stack" 
+          className="fixed top-16 sm:top-20 right-3 sm:right-6 z-[99999] flex flex-col gap-2.5 w-[360px] max-w-[calc(100vw-2rem)] pointer-events-none animate-in fade-in slide-in-from-top-4 duration-300"
+        >
+          {/* Stacked Cards Container - Limited to 3 visible cards max, grouped if more */}
+          <div className="flex flex-col gap-2.5 max-h-[75vh] overflow-y-auto no-scrollbar pr-0.5 pb-1">
+            {/* Show top 2 latest notifications if more than 3, otherwise up to 3 */}
+            {toastStack.slice(0, toastStack.length > 3 ? 2 : 3).map((toast) => (
+              <div
+                key={toast.id}
+                onClick={() => handleToastClick(toast)}
+                className="pointer-events-auto shrink-0 relative overflow-hidden rounded-2xl bg-slate-900/85 dark:bg-slate-950/90 backdrop-blur-3xl border border-white/15 shadow-[0_14px_40px_-6px_rgba(0,0,0,0.7)] hover:shadow-[0_18px_48px_-4px_rgba(0,0,0,0.85)] p-3.5 transition-all duration-200 hover:scale-[1.01] hover:border-white/25 cursor-pointer animate-in fade-in slide-in-from-top-3 select-none min-h-[76px]"
+              >
+                {/* Ambient glow matching notification gradient */}
+                <div 
+                  className="absolute -top-10 -right-10 w-28 h-28 rounded-full blur-2xl opacity-25 pointer-events-none"
+                  style={{ background: toast.gradient || 'linear-gradient(135deg, #6366f1, #d946ef)' }}
+                />
+
+                <div className="relative z-10 flex items-start gap-3">
+                  {/* Left App / Source Squircle Icon */}
+                  <div 
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-extrabold text-base shrink-0 shadow-md ring-1 ring-white/20"
+                    style={{ background: toast.gradient || 'linear-gradient(135deg, #6366f1, #d946ef)' }}
+                  >
+                    {toast.iconLetter || '💬'}
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="flex-1 min-w-0 pr-6">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-[13px] font-bold text-white truncate leading-tight">
+                        {toast.title}
+                      </h4>
+                      <span className="text-[10px] font-medium text-slate-400 font-mono shrink-0">
+                        {formatNotifTime(toast.time)}
+                      </span>
+                    </div>
+
+                    {toast.subtitle && (
+                      <p className="text-[11px] font-semibold text-indigo-300 dark:text-indigo-400 truncate mt-0.5">
+                        {toast.subtitle}
+                      </p>
+                    )}
+
+                    <p className="text-xs text-slate-200 leading-snug line-clamp-2 mt-1 break-words">
+                      {toast.text}
+                    </p>
+
+                    {toast.actionText && (
+                      <div className="mt-2.5 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToastClick(toast);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-white/15 hover:bg-white/25 active:bg-white/35 text-white border border-white/20 shadow-xs transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                        >
+                          <span>{toast.actionText}</span>
+                          <span className="text-xs leading-none">→</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Close X Button */}
+                  <button
+                    onClick={(e) => handleToastClose(e, toast.id)}
+                    className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-white/10 hover:bg-rose-500/80 hover:text-white text-slate-300 flex items-center justify-center transition-all cursor-pointer z-20"
+                    title="Dismiss notification"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {/* If more than 3 notifications, show iOS-style stacked grouping card */}
+            {toastStack.length > 3 && (
+              <div
+                onClick={() => {
+                  const hasSubmissions = toastStack.some(t => t.type?.includes('submission') || t.title?.toLowerCase().includes('submission') || t.text?.toLowerCase().includes('submitted'));
+                  if (hasSubmissions && (user?.role === 'admin' || user?.role === 'mentor')) {
+                    navigate('/reviews');
+                  } else if (user?.role === 'student') {
+                    navigate('/student/tasks');
+                  } else {
+                    setShowNotifications(true);
+                  }
+                }}
+                className="pointer-events-auto shrink-0 group relative overflow-hidden rounded-2xl bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-3xl border border-white/20 shadow-[0_14px_40px_-6px_rgba(0,0,0,0.75)] p-3.5 transition-all duration-200 hover:scale-[1.01] hover:border-white/30 cursor-pointer animate-in fade-in select-none min-h-[76px]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-pink-500 flex items-center justify-center text-white font-extrabold text-sm shrink-0 shadow-md ring-1 ring-white/20">
+                    +{toastStack.length - 2}
+                  </div>
+                  <div className="flex-1 min-w-0 pr-2">
+                    <div className="flex items-center justify-between gap-1">
+                      <h4 className="text-[13px] font-bold text-white truncate">
+                        +{toastStack.length - 2} More Notifications
+                      </h4>
+                      <span className="text-[10px] text-slate-400 font-mono">Earlier</span>
+                    </div>
+                    <p className="text-xs text-slate-300 truncate mt-0.5">
+                      {toastStack.some(t => t.type?.includes('submission') || t.title?.toLowerCase().includes('submission'))
+                        ? `${toastStack.length - 2} student submissions waiting for review`
+                        : `${toastStack.length - 2} additional notifications in stack`
+                      }
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-[11px] font-bold bg-white/15 hover:bg-white/25 active:bg-white/35 text-white border border-white/25 shadow-md transition-all group-hover:scale-105"
+                  >
+                    <span>View All</span>
+                    <span className="text-xs leading-none">→</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Floating Action Bar matching reference screenshot (Clear All pill + circular (X) button) */}
+          <div className="flex items-center justify-center gap-2 pt-0.5 pointer-events-auto">
+            <button
+              onClick={clearAllToasts}
+              className="px-3.5 py-1 rounded-full bg-slate-900/80 dark:bg-black/60 hover:bg-slate-800/95 text-slate-200 hover:text-white text-xs font-semibold backdrop-blur-2xl border border-white/15 shadow-lg transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1.5"
+            >
+              <span>Clear All</span>
+            </button>
+            <button
+              onClick={clearAllToasts}
+              className="w-7 h-7 rounded-full bg-slate-900/80 dark:bg-black/60 hover:bg-rose-500/90 text-slate-300 hover:text-white backdrop-blur-2xl border border-white/15 shadow-lg flex items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer"
+              title="Clear all notifications"
+            >
+              <X size={13} className="stroke-[2.5]" />
+            </button>
+          </div>
+        </aside>
+      )}
     </div>
   );
 };

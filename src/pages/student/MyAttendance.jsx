@@ -73,6 +73,7 @@ const MyAttendance = () => {
 
     // 2. Calculate the finalized status for each DAY
     Object.values(dailyMap).forEach(day => {
+      if (day.status && day.status !== 'In Progress') return; // Keep authoritative backend evaluation
       const reqHours = day.requiredPresentHours !== undefined ? day.requiredPresentHours : (day.workHours || 4);
       const maxHours = day.maxValidHours !== undefined ? day.maxValidHours : 10;
       const hours = day.totalSeconds / 3600;

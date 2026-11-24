@@ -72,6 +72,7 @@ const AttendanceTracker = () => {
   const getCellAttendanceStatus = (studentId, dateStr) => {
     const record = attendanceMap[studentId]?.[dateStr];
     if (record) {
+      if (record.status) return record.status;
       if ((record.isLeave || record.status === 'Leave') && (record.leaveHours || 0) === 0) {
         return 'Leave';
       }

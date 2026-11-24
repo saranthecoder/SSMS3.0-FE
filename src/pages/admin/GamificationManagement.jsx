@@ -511,7 +511,7 @@ const GamificationManagement = () => {
               className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl border transition-all cursor-pointer whitespace-nowrap ${
                 activeCategoryTab === 'All'
                   ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900 border-transparent shadow-md'
-                  : 'bg-white dark:bg-slate-850 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700'
               }`}
             >
               All ({items.length})
@@ -525,7 +525,7 @@ const GamificationManagement = () => {
                   className={`px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-xl border flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
                     activeCategoryTab === key
                       ? 'bg-theme-primary text-white border-transparent shadow-md'
-                      : 'bg-white dark:bg-slate-850 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800'
+                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700'
                   }`}
                 >
                   <span>{details.icon}</span>

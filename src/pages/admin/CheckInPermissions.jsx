@@ -383,7 +383,7 @@ const CheckInPermissions = () => {
           </div>
           
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-2.5 bg-white dark:bg-slate-850 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+            <div className="flex items-center gap-2.5 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
               <Clock size={15} className="text-emerald-500 shrink-0" />
               <div className="flex items-center gap-1">
                 <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Min:</span>

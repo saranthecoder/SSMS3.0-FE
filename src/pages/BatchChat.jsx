@@ -791,38 +791,13 @@ const BatchChat = () => {
       }
     };
 
-    const handleFriendReqReceived = (data) => {
-      soundManager.playNotification();
+    const handleFriendReqReceived = () => {
       fetchFriendsData();
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'info',
-        title: '🤝 Friend Request Received',
-        text: `${data.requester.name} sent you a friend request. Accept to start private chat!`,
-        timer: 5000,
-        showConfirmButton: true,
-        confirmButtonText: 'View'
-      }).then((res) => {
-        if (res.isConfirmed) {
-          setIsFriendsModalOpen(true);
-          setFriendModalTab('incoming');
-        }
-      });
     };
 
-    const handleFriendReqAccepted = (data) => {
-      soundManager.playSuccess();
+    const handleFriendReqAccepted = () => {
       fetchFriendsData();
       loadChatData();
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: '🎉 Friend Request Accepted!',
-        text: `You and ${data.friend.name} are now friends! Private chat & coin sharing unlocked.`,
-        timer: 5000
-      });
     };
 
     const handleMessagesRead = (data) => {

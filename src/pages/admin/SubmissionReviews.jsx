@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import 'react-quill-new/dist/quill.snow.css';
@@ -23,6 +24,8 @@ const formatDateTime = (dateString) => {
 };
 
 const SubmissionReviews = () => {
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
   const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -119,6 +122,42 @@ const SubmissionReviews = () => {
   };
 
   useEffect(() => { fetchData(); }, [selectedBatchId]);
+
+  useEffect(() => {
+    const urlSearch = searchParams.get('search') || searchParams.get('taskTitle') || location.state?.search || location.state?.taskTitle || '';
+    if (urlSearch) {
+      setSearchQuery(urlSearch);
+    }
+  }, [searchParams, location.state]);
+
+  // When submissions load, auto-open target submission if specified
+  useEffect(() => {
+    const targetSubId = searchParams.get('submissionId') || location.state?.submissionId;
+    if (targetSubId) {
+      const match = submissions.find(s => s._id === targetSubId);
+      if (match) {
+        openReviewModal(match);
+      } else if (!loading) {
+        axios.get(`/submissions/${targetSubId}`)
+          .then(res => {
+            if (res.data) openReviewModal(res.data);
+          })
+          .catch(() => {});
+      }
+    } else {
+      const urlSearch = (searchParams.get('search') || searchParams.get('taskTitle') || location.state?.search || location.state?.taskTitle || '').trim().toLowerCase();
+      if (urlSearch && submissions.length > 0 && !activeReview) {
+        const match = submissions.find(s => 
+          (s.taskId?.title || '').toLowerCase() === urlSearch ||
+          (s.studentId?.name || '').toLowerCase() === urlSearch ||
+          (s.taskId?.title || '').toLowerCase().includes(urlSearch)
+        );
+        if (match) {
+          openReviewModal(match);
+        }
+      }
+    }
+  }, [submissions, searchParams, location.state]);
 
   const openReviewModal = async (sub) => {
     setActiveReview(sub);

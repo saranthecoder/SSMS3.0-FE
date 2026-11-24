@@ -68,40 +68,16 @@ const StudentConnections = () => {
   useEffect(() => {
     if (!socket) return;
 
-    const handleReqReceived = (data) => {
+    const handleReqReceived = () => {
       fetchConnectionsData(true);
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'info',
-        title: 'New Friend Request!',
-        text: `${data.requester?.name || 'A classmate'} sent you a connection request.`,
-        showConfirmButton: false,
-        timer: 4000
-      });
     };
 
-    const handleReqAccepted = (data) => {
+    const handleReqAccepted = () => {
       fetchConnectionsData(true);
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: 'Connection Accepted! 🎉',
-        text: `You and ${data.friend?.name || 'your classmate'} are now connected. Private chat and coin sharing unlocked!`,
-        showConfirmButton: false,
-        timer: 5000
-      });
     };
 
     const handleCoinsReceived = (data) => {
       if (typeof data.newCoins === 'number') setUserCoins(data.newCoins);
-      Swal.fire({
-        icon: 'success',
-        title: '🪙 Coins Received!',
-        html: `<b>${data.sender?.name || 'A friend'}</b> shared <b>${data.amount} Coins</b> with you!`,
-        confirmButtonColor: 'var(--color-theme-primary)'
-      });
     };
 
     const handleFriendRemoved = () => {
