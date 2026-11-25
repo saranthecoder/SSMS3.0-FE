@@ -10,6 +10,7 @@ const AttendanceTracker = () => {
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState([]);
   const [attendanceData, setAttendanceData] = useState([]);
+  const [fetchError, setFetchError] = useState(false);
   
   const activeBatchId = selectedBatchId !== 'all' ? selectedBatchId : (batchesList[0]?._id || '');
 
@@ -22,9 +23,12 @@ const AttendanceTracker = () => {
   // Sorting
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
 
-  const fetchAttendanceData = async () => {
+  const fetchAttendanceData = async (attempt = 0) => {
     if (!activeBatchId) return;
-    setLoading(true);
+    if (attempt === 0) {
+      setLoading(true);
+      setFetchError(false);
+    }
     try {
       const [studentsRes, attendanceRes] = await Promise.all([
         axios.get(`/tasks/tracker/${activeBatchId}`), // Fetch students using the tracker endpoint
@@ -38,10 +42,16 @@ const AttendanceTracker = () => {
         setStudents(allStudents);
       }
       setAttendanceData(attendanceRes.data || []);
+      setFetchError(false);
+      setLoading(false);
     } catch (error) {
       console.error('Failed to fetch attendance tracker data', error);
-    } finally {
-      setLoading(false);
+      if (attempt < 2) {
+        setTimeout(() => fetchAttendanceData(attempt + 1), 1200);
+      } else {
+        setFetchError(true);
+        setLoading(false);
+      }
     }
   };
 
@@ -410,6 +420,13 @@ const AttendanceTracker = () => {
 
         {loading && activeBatchId ? (
           <SkeletonLoader type="table" />
+        ) : fetchError ? (
+          <div className="p-8 text-center space-y-3 bg-white dark:bg-slate-800 rounded-2xl border border-rose-200 dark:border-rose-800/50">
+            <p className="text-sm font-bold text-rose-500">Unable to load attendance data right now.</p>
+            <button onClick={() => fetchAttendanceData(0)} className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl cursor-pointer">
+              Retry Now
+            </button>
+          </div>
         ) : students.length === 0 ? (
           <div className="p-12 text-center text-slate-500 font-medium bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">No attendance data found for this batch.</div>
         ) : (
@@ -703,6 +720,13 @@ const AttendanceTracker = () => {
       <div className="glass-panel p-0 overflow-hidden border border-slate-200 dark:border-slate-700/50 rounded-xl relative shadow-sm">
         {loading && activeBatchId ? (
           <SkeletonLoader type="table" />
+        ) : fetchError ? (
+          <div className="p-8 text-center space-y-3 bg-white dark:bg-slate-800 rounded-2xl border border-rose-200 dark:border-rose-800/50">
+            <p className="text-sm font-bold text-rose-500">Unable to load attendance data right now.</p>
+            <button onClick={() => fetchAttendanceData(0)} className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl cursor-pointer">
+              Retry Now
+            </button>
+          </div>
         ) : students.length === 0 ? (
           <div className="p-12 text-center text-slate-500 font-medium">No students found in this batch.</div>
         ) : (

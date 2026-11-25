@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
+import Swal from 'sweetalert2';
 import {
   getPrimaryEnvServer,
   selectBackendNode,
@@ -8,7 +9,8 @@ import {
   getFallbackServer,
   normalizeUrl,
   recordNodeFailure,
-  recordNodeSuccess
+  recordNodeSuccess,
+  resetClientHealthRegistry
 } from '../utils/trafficRouter';
 
 // Set global axios defaults
@@ -21,6 +23,10 @@ const AuthContext = createContext();
 export const useAuth = () => useContext(AuthContext);
 
 let rrIndex = 0; // Round-robin index counter
+let consecutiveGlobalFailures = 0;
+let lastOutagePopupAt = 0;
+const OUTAGE_FAILURE_THRESHOLD = 2;
+const OUTAGE_POPUP_COOLDOWN_MS = 3 * 60 * 1000;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -74,38 +80,46 @@ export const AuthProvider = ({ children }) => {
       const uniqueCandidates = [...new Set(candidates.map(u => normalizeUrl(u)))];
 
       let data = null;
+      let legacyFallback = null;
       for (const baseUrl of uniqueCandidates) {
         try {
-          const res = await axios.get(`${baseUrl}/api/traffic/public-config`, { timeout: 4000 });
-          if (res.data && res.data.servers) {
-            data = res.data;
-            break;
+          const res = await axios.get(`${baseUrl}/api/traffic/public-config`, { timeout: 4000, _skipOutagePopup: true });
+          if (res.data && Array.isArray(res.data.servers)) {
+            if (res.data.apiVersion || typeof res.data.cpuThreshold === 'number') {
+              data = res.data;
+              break;
+            }
+            if (!legacyFallback) legacyFallback = res.data;
           }
         } catch (e) {
           // ignore & try next candidate
         }
       }
+      if (!data) data = legacyFallback;
 
       if (!data) return;
 
       setTrafficConfig(prev => {
+        const normalizedPrimaryUrl = normalizeUrl(primaryServer.url);
         const dbServers = (data.servers || []).map(dbS => {
           const cleanUrl = normalizeUrl(dbS.url);
-          const isPrimary = cleanUrl === normalizeUrl(primaryServer.url);
+          const isPrimary = cleanUrl === normalizedPrimaryUrl || Boolean(dbS.isPrimary);
           return {
             id: dbS.id || dbS._id,
-            name: isPrimary ? primaryServer.name : dbS.name,
+            name: dbS.name || (cleanUrl === normalizedPrimaryUrl ? primaryServer.name : cleanUrl),
             url: cleanUrl,
-            isPrimary: isPrimary,
+            isPrimary,
             status: dbS.status || 'unknown',
+            isStale: Boolean(dbS.isStale),
+            lastHealthCheck: dbS.lastHealthCheck || null,
             responseTime: dbS.responseTime || 0,
-            cpuUsage: dbS.cpuUsage || 0,
+            cpuUsage: dbS.cpuUsage ?? null,
             isActive: dbS.isActive !== undefined ? dbS.isActive : true
           };
         });
 
-        const secondaryServers = dbServers.filter(s => normalizeUrl(s.url) !== normalizeUrl(primaryServer.url));
-        const merged = [primaryServer, ...secondaryServers];
+        // Respect DB status/activation for all nodes including primary; only fall back to env primary if DB list is empty
+        const merged = dbServers.length > 0 ? dbServers : [primaryServer];
 
         // Ensure active policy from DB applies directly to student traffic
         const nextConfig = {
@@ -197,8 +211,11 @@ export const AuthProvider = ({ children }) => {
         } catch (e) {}
       }
 
-      // Skip dynamic node routing if URL is already absolute (e.g. cloud upload, external webhook, direct ping)
-      if (config.url && (config.url.startsWith('http://') || config.url.startsWith('https://'))) {
+      // Skip dynamic node routing if URL is already absolute OR if this is a failover retry pinned to a fallback node
+      if (
+        (config.url && (config.url.startsWith('http://') || config.url.startsWith('https://'))) ||
+        (config._retryCount > 0 && config.baseURL)
+      ) {
         return config;
       }
 
@@ -229,6 +246,7 @@ export const AuthProvider = ({ children }) => {
     const responseInterceptor = axios.interceptors.response.use(
       (response) => {
         // Record node success to clear cooldown upon recovery
+        consecutiveGlobalFailures = 0;
         if (response.config && response.config.baseURL) {
           recordNodeSuccess(response.config.baseURL);
         }
@@ -236,19 +254,18 @@ export const AuthProvider = ({ children }) => {
       },
       async (error) => {
         const originalRequest = error.config;
-        if (originalRequest && originalRequest.baseURL) {
-          const status = error.response?.status;
-          const isNodeOrEdgeFailure =
-            !error.response ||
-            status >= 500 ||
-            status === 429 ||
-            (status === 403 && !error.response?.data?.isBlocked && !error.response?.data?.isSuspended);
-          if (isNodeOrEdgeFailure) {
-            recordNodeFailure(originalRequest.baseURL, error);
-          }
+        const status = error.response?.status;
+        const isNodeOrEdgeFailure =
+          !error.response ||
+          status >= 500 ||
+          status === 429 ||
+          (status === 403 && !error.response?.data?.isBlocked && !error.response?.data?.isSuspended);
+
+        if (originalRequest && originalRequest.baseURL && isNodeOrEdgeFailure) {
+          recordNodeFailure(originalRequest.baseURL, error);
         }
 
-        // Idempotency check: only retry GET/HEAD/OPTIONS requests on network drops or 502-504 gateway failures
+        // Idempotency check: only retry GET/HEAD/OPTIONS requests on network drops or server/edge failures
         if (originalRequest && shouldRetryRequest(error, originalRequest)) {
           originalRequest._retryCount = (originalRequest._retryCount || 0) + 1;
 
@@ -260,6 +277,47 @@ export const AuthProvider = ({ children }) => {
             originalRequest.baseURL = `${normalizeUrl(fallbackServer.url)}/api`;
             console.warn(`Idempotent request failed on ${currentBaseURL}. Retrying on fallback node: ${fallbackServer.name} (${fallbackServer.url})`);
             return axios(originalRequest);
+          }
+        }
+
+        // Surface a helpful calm popup when all servers or repeated requests fail so users know to wait 5-10 min
+        if (isNodeOrEdgeFailure && !originalRequest?._skipOutagePopup && !axios.isCancel?.(error)) {
+          consecutiveGlobalFailures += 1;
+          const currentConfig = trafficConfigRef.current;
+          const primaryServer = getPrimaryEnvServer();
+          const { allNodesUnavailable } = selectBackendNode({
+            policy: currentConfig.policy,
+            servers: currentConfig.servers,
+            manualSelectedServerId: currentConfig.manualSelectedServerId,
+            cpuThreshold: currentConfig.cpuThreshold,
+            rrIndex,
+            isOnWebDomain,
+            primaryUrl: primaryServer.url
+          });
+
+          const now = Date.now();
+          if (
+            (allNodesUnavailable || consecutiveGlobalFailures >= OUTAGE_FAILURE_THRESHOLD) &&
+            !Swal.isVisible() &&
+            now - lastOutagePopupAt > OUTAGE_POPUP_COOLDOWN_MS
+          ) {
+            lastOutagePopupAt = now;
+            Swal.fire({
+              icon: 'warning',
+              title: 'Server Temporarily Unavailable',
+              html: '<p style="font-size:14px;line-height:1.6;">Our servers are currently experiencing a temporary issue or restarting.<br/><br/>Please wait <strong>5 to 10 minutes</strong> before refreshing the page. Your saved progress and attendance records remain safe.</p>',
+              confirmButtonText: 'OK, I Will Wait',
+              showDenyButton: true,
+              denyButtonText: 'Retry Connection',
+              confirmButtonColor: '#10b981',
+              denyButtonColor: '#6366f1'
+            }).then((result) => {
+              if (result.isDenied) {
+                consecutiveGlobalFailures = 0;
+                resetClientHealthRegistry();
+                refreshTrafficConfig();
+              }
+            });
           }
         }
         return Promise.reject(error);

@@ -105,7 +105,7 @@ const format12HourDateTime = (dateString) => {
 const StudentDashboard = () => {
   const { user, customPanelName, customPanelSubheading } = useAuth();
   const { 
-    sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, checkInAccess: contextCheckInAccess, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus, isSyncing, attendanceSynced,
+    sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, checkInAccess: contextCheckInAccess, attendanceLimits, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus, isSyncing, attendanceSynced,
     themeColor, activeTheme, userCoins, gamificationData, fetchCounts
   } = useOutletContext();
   const [analytics, setAnalytics] = useState(() => {
@@ -676,10 +676,10 @@ const StudentDashboard = () => {
                 (effectiveMode === 'wfh' && onsiteSeconds > 0) ||
                 (effectiveMode === 'on-site' && wfhSeconds > 0)
               );
-              const onsiteMin = Number(dw.onsiteMinHours || checkInAccess.onsiteMinHours || checkInAccess.policy?.onsiteMinHours || 2);
-              const onsiteMax = Number(dw.onsiteMaxHours || checkInAccess.onsiteMaxHours || checkInAccess.policy?.onsiteMaxHours || 10);
-              const wfhMin = Number(dw.wfhMinHours || checkInAccess.wfhMinHours || checkInAccess.policy?.wfhMinHours || 3);
-              const wfhMax = Number(dw.wfhMaxHours || checkInAccess.wfhMaxHours || checkInAccess.policy?.wfhMaxHours || 10);
+              const onsiteMin = Number(dw.onsiteMinHours || checkInAccess.onsiteMinHours || attendanceLimits?.onsiteMinHours || checkInAccess.policy?.onsiteMinHours || 2);
+              const onsiteMax = Number(dw.onsiteMaxHours || checkInAccess.onsiteMaxHours || attendanceLimits?.onsiteMaxHours || checkInAccess.policy?.onsiteMaxHours || 10);
+              const wfhMin = Number(dw.wfhMinHours || checkInAccess.wfhMinHours || attendanceLimits?.wfhMinHours || checkInAccess.policy?.wfhMinHours || 3);
+              const wfhMax = Number(dw.wfhMaxHours || checkInAccess.wfhMaxHours || attendanceLimits?.wfhMaxHours || checkInAccess.policy?.wfhMaxHours || 10);
 
               const onsiteSecsReq = onsiteMin * 3600;
               const wfhSecsReq = wfhMin * 3600;

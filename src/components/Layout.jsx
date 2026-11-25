@@ -657,6 +657,7 @@ const Layout = () => {
   const [wfhSeconds, setWfhSeconds] = useState(() => initialCachedStudent?.wfhSeconds || 0);
   const [currentAccessType, setCurrentAccessType] = useState(() => initialCachedStudent?.currentAccessType || 'on-site');
   const [checkInAccess, setCheckInAccess] = useState(() => initialCachedStudent?.checkInAccess || { hasAccess: false, accessType: null });
+  const [attendanceLimits, setAttendanceLimits] = useState(() => initialCachedStudent?.attendanceLimits || null);
   const currentAccessTypeRef = useRef('on-site');
   useEffect(() => { currentAccessTypeRef.current = currentAccessType; }, [currentAccessType]);
   const [isSyncing, setIsSyncing] = useState(user?.role === 'student');
@@ -1278,13 +1279,24 @@ const Layout = () => {
         }
         setCurrentAccessType(activeMode);
 
+        const nextLimits = {
+          onsiteMinHours: primaryRecord.onsiteMinHours,
+          onsiteMaxHours: primaryRecord.onsiteMaxHours,
+          wfhMinHours: primaryRecord.wfhMinHours,
+          wfhMaxHours: primaryRecord.wfhMaxHours,
+          onsiteAllocated: Boolean(primaryRecord.onsiteAllocated || baseOnsite > 0),
+          wfhAllocated: Boolean(primaryRecord.wfhAllocated || baseWfh > 0)
+        };
+        setAttendanceLimits(nextLimits);
+
         try {
           sessionStorage.setItem(`ssms_student_session_${user._id}_${todayStr}`, JSON.stringify({
             onsiteSeconds: baseOnsite,
             wfhSeconds: baseWfh,
             sessionSeconds: targetSessionSeconds,
             currentAccessType: activeMode,
-            checkInAccess: resolvedAccess
+            checkInAccess: resolvedAccess,
+            attendanceLimits: nextLimits
           }));
         } catch {}
       } else {
@@ -2983,7 +2995,7 @@ const Layout = () => {
                 </div>
               )}
               <Outlet context={{ 
-                sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, checkInAccess, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus, isSyncing, attendanceSynced,
+                sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, checkInAccess, attendanceLimits, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus, isSyncing, attendanceSynced,
                 themeColor, activeTheme: themes.find(t => t.name === themeColor) || themes[0],
                 userCoins, gamificationData, fetchCounts, showGlossyNotification
               }} />

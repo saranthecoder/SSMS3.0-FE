@@ -1503,6 +1503,11 @@ const TrafficManagement = () => {
                               </div>
                             </div>
                           )}
+                          {server.status === 'offline' && server.failureReason && (
+                            <div className="w-full px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-[11px] font-medium text-rose-500">
+                              {server.failureReason}
+                            </div>
+                          )}
 
                           {/* Action tools */}
                           <div className="flex items-center gap-2 border-l border-slate-200 dark:border-slate-800 pl-3">
