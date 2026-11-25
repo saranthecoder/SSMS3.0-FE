@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Lock, Loader2, Users, Activity, CheckCircle, Clock, ShieldCheck, ShieldAlert, Ban, Search, Code, GitBranch, Globe, Terminal, XCircle, Layout, ArrowRight, BookOpen, TrendingUp, Cpu, BarChart3, FileText, ClipboardList, Award, Eye, Timer, UserCheck, UserX, Hash, Calendar, ChevronDown, ChevronRight, RefreshCw, GraduationCap, Briefcase, Building2, Flame, LogOut, Sun, Moon } from 'lucide-react';
+import { Lock, Loader2, Users, Activity, CheckCircle, Clock, ShieldCheck, ShieldAlert, Ban, Search, Code, GitBranch, Globe, Terminal, XCircle, Layout, ArrowRight, BookOpen, TrendingUp, Cpu, BarChart3, FileText, ClipboardList, Award, Eye, Timer, UserCheck, UserX, Hash, Calendar, ChevronDown, ChevronRight, RefreshCw, GraduationCap, Briefcase, Building2, Flame, LogOut, Sun, Moon, Home, AlertTriangle, Check, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import SkeletonLoader from '../components/SkeletonLoader';
 
@@ -346,6 +346,15 @@ const Verification = () => {
   const [syllabusBatchFilter, setSyllabusBatchFilter] = useState('');
   const [syllabusStatusFilter, setSyllabusStatusFilter] = useState('');
 
+  // Attendance Monitoring detailed date/mode state
+  const [attendanceDate, setAttendanceDate] = useState(
+    () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]
+  );
+  const [attendanceSummaryLogs, setAttendanceSummaryLogs] = useState([]);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceStatusFilter, setAttendanceStatusFilter] = useState('all'); // all, present, absent, invalid, permission, wfh, onsite
+  const [attendanceSearch, setAttendanceSearch] = useState('');
+
   const {
     stats = {},
     students = [],
@@ -390,6 +399,28 @@ const Verification = () => {
       }
     }
   }, [batches]);
+
+  const fetchMonitorAttendance = async () => {
+    if (!isAuthenticated) return;
+    setAttendanceLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (effectiveBatchFilter) params.set('batchId', effectiveBatchFilter);
+      if (attendanceDate) params.set('date', attendanceDate);
+      const { data: resData } = await axios.get(`/public/attendance/summary?${params.toString()}`);
+      setAttendanceSummaryLogs(Array.isArray(resData?.logs) ? resData.logs : []);
+    } catch (err) {
+      console.error('Error fetching monitor attendance summary:', err);
+    } finally {
+      setAttendanceLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && activeModule === 'attendance') {
+      fetchMonitorAttendance();
+    }
+  }, [isAuthenticated, activeModule, effectiveBatchFilter, attendanceDate]);
 
   const uniqueMockDrives = useMemo(() => {
     if (!mockDriveScores) return [];
@@ -1962,40 +1993,259 @@ const Verification = () => {
       );
 
       // ═══ ATTENDANCE ══════════════════════════════════════
-      case 'attendance': return (
-        <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white">Attendance Monitoring</h2>
-          <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left whitespace-nowrap">
-                <thead><tr className="bg-slate-900 text-xs uppercase tracking-wider text-slate-500">
-                  <th className="py-3 px-4 font-semibold">Student</th>
-                  <th className="py-3 px-4 font-semibold text-center">Status</th>
-                  <th className="py-3 px-4 font-semibold text-center">Days Present</th>
-                  <th className="py-3 px-4 font-semibold text-center">Total Time</th>
-                  <th className="py-3 px-4 font-semibold text-center">Avg Grade</th>
-                </tr></thead>
-                <tbody>
-                  {[...scopedStudents].sort((a, b) => (b.daysPresent || 0) - (a.daysPresent || 0)).map(s => (
-                    <tr key={s._id} className="border-t border-slate-700/50 hover:bg-slate-700/20 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-sm">{s.name.charAt(0)}</div>
-                          <div><p className="text-sm font-bold text-white">{s.name}</p><p className="text-[10px] text-slate-400 font-mono">{s.rollNumber}</p></div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold ${s.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'}`}>{s.isActive ? 'Active' : 'Offline'}</span></td>
-                      <td className="py-3 px-4 text-center font-bold text-white">{s.daysPresent}</td>
-                      <td className="py-3 px-4 text-center font-bold text-emerald-400">{formatTime(s.totalSeconds)}</td>
-                      <td className="py-3 px-4 text-center font-bold text-amber-400">{s.avgGrade}%</td>
+      case 'attendance': {
+        const studentMetaMap = new Map();
+        scopedStudents.forEach(s => studentMetaMap.set(String(s._id), s));
+
+        // Scope summary logs to allowed/selected students if no batchFilter is set
+        const allowedStudentIds = new Set(scopedStudents.map(s => String(s._id)));
+        const scopedAttLogs = attendanceSummaryLogs.filter(log =>
+          effectiveBatchFilter ? true : allowedStudentIds.has(String(log.studentId))
+        );
+
+        const attTotal = scopedAttLogs.length;
+        const attActive = scopedAttLogs.filter(l => l.isActive).length;
+        const attPresent = scopedAttLogs.filter(l => l.status === 'Present' || l.isActive).length;
+        const attAbsent = scopedAttLogs.filter(l => l.status === 'Absent' && !l.isActive && !l.isLeave).length;
+        const attInvalid = scopedAttLogs.filter(l => l.status === 'Invalid').length;
+        const attLeave = scopedAttLogs.filter(l => l.status === 'Leave' || (l.isLeave && !l.isActive && l.status !== 'Present')).length;
+        const attWfh = scopedAttLogs.filter(l => l.accessType === 'wfh' || (l.wfhSeconds || 0) > 0).length;
+
+        const filteredAttLogs = scopedAttLogs.filter(l => {
+          const q = attendanceSearch.trim().toLowerCase();
+          if (q && !(l.name || '').toLowerCase().includes(q) && !(l.rollNumber || '').toLowerCase().includes(q)) {
+            return false;
+          }
+          if (attendanceStatusFilter === 'present') return l.status === 'Present' || l.isActive;
+          if (attendanceStatusFilter === 'absent') return l.status === 'Absent' && !l.isActive && !l.isLeave;
+          if (attendanceStatusFilter === 'invalid') return l.status === 'Invalid';
+          if (attendanceStatusFilter === 'permission') return l.status === 'Leave' || (l.isLeave && !l.isActive && l.status !== 'Present');
+          if (attendanceStatusFilter === 'wfh') return l.accessType === 'wfh' || (l.wfhSeconds || 0) > 0;
+          if (attendanceStatusFilter === 'onsite') return (l.onsiteSeconds || 0) > 0 || l.accessType === 'on-site';
+          return true;
+        }).sort((a, b) => (b.totalSeconds || 0) - (a.totalSeconds || 0) || (a.name || '').localeCompare(b.name || ''));
+
+        const fmtClock = (dt) => dt ? new Date(dt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+
+        return (
+          <div className="space-y-4">
+            {/* Header & Controls */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold text-white">Attendance Monitoring</h2>
+                <p className="text-xs text-slate-400">Detailed On-Site &amp; WFH workload tracking, status filters, and date records</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {batches.length > 1 && (
+                  <select
+                    className="bg-slate-800 border border-slate-700 text-xs text-white rounded-lg py-2 px-3 focus:outline-none focus:border-indigo-500 font-semibold cursor-pointer"
+                    value={effectiveBatchFilter}
+                    onChange={(e) => setBatchFilter(e.target.value)}
+                  >
+                    <option value="">All Batches</option>
+                    {batches.map(b => <option key={b._id} value={b._id}>{b.batchName}</option>)}
+                  </select>
+                )}
+                <div className="flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5">
+                  <Calendar size={14} className="text-indigo-400 shrink-0" />
+                  <input
+                    type="date"
+                    value={attendanceDate}
+                    onChange={(e) => setAttendanceDate(e.target.value)}
+                    max={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]}
+                    className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer"
+                  />
+                </div>
+                <button
+                  onClick={fetchMonitorAttendance}
+                  disabled={attendanceLoading}
+                  className="p-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 hover:text-white cursor-pointer disabled:opacity-50"
+                  title="Refresh Date Attendance"
+                >
+                  <RefreshCw size={15} className={attendanceLoading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+            </div>
+
+            {/* Summary Stat Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-3">
+                <p className="text-[10px] uppercase font-bold text-slate-400">Strength</p>
+                <p className="text-xl font-black text-white mt-0.5">{attTotal}</p>
+              </div>
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-3">
+                <p className="text-[10px] uppercase font-bold text-emerald-400">Present</p>
+                <p className="text-xl font-black text-emerald-400 mt-0.5">{attPresent} <span className="text-[10px] font-medium text-slate-400">({attActive} active)</span></p>
+              </div>
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-3">
+                <p className="text-[10px] uppercase font-bold text-rose-400">Absent</p>
+                <p className="text-xl font-black text-rose-400 mt-0.5">{attAbsent}</p>
+              </div>
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-3">
+                <p className="text-[10px] uppercase font-bold text-amber-400">Invalid (&gt;10h)</p>
+                <p className="text-xl font-black text-amber-400 mt-0.5">{attInvalid}</p>
+              </div>
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-3">
+                <p className="text-[10px] uppercase font-bold text-indigo-400">Permission</p>
+                <p className="text-xl font-black text-indigo-400 mt-0.5">{attLeave}</p>
+              </div>
+              <div className="bg-slate-800 border border-slate-700 rounded-xl p-3">
+                <p className="text-[10px] uppercase font-bold text-cyan-400">WFH</p>
+                <p className="text-xl font-black text-cyan-400 mt-0.5">{attWfh}</p>
+              </div>
+            </div>
+
+            {/* Search & Status Filters */}
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-3 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={attendanceSearch}
+                  onChange={(e) => setAttendanceSearch(e.target.value)}
+                  placeholder="Search student name or roll number..."
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                {[
+                  { id: 'all', label: `All (${attTotal})` },
+                  { id: 'present', label: `Present (${attPresent})` },
+                  { id: 'absent', label: `Absent (${attAbsent})` },
+                  { id: 'invalid', label: `Invalid (${attInvalid})` },
+                  { id: 'permission', label: `Permission (${attLeave})` },
+                  { id: 'wfh', label: `WFH (${attWfh})` },
+                  { id: 'onsite', label: 'On-Site' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setAttendanceStatusFilter(tab.id)}
+                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer ${
+                      attendanceStatusFilter === tab.id
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Detailed Attendance Table */}
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left whitespace-nowrap">
+                  <thead>
+                    <tr className="bg-slate-900 text-xs uppercase tracking-wider text-slate-500">
+                      <th className="py-3 px-4 font-semibold">Student</th>
+                      <th className="py-3 px-4 font-semibold text-center">Day Status</th>
+                      <th className="py-3 px-4 font-semibold text-center">On-Site Workload</th>
+                      <th className="py-3 px-4 font-semibold text-center">WFH Workload</th>
+                      <th className="py-3 px-4 font-semibold text-center">Date Time &amp; In/Out</th>
+                      <th className="py-3 px-4 font-semibold text-center">Days Present / Avg</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {attendanceLoading ? (
+                      <tr>
+                        <td colSpan={6} className="py-10 text-center text-slate-400 text-xs font-semibold">
+                          <Loader2 size={20} className="animate-spin mx-auto mb-2 text-indigo-400" />
+                          Loading attendance records for {attendanceDate}...
+                        </td>
+                      </tr>
+                    ) : filteredAttLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-10 text-center text-slate-400 text-xs font-semibold">
+                          No attendance records match the current filters for {attendanceDate}.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredAttLogs.map(log => {
+                        const meta = studentMetaMap.get(String(log.studentId)) || {};
+                        const statusPillClass = log.isActive
+                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                          : log.status === 'Present'
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                            : log.status === 'Invalid'
+                              ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                              : log.status === 'Leave' || log.isLeave
+                                ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
+                                : 'bg-rose-500/20 text-rose-400 border-rose-500/30';
+
+                        return (
+                          <tr key={log._id} className="border-t border-slate-700/50 hover:bg-slate-700/20 transition-colors">
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-sm">
+                                  {(log.name || 'S').charAt(0)}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-white">{log.name}</p>
+                                  <p className="text-[10px] text-slate-400 font-mono">{log.rollNumber}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase ${statusPillClass}`}>
+                                  {log.isActive ? 'Active' : log.status === 'Leave' ? 'Permission' : log.status}
+                                </span>
+                                {log.onsiteAllocated && log.wfhAllocated && (
+                                  <span className={`text-[9px] font-bold ${log.bothMet ? 'text-emerald-400' : 'text-slate-400'}`}>
+                                    {log.bothMet ? 'Both Met' : 'Incomplete'}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              {log.onsiteAllocated ? (
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                                  log.onsiteMet ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                                }`}>
+                                  <Building2 size={12} />
+                                  {formatTime(log.onsiteSeconds)} / {log.onsiteMinHours || 4}h
+                                  {log.onsiteMet ? <Check size={12} /> : <X size={12} />}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-500">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              {log.wfhAllocated ? (
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${
+                                  log.wfhMet ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
+                                }`}>
+                                  <Home size={12} />
+                                  {formatTime(log.wfhSeconds)} / {log.wfhMinHours || 4}h
+                                  {log.wfhMet ? <Check size={12} /> : <X size={12} />}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-500">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <p className="text-xs font-bold text-emerald-400">{formatTime(log.totalSeconds)}</p>
+                              <p className="text-[10px] text-slate-400">
+                                {fmtClock(log.firstCheckIn)} – {log.isActive ? 'Active' : fmtClock(log.lastCheckOut)}
+                              </p>
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="font-bold text-white text-xs">{meta.daysPresent ?? 0}d</span>
+                              <span className="text-slate-500 mx-1">•</span>
+                              <span className="font-bold text-amber-400 text-xs">{meta.avgGrade ?? 0}%</span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
-      );
+        );
+      }
 
       // ═══ TASKS ═══════════════════════════════════════════
       case 'tasks': {

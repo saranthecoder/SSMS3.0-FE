@@ -528,7 +528,7 @@ const AdminDashboard = () => {
                   <h3 className="text-sm font-extrabold text-slate-800 dark:text-white uppercase tracking-wider">Classroom Attendance</h3>
                   <p className="text-xs text-slate-400 mt-0.5 font-medium">Real-time status of physical lab check-ins today</p>
                 </div>
-                <a href="/student/attenence" target="_blank" rel="noopener noreferrer" className="text-xs font-black text-theme-primary flex items-center gap-0.5">
+                <a href={`/student/attenence${selectedBatchId && selectedBatchId !== 'all' ? `?batchId=${selectedBatchId}` : ''}`} target="_blank" rel="noopener noreferrer" className="text-xs font-black text-theme-primary flex items-center gap-0.5">
                   Classroom Board <ChevronRight size={14} />
                 </a>
               </div>

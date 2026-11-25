@@ -128,6 +128,46 @@ const FormattedMessageText = ({ text, isMe, attachmentType }) => {
   );
 };
 
+// WhatsApp-style Skeleton Loaders for Instant Shell Rendering
+const ChatSidebarSkeleton = () => (
+  <div className="space-y-2 p-3 animate-pulse">
+    {[...Array(6)].map((_, i) => (
+      <div key={i} className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/40 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/60">
+        <div className="w-10 h-10 rounded-2xl bg-slate-200 dark:bg-slate-700/70 shrink-0" />
+        <div className="flex-1 space-y-2 min-w-0">
+          <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded-md w-3/4" />
+          <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded-md w-1/2" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const ChatMessageSkeleton = () => (
+  <div className="w-full h-full p-4 sm:p-6 space-y-4 animate-pulse">
+    <div className="flex items-start gap-2.5 max-w-[70%]">
+      <div className="w-8 h-8 rounded-full bg-slate-700/50 shrink-0" />
+      <div className="space-y-2 bg-slate-800/60 border border-slate-700/50 p-3.5 rounded-2xl rounded-tl-sm w-52">
+        <div className="h-3 bg-slate-600/60 rounded w-28" />
+        <div className="h-2.5 bg-slate-700/60 rounded w-44" />
+      </div>
+    </div>
+    <div className="flex items-end justify-end gap-2.5 ml-auto max-w-[70%]">
+      <div className="space-y-2 bg-indigo-900/40 border border-indigo-700/40 p-3.5 rounded-2xl rounded-br-sm w-60">
+        <div className="h-3 bg-indigo-600/50 rounded w-40" />
+        <div className="h-2.5 bg-indigo-700/40 rounded w-52" />
+      </div>
+    </div>
+    <div className="flex items-start gap-2.5 max-w-[70%]">
+      <div className="w-8 h-8 rounded-full bg-slate-700/50 shrink-0" />
+      <div className="space-y-2 bg-slate-800/60 border border-slate-700/50 p-3.5 rounded-2xl rounded-tl-sm w-64">
+        <div className="h-3 bg-slate-600/60 rounded w-36" />
+        <div className="h-2.5 bg-slate-700/60 rounded w-56" />
+      </div>
+    </div>
+  </div>
+);
+
 const BatchChat = () => {
   const { user, socket } = useAuth();
   const { selectedBatchId, selectedBatchName, batchesList } = useGlobalBatch();
@@ -142,16 +182,31 @@ const BatchChat = () => {
   // Active Tab: 'all' | 'direct' | 'groups' | 'announcements'
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   
   // Selected Active Chat: { id, type: 'direct'|'batch'|'group', name, avatar, role, isOnline, lastSeen, memberCount, members }
   const [activeChat, setActiveChat] = useState(null);
+  const activeChatRef = useRef(activeChat);
+
+  useEffect(() => {
+    activeChatRef.current = activeChat;
+  }, [activeChat]);
+
+  // Debounce search query
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 250);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   // Chat Data & Typing
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [typingUsers, setTypingUsers] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [isSidebarLoading, setIsSidebarLoading] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -245,12 +300,12 @@ const BatchChat = () => {
         : Promise.resolve(null);
 
       const [
-        batchList,
-        groupsData,
-        contactsData,
-        [annRes, countRes],
-        fData
-      ] = await Promise.all([
+        batchRes,
+        groupsRes,
+        contactsRes,
+        annRes,
+        friendsRes
+      ] = await Promise.allSettled([
         batchesReq,
         groupsReq,
         contactsReq,
@@ -258,18 +313,28 @@ const BatchChat = () => {
         friendsReq
       ]);
 
-      setBatches(batchList);
-      setCustomGroups(groupsData);
-      setDirectContacts(contactsData);
-      setAnnouncements(Array.isArray(annRes.data) ? annRes.data : []);
-      setUnreadAnnouncementCount(countRes.data?.count || 0);
-      if (fData) {
-        setFriendsData(fData);
+      if (batchRes.status === 'fulfilled' && batchRes.value) {
+        setBatches(batchRes.value);
+      }
+      if (groupsRes.status === 'fulfilled' && groupsRes.value) {
+        setCustomGroups(groupsRes.value);
+      }
+      if (contactsRes.status === 'fulfilled' && contactsRes.value) {
+        setDirectContacts(contactsRes.value);
+      }
+      if (annRes.status === 'fulfilled' && annRes.value) {
+        const [annList, countRes] = annRes.value;
+        setAnnouncements(Array.isArray(annList?.data) ? annList.data : []);
+        setUnreadAnnouncementCount(countRes?.data?.count || 0);
+      }
+      if (friendsRes.status === 'fulfilled' && friendsRes.value) {
+        setFriendsData(friendsRes.value);
       }
     } catch (error) {
       console.error('Error fetching chat data in parallel:', error);
     } finally {
       setLoading(false);
+      setIsSidebarLoading(false);
     }
   }, [user.role, selectedBatchId]);
 
@@ -534,17 +599,17 @@ const BatchChat = () => {
     try {
       let endpoint = '';
       if (chat.type === 'batch') {
-        endpoint = `/chat/batch/${chat.id}?limit=60`;
+        endpoint = `/chat/batch/${chat.id}?limit=40`;
       } else if (chat.type === 'group') {
-        endpoint = `/chat/groups/${chat.id}/messages?limit=60`;
+        endpoint = `/chat/groups/${chat.id}/messages?limit=40`;
       } else if (chat.type === 'direct') {
-        endpoint = `/chat/direct/${chat.id}?limit=60`;
+        endpoint = `/chat/direct/${chat.id}?limit=40`;
       }
 
       const { data } = await axios.get(endpoint);
       const list = Array.isArray(data) ? data : [];
       setMessages(list);
-      setHasMoreMessages(list.length >= 60);
+      setHasMoreMessages(list.length >= 40);
       scrollToBottom(false);
 
       // Instantly clear unread badge for this chat in local sidebar state
@@ -600,8 +665,8 @@ const BatchChat = () => {
     if (!socket) return;
 
     const handleConnect = () => {
-      if (activeChat) {
-        joinChatRoom(activeChat);
+      if (activeChatRef.current) {
+        joinChatRoom(activeChatRef.current);
       }
     };
 
@@ -609,7 +674,7 @@ const BatchChat = () => {
     return () => {
       socket.off('connect', handleConnect);
     };
-  }, [socket, activeChat, joinChatRoom]);
+  }, [socket, joinChatRoom]);
 
   // ─── 4. Real-Time Message Reception & WhatsApp Notifications ───
   useEffect(() => {
@@ -618,8 +683,8 @@ const BatchChat = () => {
     const handleIncomingMessage = (msg) => {
       if (!msg) return;
 
-      const currentChatId = activeChat?.id?.toString();
-      const currentChatType = activeChat?.type;
+      const currentChatId = activeChatRef.current?.id?.toString();
+      const currentChatType = activeChatRef.current?.type;
 
       let isForCurrent = false;
       if (currentChatType === 'batch' && msg.batchId?.toString() === currentChatId) {
@@ -634,9 +699,18 @@ const BatchChat = () => {
 
       if (isForCurrent) {
         setMessages(prev => {
-          // Avoid duplicate insertion
-          if (prev.some(m => m._id?.toString() === msg._id?.toString())) return prev;
-          return [...prev, msg];
+          // If optimistic message matching tempId or _id exists, replace it with confirmed real message
+          const matchIdx = prev.findIndex(m => 
+            (msg.tempId && m.tempId === msg.tempId) || 
+            (msg.tempId && m._id === msg.tempId) || 
+            m._id?.toString() === msg._id?.toString()
+          );
+          if (matchIdx !== -1) {
+            const next = [...prev];
+            next[matchIdx] = { ...msg, status: 'sent' };
+            return next;
+          }
+          return [...prev, { ...msg, status: 'sent' }];
         });
         scrollToBottom(true);
 
@@ -655,38 +729,38 @@ const BatchChat = () => {
         }
       }
 
-        // Update last message in local sidebar contact or group state instantly
-        if (currentChatType === 'direct' && currentChatId) {
-          setDirectContacts(prev => prev.map(c => {
-            if ((c._id || c.id)?.toString() === currentChatId.toString()) {
-              return {
-                ...c,
-                lastMessage: {
-                  text: msg.text,
-                  attachmentType: msg.attachmentType,
-                  createdAt: msg.createdAt || new Date().toISOString(),
-                  senderId: msg.senderId?._id || msg.senderId
-                }
-              };
-            }
-            return c;
-          }));
-        } else if (currentChatType === 'group' && currentChatId) {
-          setCustomGroups(prev => prev.map(g => {
-            if (g._id?.toString() === currentChatId.toString()) {
-              return {
-                ...g,
-                lastMessage: {
-                  text: msg.text,
-                  attachmentType: msg.attachmentType,
-                  createdAt: msg.createdAt || new Date().toISOString(),
-                  senderId: { name: msg.senderId?.name }
-                }
-              };
-            }
-            return g;
-          }));
-        }
+      // Update last message in local sidebar contact or group state instantly
+      if (currentChatType === 'direct' && currentChatId) {
+        setDirectContacts(prev => prev.map(c => {
+          if ((c._id || c.id)?.toString() === currentChatId.toString()) {
+            return {
+              ...c,
+              lastMessage: {
+                text: msg.text,
+                attachmentType: msg.attachmentType,
+                createdAt: msg.createdAt || new Date().toISOString(),
+                senderId: msg.senderId?._id || msg.senderId
+              }
+            };
+          }
+          return c;
+        }));
+      } else if (currentChatType === 'group' && currentChatId) {
+        setCustomGroups(prev => prev.map(g => {
+          if (g._id?.toString() === currentChatId.toString()) {
+            return {
+              ...g,
+              lastMessage: {
+                text: msg.text,
+                attachmentType: msg.attachmentType,
+                createdAt: msg.createdAt || new Date().toISOString(),
+                senderId: { name: msg.senderId?.name }
+              }
+            };
+          }
+          return g;
+        }));
+      }
     };
 
     const handleDirectNotif = (data) => {
@@ -694,7 +768,7 @@ const BatchChat = () => {
       const senderIdStr = data.senderId?.toString();
       if (senderIdStr === user._id.toString()) return;
 
-      const isCurrentOpen = activeChat?.type === 'direct' && activeChat.id === senderIdStr;
+      const isCurrentOpen = activeChatRef.current?.type === 'direct' && activeChatRef.current?.id === senderIdStr;
       if (!isCurrentOpen) {
         soundManager.playWhatsAppIncoming();
         showToastNotification(
@@ -734,7 +808,7 @@ const BatchChat = () => {
       if (data.senderId?.toString() === user._id.toString()) return;
 
       const gIdStr = data.groupId?.toString();
-      const isCurrentOpen = activeChat?.type === 'group' && activeChat.id === gIdStr;
+      const isCurrentOpen = activeChatRef.current?.type === 'group' && activeChatRef.current?.id === gIdStr;
       if (!isCurrentOpen) {
         soundManager.playWhatsAppIncoming();
         showToastNotification(
@@ -773,7 +847,7 @@ const BatchChat = () => {
       if (!data) return;
       if (data.senderId?.toString() === user._id.toString()) return;
 
-      const isCurrentOpen = activeChat?.type === 'batch' && activeChat.id === data.batchId?.toString();
+      const isCurrentOpen = activeChatRef.current?.type === 'batch' && activeChatRef.current?.id === data.batchId?.toString();
       if (!isCurrentOpen) {
         soundManager.playWhatsAppIncoming();
         showToastNotification(
@@ -801,8 +875,8 @@ const BatchChat = () => {
     };
 
     const handleMessagesRead = (data) => {
-      if (activeChat?.type === 'direct' && (data?.readBy?.toString() === activeChat.id?.toString() || data?.senderId?.toString() === user._id.toString())) {
-        const readerId = (data.readBy || activeChat.id)?.toString();
+      if (activeChatRef.current?.type === 'direct' && (data?.readBy?.toString() === activeChatRef.current.id?.toString() || data?.senderId?.toString() === user._id.toString())) {
+        const readerId = (data.readBy || activeChatRef.current.id)?.toString();
         setMessages(prev => prev.map(m => {
           if ((m.senderId?._id || m.senderId)?.toString() === user._id.toString()) {
             const currentReadBy = Array.isArray(m.readBy) ? m.readBy : [];
@@ -819,7 +893,7 @@ const BatchChat = () => {
     };
 
     const handleMessagesDelivered = (data) => {
-      if (activeChat?.type === 'direct' && (data?.deliveredTo?.toString() === activeChat.id?.toString())) {
+      if (activeChatRef.current?.type === 'direct' && (data?.deliveredTo?.toString() === activeChatRef.current.id?.toString())) {
         const delivUser = data.deliveredTo.toString();
         setMessages(prev => prev.map(m => {
           if ((m.senderId?._id || m.senderId)?.toString() === user._id.toString()) {
@@ -841,7 +915,7 @@ const BatchChat = () => {
 
     const handleUserTyping = (data) => {
       if (!data) return;
-      const currentChatId = activeChat?.id?.toString();
+      const currentChatId = activeChatRef.current?.id?.toString();
       const matches = (data.batchId && data.batchId?.toString() === currentChatId) ||
                       (data.groupId && data.groupId?.toString() === currentChatId) ||
                       (data.senderId && data.senderId?.toString() === currentChatId);
@@ -885,15 +959,23 @@ const BatchChat = () => {
       socket.off('user-typing', handleUserTyping);
       socket.off('user-stop-typing', handleUserStopTyping);
     };
-  }, [socket, activeChat, user._id, scrollToBottom, loadChatData, showToastNotification, fetchFriendsData]);
+  }, [socket, user._id, scrollToBottom, loadChatData, showToastNotification, fetchFriendsData]);
 
-  // ─── 5. Load Older Messages (Pagination) ───
+  // ─── 5. Load Older Messages (Cursor Pagination with Scroll Anchoring) ───
   const loadOlderMessages = async () => {
     if (!activeChat || messages.length === 0 || isLoadingMore) return;
     setIsLoadingMore(true);
 
-    const oldest = messages[0];
+    const oldest = messages.find(m => !m._id?.toString().startsWith('temp_'));
     const beforeDate = oldest?.createdAt;
+    if (!beforeDate) {
+      setIsLoadingMore(false);
+      return;
+    }
+
+    const container = messagesContainerRef.current;
+    const prevScrollHeight = container ? container.scrollHeight : 0;
+    const prevScrollTop = container ? container.scrollTop : 0;
 
     try {
       let endpoint = '';
@@ -909,8 +991,18 @@ const BatchChat = () => {
       const olderList = Array.isArray(data) ? data : [];
 
       if (olderList.length > 0) {
-        setMessages(prev => [...olderList, ...prev]);
+        setMessages(prev => {
+          const existingIds = new Set(prev.map(m => m._id?.toString()));
+          const newOlder = olderList.filter(m => !existingIds.has(m._id?.toString()));
+          return [...newOlder, ...prev];
+        });
         setHasMoreMessages(olderList.length >= 40);
+
+        requestAnimationFrame(() => {
+          if (container) {
+            container.scrollTop = container.scrollHeight - prevScrollHeight + prevScrollTop;
+          }
+        });
       } else {
         setHasMoreMessages(false);
       }
@@ -1118,6 +1210,7 @@ const BatchChat = () => {
     setIsSending(true);
     const textContent = newMessage.trim();
     const currentAttachment = attachment;
+    const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
     const payload = {
       batchId: activeChat.type === 'batch' ? activeChat.id : null,
@@ -1126,10 +1219,40 @@ const BatchChat = () => {
       text: textContent,
       attachmentUrl: currentAttachment?.url || '',
       attachmentName: currentAttachment?.name || '',
-      attachmentType: currentAttachment?.type || ''
+      attachmentType: currentAttachment?.type || '',
+      tempId
     };
 
-    // Clear input fields immediately
+    // Instant WhatsApp-style Optimistic Message Render
+    const optimisticMsg = {
+      _id: tempId,
+      tempId,
+      batchId: payload.batchId,
+      groupId: payload.groupId,
+      recipientId: payload.recipientId,
+      text: textContent,
+      attachmentUrl: currentAttachment?.url || '',
+      attachmentName: currentAttachment?.name || '',
+      attachmentType: currentAttachment?.type || '',
+      isAnnouncement: false,
+      deliveredTo: [],
+      readBy: [user._id.toString()],
+      createdAt: new Date().toISOString(),
+      senderId: {
+        _id: user._id,
+        name: user.name,
+        role: user.role,
+        equippedAvatar: user.equippedAvatar || user.profileImage,
+        profileImage: user.profileImage
+      },
+      status: 'sending'
+    };
+
+    // Clear input fields and render immediately
+    setMessages(prev => [...prev, optimisticMsg]);
+    soundManager.playWhatsAppOutgoing();
+    scrollToBottom(true);
+
     setNewMessage('');
     setAttachment(null);
     setShowAttachMenu(false);
@@ -1146,25 +1269,22 @@ const BatchChat = () => {
     }
 
     try {
-      // 1. If socket is connected, emit real-time event
       if (socket && socket.connected) {
-        socket.emit('send-chat-message', payload);
-      } else {
-        // 2. Fallback to HTTP REST endpoint if socket is disconnected/reconnecting
-        const { data: savedMsg } = await axios.post('/chat/message', payload);
-        setMessages(prev => {
-          if (prev.some(m => m._id === savedMsg._id)) return prev;
-          return [...prev, savedMsg];
+        socket.emit('send-chat-message', payload, (ack) => {
+          if (ack?.success && ack.message) {
+            setMessages(prev => prev.map(m => (m.tempId === tempId || m._id === tempId) ? { ...ack.message, status: 'sent' } : m));
+          } else if (ack && !ack.success) {
+            setMessages(prev => prev.map(m => (m.tempId === tempId || m._id === tempId) ? { ...m, status: 'failed' } : m));
+          }
         });
+      } else {
+        const { data: savedMsg } = await axios.post('/chat/message', payload);
+        setMessages(prev => prev.map(m => (m.tempId === tempId || m._id === tempId) ? { ...savedMsg, status: 'sent' } : m));
       }
-      soundManager.playWhatsAppOutgoing();
-      scrollToBottom(true);
     } catch (err) {
       console.error('Failed to send message:', err);
+      setMessages(prev => prev.map(m => (m.tempId === tempId || m._id === tempId) ? { ...m, status: 'failed' } : m));
       Swal.fire('Delivery Error', err.response?.data?.message || 'Failed to send message. Please check connection.', 'error');
-      // Restore input text so user does not lose content
-      setNewMessage(textContent);
-      setAttachment(currentAttachment);
     } finally {
       setIsSending(false);
     }
@@ -1360,8 +1480,8 @@ const BatchChat = () => {
     return curr.toDateString() !== prev.toDateString();
   };
 
-  // ─── Filter Items by Search Query ───
-  const q = searchQuery.toLowerCase().trim();
+  // ─── Filter Items by Search Query (Debounced) ───
+  const q = (debouncedSearch || searchQuery).toLowerCase().trim();
 
   const filteredBatches = batches.filter(b =>
     !q || b.batchName.toLowerCase().includes(q) || (b.panelName && b.panelName.toLowerCase().includes(q))
@@ -1396,8 +1516,6 @@ const BatchChat = () => {
   const filteredAnnouncements = announcements.filter(a =>
     !q || a.title.toLowerCase().includes(q) || a.content.toLowerCase().includes(q) || (a.authorId?.name && a.authorId.name.toLowerCase().includes(q))
   );
-
-  if (loading) return <Loader />;
 
   return (
     <div className="w-full h-full max-w-7xl mx-auto flex flex-col md:flex-row bg-white dark:bg-slate-950 rounded-none sm:rounded-2xl md:rounded-3xl border border-slate-200/80 dark:border-slate-800/80 shadow-xl shadow-slate-200/40 dark:shadow-2xl overflow-hidden text-left min-h-0 transition-colors">
@@ -1503,6 +1621,10 @@ const BatchChat = () => {
         {/* Conversation Items List */}
         <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-200/60 dark:divide-slate-800/40 custom-scrollbar">
           
+          {isSidebarLoading && directContacts.length === 0 && customGroups.length === 0 && batches.length === 0 ? (
+            <ChatSidebarSkeleton />
+          ) : null}
+
           {/* ─── GROUPS (BATCHES & CUSTOM GROUPS) ─── */}
           {(activeTab === 'all' || activeTab === 'groups') && (
             <div>
@@ -2034,6 +2156,11 @@ const BatchChat = () => {
               {/* Scrollable Message Feed */}
               <div 
                 ref={messagesContainerRef}
+                onScroll={(e) => {
+                  if (e.currentTarget.scrollTop <= 30 && hasMoreMessages && !isLoadingMore && !isLoadingHistory) {
+                    loadOlderMessages();
+                  }
+                }}
                 className="relative z-10 w-full h-full overflow-y-auto p-3 sm:p-6 space-y-4 custom-scrollbar touch-pan-y"
               >
 
@@ -2051,10 +2178,7 @@ const BatchChat = () => {
               )}
 
               {isLoadingHistory ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2">
-                  <Loader />
-                  <p className="text-xs font-semibold">Loading messages...</p>
-                </div>
+                <ChatMessageSkeleton />
               ) : messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2">
                   <MessageSquare size={36} className="text-slate-300 dark:text-slate-700" />
@@ -2224,6 +2348,21 @@ const BatchChat = () => {
                                   // Batch or Group chat
                                   isRead = readList.some(id => id !== user._id.toString());
                                   isDelivered = true;
+                                }
+
+                                if (msg.status === 'sending' || (typeof msg._id === 'string' && msg._id.startsWith('temp_'))) {
+                                  return (
+                                    <span title="Sending..." className="inline-flex items-center text-white/50 ml-0.5 animate-pulse">
+                                      <Clock size={12} className="text-white/60" />
+                                    </span>
+                                  );
+                                }
+                                if (msg.status === 'failed') {
+                                  return (
+                                    <span title="Failed to deliver" className="inline-flex items-center text-rose-400 ml-0.5">
+                                      <AlertCircle size={12} className="text-rose-400" />
+                                    </span>
+                                  );
                                 }
 
                                 if (isRead) {

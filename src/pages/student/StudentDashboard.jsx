@@ -78,6 +78,15 @@ const getNamecolorClass = (value) => {
   return classes[value] || value || '';
 };
 
+const format12HourTime = (time24 = '19:00') => {
+  if (!time24) return '';
+  const [h, m] = time24.split(':');
+  let hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12 || 12;
+  return `${String(hour).padStart(2, '0')}:${m || '00'} ${ampm}`;
+};
+
 const format12HourDateTime = (dateString) => {
   if (!dateString) return '';
   const d = new Date(dateString);
@@ -684,7 +693,15 @@ const StudentDashboard = () => {
                         </div>
                         <p className="text-[10px] text-sky-100/70 mt-1">
                           Logged: <strong className="text-white font-mono">{formatTime(wfhSeconds)}</strong>
-                          {!wfhSatisfied && ` • ${Math.ceil((wfhSecsReq - wfhSeconds) / 60)}m left`}
+                          {!wfhSatisfied && (
+                            dw.autoWfhEnabled && !dw.autoWfhGranted ? (
+                              <span className="block text-sky-200 font-semibold mt-0.5">
+                                Auto-unlocks @ {format12HourTime(dw.autoWfhTime)}
+                              </span>
+                            ) : (
+                              ` • ${Math.ceil((wfhSecsReq - wfhSeconds) / 60)}m left`
+                            )
+                          )}
                         </p>
                       </div>
                     </div>
@@ -805,22 +822,7 @@ const StudentDashboard = () => {
               </div>
             )}
 
-            {/* Separated Record Badges (Pills from Reference Photo) */}
-            {(onsiteSeconds > 0 || wfhSeconds > 0) && (
-              <div className="relative z-10 flex items-center gap-2 mb-3 text-[11px] flex-wrap">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-black/25 border-white/15 text-white shadow-xs">
-                  <Building2 size={12} className="text-emerald-300 shrink-0" />
-                  <span className="font-medium text-white/90">On-Site:</span>
-                  <span className="font-mono font-bold text-white">{formatTime(onsiteSeconds || 0)}</span>
-                </div>
-
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-black/25 border-white/15 text-white shadow-xs">
-                  <Home size={12} className="text-sky-300 shrink-0" />
-                  <span className="font-medium text-white/90">WFH:</span>
-                  <span className="font-mono font-bold text-white">{formatTime(wfhSeconds || 0)}</span>
-                </div>
-              </div>
-            )}
+            {/* Check-In Access Not Granted Banner */}
 
             <div className={`relative z-10 flex items-center justify-between mt-auto pt-3 border-t ${
               themeColor === 'Emerald' ? 'border-emerald-400/30' : 'border-primary-400/30'

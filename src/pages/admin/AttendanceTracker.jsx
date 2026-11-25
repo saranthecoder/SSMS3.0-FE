@@ -16,6 +16,8 @@ const AttendanceTracker = () => {
   // Row Filters (Top bar)
   const [filterName, setFilterName] = useState('');
   const [filterRoll, setFilterRoll] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all'); // all, Absent, Present, In Progress, Leave
+  const [filterDate, setFilterDate] = useState('');
 
   // Sorting
   const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
@@ -48,6 +50,8 @@ const AttendanceTracker = () => {
       fetchAttendanceData();
       setFilterName('');
       setFilterRoll('');
+      setFilterStatus('all');
+      setFilterDate('');
     } else {
       setLoading(false);
     }
@@ -68,28 +72,110 @@ const AttendanceTracker = () => {
     return map;
   }, [attendanceData]);
 
+  const formatShortDuration = (seconds) => {
+    const s = Math.max(0, Math.floor(seconds || 0));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
+  };
+
+  // Determine each date's target On-Site / WFH min workload from logs on that date
+  const dateTargetsMap = useMemo(() => {
+    const map = {};
+    attendanceData.forEach(r => {
+      if (!r.date) return;
+      if (!map[r.date]) {
+        map[r.date] = {
+          onsiteMinHours: r.onsiteMinHours || 2,
+          wfhMinHours: r.wfhMinHours || 3,
+          onsiteAllocated: Boolean(r.onsiteAllocated || r.onsiteSeconds > 0),
+          wfhAllocated: Boolean(r.wfhAllocated || r.wfhSeconds > 0)
+        };
+      } else {
+        if (r.onsiteAllocated) map[r.date].onsiteAllocated = true;
+        if (r.wfhAllocated) map[r.date].wfhAllocated = true;
+        if (r.onsiteMinHours) map[r.date].onsiteMinHours = r.onsiteMinHours;
+        if (r.wfhMinHours) map[r.date].wfhMinHours = r.wfhMinHours;
+      }
+    });
+    return map;
+  }, [attendanceData]);
+
+  // Compute detailed On-Site & WFH workload completion + overall day status
+  const getDayWorkloadDetail = (studentId, dateStr) => {
+    const record = attendanceMap[studentId]?.[dateStr];
+    const dateMeta = dateTargetsMap[dateStr] || { onsiteMinHours: 2, wfhMinHours: 3, onsiteAllocated: true, wfhAllocated: false };
+
+    if (!record) {
+      return {
+        hasRecord: false,
+        status: 'Absent',
+        onsiteAllocated: dateMeta.onsiteAllocated,
+        wfhAllocated: dateMeta.wfhAllocated,
+        onsiteSeconds: 0,
+        wfhSeconds: 0,
+        onsiteMinHours: dateMeta.onsiteMinHours,
+        wfhMinHours: dateMeta.wfhMinHours,
+        onsiteMet: !dateMeta.onsiteAllocated,
+        wfhMet: !dateMeta.wfhAllocated,
+        bothMet: false
+      };
+    }
+
+    const onsiteAlloc = Boolean(record.onsiteAllocated || (record.onsiteSeconds || 0) > 0);
+    const wfhAlloc = Boolean(record.wfhAllocated || (record.wfhSeconds || 0) > 0);
+    const onsiteMin = record.onsiteMinHours ?? dateMeta.onsiteMinHours ?? 2;
+    const wfhMin = record.wfhMinHours ?? dateMeta.wfhMinHours ?? 3;
+    const onsiteSecs = record.onsiteSeconds || 0;
+    const wfhSecs = record.wfhSeconds || 0;
+
+    // Fallback for legacy logs where neither allocation flag is explicitly stored
+    const effOnsiteAlloc = onsiteAlloc || (!wfhAlloc && record.accessType !== 'wfh');
+    const effWfhAlloc = wfhAlloc || (!onsiteAlloc && record.accessType === 'wfh');
+
+    const onsiteMet = !effOnsiteAlloc || onsiteSecs >= (onsiteMin * 3600);
+    const wfhMet = !effWfhAlloc || wfhSecs >= (wfhMin * 3600);
+    const bothMet = onsiteMet && wfhMet;
+
+    let status = 'Absent';
+    const maxHours = record.maxValidHours || 10;
+    const totalHours = (record.totalSeconds || 0) / 3600;
+
+    if (record.status === 'Leave' || (record.isLeave && (record.leaveHours || 0) === 0)) {
+      status = 'Leave';
+    } else if (record.status === 'Invalid' || totalHours > maxHours) {
+      status = 'Invalid';
+    } else if (bothMet && (onsiteSecs > 0 || wfhSecs > 0 || (record.leaveHours || 0) > 0)) {
+      status = 'Present';
+    } else if (record.isActive) {
+      status = 'In Progress';
+    } else if (record.status === 'Present' && bothMet) {
+      status = 'Present';
+    } else {
+      status = 'Absent';
+    }
+
+    return {
+      hasRecord: true,
+      status,
+      onsiteAllocated: effOnsiteAlloc,
+      wfhAllocated: effWfhAlloc,
+      onsiteSeconds: onsiteSecs,
+      wfhSeconds: wfhSecs,
+      onsiteMinHours: onsiteMin,
+      wfhMinHours: wfhMin,
+      onsiteMet,
+      wfhMet,
+      bothMet,
+      isActive: Boolean(record.isActive)
+    };
+  };
+
   // Helper to determine cell attendance status
   const getCellAttendanceStatus = (studentId, dateStr) => {
-    const record = attendanceMap[studentId]?.[dateStr];
-    if (record) {
-      if (record.status) return record.status;
-      if ((record.isLeave || record.status === 'Leave') && (record.leaveHours || 0) === 0) {
-        return 'Leave';
-      }
-      const currentBatch = batchesList.find(b => b._id === activeBatchId);
-      const reqHours = currentBatch?.requiredPresentHours !== undefined ? currentBatch.requiredPresentHours : 8;
-      const maxHours = currentBatch?.maxValidHours !== undefined ? currentBatch.maxValidHours : 10;
-      const hours = (record.totalSeconds || 0) / 3600;
-      const minRequired = reqHours - (record.leaveHours || 0);
-      if (hours >= minRequired && hours <= maxHours) {
-        return 'Present';
-      } else if (hours > maxHours) {
-        return 'Invalid';
-      } else if (record.isActive) {
-        return 'In Progress';
-      }
-    }
-    return 'Absent';
+    return getDayWorkloadDetail(studentId, dateStr).status;
   };
 
   // Today's date string in YYYY-MM-DD format (to exclude from % calc) using local timezone
@@ -114,6 +200,21 @@ const AttendanceTracker = () => {
     });
     return Array.from(datesSet).sort(); // Sort in ascending order
   }, [attendanceData, todayStr, batchesList, activeBatchId]);
+
+  // Pre-calculate overall attendance count & % per date (Present only if min workload completed)
+  const dateOverallSummaryMap = useMemo(() => {
+    const summary = {};
+    uniqueAttendanceDates.forEach(date => {
+      let present = 0;
+      students.forEach(s => {
+        if (getCellAttendanceStatus(s._id, date) === 'Present') present++;
+      });
+      const total = students.length;
+      const pct = total > 0 ? Math.round((present / total) * 100) : 0;
+      summary[date] = { present, total, pct };
+    });
+    return summary;
+  }, [uniqueAttendanceDates, students, attendanceMap, dateTargetsMap]);
 
   // Overall Attendance % calculation (excludes today)
   const getAttendanceOverallPercentage = (studentId) => {
@@ -141,6 +242,28 @@ const AttendanceTracker = () => {
     return 0;
   };
 
+  // Determine target date to evaluate filter against (defaults to latest tracked date or today)
+  const targetDateForFilter = useMemo(() => {
+    if (filterDate) return filterDate;
+    if (uniqueAttendanceDates.length > 0) {
+      return uniqueAttendanceDates[uniqueAttendanceDates.length - 1];
+    }
+    return todayStr;
+  }, [filterDate, uniqueAttendanceDates, todayStr]);
+
+  // Status counts for target date
+  const statusCounts = useMemo(() => {
+    let absent = 0, present = 0, inProgress = 0, leave = 0;
+    students.forEach(s => {
+      const st = getCellAttendanceStatus(s._id, targetDateForFilter);
+      if (st === 'Absent') absent++;
+      else if (st === 'Present') present++;
+      else if (st === 'In Progress') inProgress++;
+      else if (st === 'Leave') leave++;
+    });
+    return { absent, present, inProgress, leave, total: students.length };
+  }, [students, targetDateForFilter, attendanceMap]);
+
   // Apply row filters and sorting
   const filteredAndSortedStudents = useMemo(() => {
     let result = [...students];
@@ -152,6 +275,13 @@ const AttendanceTracker = () => {
       }
       if (filterRoll && !student.rollNumber.toLowerCase().includes(filterRoll.toLowerCase())) {
         return false;
+      }
+      if (filterStatus !== 'all') {
+        const st = getCellAttendanceStatus(student._id, targetDateForFilter);
+        if (filterStatus === 'Absent' && st !== 'Absent') return false;
+        if (filterStatus === 'Present' && st !== 'Present') return false;
+        if (filterStatus === 'In Progress' && st !== 'In Progress') return false;
+        if (filterStatus === 'Leave' && st !== 'Leave') return false;
       }
       return true;
     });
@@ -165,6 +295,25 @@ const AttendanceTracker = () => {
         if (sortConfig.key === 'overallPercentage') {
           aVal = getAttendanceOverallPercentage(a._id);
           bVal = getAttendanceOverallPercentage(b._id);
+        } else if (sortConfig.key === 'absent-first') {
+          const statusOrder = { 'Absent': 0, 'In Progress': 1, 'Invalid': 2, 'Leave': 3, 'Present': 4 };
+          aVal = statusOrder[getCellAttendanceStatus(a._id, targetDateForFilter)] ?? 99;
+          bVal = statusOrder[getCellAttendanceStatus(b._id, targetDateForFilter)] ?? 99;
+          if (aVal !== bVal) return aVal - bVal;
+          return a.name.localeCompare(b.name);
+        } else if (sortConfig.key === 'present-first') {
+          const statusOrder = { 'Present': 0, 'Leave': 1, 'In Progress': 2, 'Invalid': 3, 'Absent': 4 };
+          aVal = statusOrder[getCellAttendanceStatus(a._id, targetDateForFilter)] ?? 99;
+          bVal = statusOrder[getCellAttendanceStatus(b._id, targetDateForFilter)] ?? 99;
+          if (aVal !== bVal) return aVal - bVal;
+          return a.name.localeCompare(b.name);
+        } else if (uniqueAttendanceDates.includes(sortConfig.key) || sortConfig.key === 'status-target') {
+          const date = sortConfig.key === 'status-target' ? targetDateForFilter : sortConfig.key;
+          const statusOrder = { 'Absent': 0, 'In Progress': 1, 'Invalid': 2, 'Leave': 3, 'Present': 4 };
+          const statusA = getCellAttendanceStatus(a._id, date);
+          const statusB = getCellAttendanceStatus(b._id, date);
+          aVal = statusOrder[statusA] ?? 99;
+          bVal = statusOrder[statusB] ?? 99;
         } else {
           aVal = aVal || '';
           bVal = bVal || '';
@@ -172,12 +321,12 @@ const AttendanceTracker = () => {
 
         if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
         if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-        return 0;
+        return a.name.localeCompare(b.name);
       });
     }
 
     return result;
-  }, [students, filterName, filterRoll, sortConfig, attendanceData]);
+  }, [students, filterName, filterRoll, filterStatus, targetDateForFilter, sortConfig, attendanceData, uniqueAttendanceDates]);
 
   const handleSort = (key) => {
     let direction = 'asc';
@@ -190,6 +339,8 @@ const AttendanceTracker = () => {
   const clearAllFilters = () => {
     setFilterName('');
     setFilterRoll('');
+    setFilterStatus('all');
+    setFilterDate('');
     setSortConfig({ key: 'name', direction: 'asc' });
   };
 
@@ -319,7 +470,8 @@ const AttendanceTracker = () => {
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3">
                   {uniqueAttendanceDates.map(date => {
-                    const status = getCellAttendanceStatus(students[0]._id, date);
+                    const detail = getDayWorkloadDetail(students[0]._id, date);
+                    const status = detail.status;
                     let bgColor = 'bg-rose-500/10 border-rose-500/30';
                     let iconBg = 'bg-rose-500';
                     let Icon = X;
@@ -370,6 +522,20 @@ const AttendanceTracker = () => {
                           )}
                         </div>
                         <p className={`text-[10px] font-bold ${textColor} uppercase tracking-wider`}>{label}</p>
+                        <div className="w-full space-y-1 pt-1 border-t border-slate-200/50 dark:border-slate-700/50 text-[10px] font-semibold">
+                          {detail.onsiteAllocated && (
+                            <div className={`flex items-center justify-between ${detail.onsiteMet ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                              <span>OS: {formatShortDuration(detail.onsiteSeconds)}/{detail.onsiteMinHours}h</span>
+                              {detail.onsiteMet ? <Check size={10} strokeWidth={3} /> : <X size={10} strokeWidth={3} />}
+                            </div>
+                          )}
+                          {detail.wfhAllocated && (
+                            <div className={`flex items-center justify-between ${detail.wfhMet ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                              <span>WFH: {formatShortDuration(detail.wfhSeconds)}/{detail.wfhMinHours}h</span>
+                              {detail.wfhMet ? <Check size={10} strokeWidth={3} /> : <X size={10} strokeWidth={3} />}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -431,6 +597,67 @@ const AttendanceTracker = () => {
               onChange={(e) => setFilterRoll(e.target.value)}
               className="input-field w-[140px] py-1.5 px-3 text-sm bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700"
             />
+          </div>
+
+          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 flex-none hidden lg:block"></div>
+
+          {/* Status Filter & Absentee Quick Filter */}
+          <div className="flex-none flex items-center gap-2">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            >
+              <option value="all">All Statuses ({statusCounts.total})</option>
+              <option value="Absent">Absent Only ({statusCounts.absent})</option>
+              <option value="Present">Present Only ({statusCounts.present})</option>
+              <option value="In Progress">In Progress ({statusCounts.inProgress})</option>
+              <option value="Leave">Approved Leave ({statusCounts.leave})</option>
+            </select>
+
+            {/* Quick 1-Click Absent Toggle Pill */}
+            <button
+              type="button"
+              onClick={() => setFilterStatus(prev => prev === 'Absent' ? 'all' : 'Absent')}
+              className={`px-3 py-1.5 text-xs font-extrabold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                filterStatus === 'Absent'
+                  ? 'bg-rose-500 text-white shadow-xs'
+                  : 'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40 hover:bg-rose-100'
+              }`}
+              title="Show only absent students"
+            >
+              <XCircle size={13} />
+              <span>Absentees ({statusCounts.absent})</span>
+            </button>
+
+            {/* Sort Dropdown */}
+            <select
+              value={sortConfig.key}
+              onChange={(e) => setSortConfig({ key: e.target.value, direction: 'asc' })}
+              className="px-3 py-1.5 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            >
+              <option value="name">Sort: Name (A-Z)</option>
+              <option value="absent-first">Sort: Absent First</option>
+              <option value="present-first">Sort: Present First</option>
+              <option value="rollNumber">Sort: Roll Number</option>
+              <option value="overallPercentage">Sort: Overall %</option>
+            </select>
+
+            {/* If multiple dates, date selector for filter target */}
+            {uniqueAttendanceDates.length > 1 && (
+              <select
+                value={targetDateForFilter}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className="px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                title="Select date for status evaluation"
+              >
+                {uniqueAttendanceDates.map(d => (
+                  <option key={d} value={d}>
+                    Date: {new Date(d).toLocaleDateString('en-GB')}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 flex-none hidden lg:block"></div>
@@ -499,11 +726,44 @@ const AttendanceTracker = () => {
                       {renderSortIcon('rollNumber')}
                     </div>
                   </th>
-                  {uniqueAttendanceDates.map(date => (
-                    <th key={date} className="px-4 py-4 border-b border-r dark:border-slate-700 text-center font-bold min-w-[125px] bg-indigo-50 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-300">
-                      {new Date(date).toLocaleDateString('en-GB')}
-                    </th>
-                  ))}
+                  {uniqueAttendanceDates.map(date => {
+                    const dateMeta = dateTargetsMap[date];
+                    const daySummary = dateOverallSummaryMap[date];
+                    return (
+                      <th 
+                        key={date} 
+                        className="px-3 py-3 border-b border-r dark:border-slate-700 text-center font-bold min-w-[180px] bg-indigo-50 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-300 cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors group select-none"
+                        onClick={() => handleSort(date)}
+                        title={`Sort by ${new Date(date).toLocaleDateString('en-GB')} status (Absent First)`}
+                      >
+                        <div className="flex flex-col items-center gap-1">
+                          <div className="flex items-center justify-center gap-1.5 text-xs font-black">
+                            <span>{new Date(date).toLocaleDateString('en-GB')}</span>
+                            {renderSortIcon(date)}
+                          </div>
+                          {dateMeta && (
+                            <div className="text-[10px] font-bold flex items-center gap-1 flex-wrap justify-center">
+                              {dateMeta.onsiteAllocated && (
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                                  OS &ge;{dateMeta.onsiteMinHours}h
+                                </span>
+                              )}
+                              {dateMeta.wfhAllocated && (
+                                <span className="px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-700 dark:text-blue-300">
+                                  WFH &ge;{dateMeta.wfhMinHours}h
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {daySummary && (
+                            <div className="text-[10px] font-extrabold text-indigo-700 dark:text-indigo-300 bg-white/80 dark:bg-slate-800/80 px-2 py-0.5 rounded-full border border-indigo-200/70 dark:border-indigo-700/60">
+                              {daySummary.present}/{daySummary.total} Present ({daySummary.pct}%)
+                            </div>
+                          )}
+                        </div>
+                      </th>
+                    );
+                  })}
                   {uniqueAttendanceDates.length === 0 && <th className="px-4 py-4 border-b border-slate-200 dark:border-slate-700">No Logs Found</th>}
                   
                   {/* OVERALL % HEADER */}
@@ -542,37 +802,74 @@ const AttendanceTracker = () => {
                           {student.rollNumber}
                         </td>
                         {uniqueAttendanceDates.map(date => {
-                          const status = getCellAttendanceStatus(student._id, date);
-                          let statusColor = 'bg-rose-500';
+                          const detail = getDayWorkloadDetail(student._id, date);
+                          const status = detail.status;
                           let Icon = X;
-                          
+
                           if (status === 'Present') {
-                            statusColor = 'bg-emerald-500';
                             Icon = Check;
                           } else if (status === 'Leave') {
-                            statusColor = 'bg-indigo-500';
                             Icon = Calendar;
                           } else if (status === 'Invalid') {
-                            statusColor = 'bg-amber-400';
                             Icon = AlertTriangle;
                           } else if (status === 'In Progress') {
-                            statusColor = 'bg-blue-500';
                             Icon = RefreshCw;
                           }
-                          
+
+                          const statusBadgeClass = status === 'Present'
+                            ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                            : status === 'Leave'
+                              ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30'
+                              : status === 'Invalid'
+                                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                                : status === 'In Progress'
+                                  ? 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30'
+                                  : 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30';
+
                           return (
-                            <td key={date} className="px-2 py-3 border-b border-r dark:border-slate-700 text-center relative group z-10">
-                              <div className={`w-8 h-8 mx-auto rounded-md shadow-sm flex items-center justify-center ${statusColor} transition-transform group-hover:scale-105`}>
-                                {status === 'In Progress' ? (
-                                  <Icon size={14} className="text-white animate-spin" />
-                                ) : (
-                                  <Icon size={14} className="text-white" strokeWidth={3} />
-                                )}
-                              </div>
-                              
-                              {/* Tooltip */}
-                              <div className="absolute opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 text-white text-xs font-medium rounded py-1 px-2 bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none whitespace-nowrap z-50 shadow-lg border border-slate-700">
-                                {status === 'Leave' ? 'Approved Leave' : status === 'Invalid' ? 'Invalid Log (>10h)' : status}
+                            <td key={date} className="px-2.5 py-2.5 border-b border-r dark:border-slate-700 text-left align-middle">
+                              <div className="flex flex-col gap-1.5 min-w-[160px]">
+                                {/* Top: Overall Day Attendance + Both Met Badge */}
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide border ${statusBadgeClass}`}>
+                                    {status === 'In Progress' ? <Icon size={10} className="animate-spin" /> : <Icon size={10} strokeWidth={3} />}
+                                    <span>{status === 'Leave' ? 'Approved Leave' : status}</span>
+                                  </span>
+
+                                  {detail.onsiteAllocated && detail.wfhAllocated && (
+                                    <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
+                                      detail.bothMet
+                                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                        : 'bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300'
+                                    }`}>
+                                      {detail.bothMet ? 'Both Met' : 'Incomplete'}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Detailed On-Site & WFH Workload Breakdown */}
+                                <div className="space-y-1 text-[10px] font-semibold">
+                                  {detail.onsiteAllocated && (
+                                    <div className={`flex items-center justify-between gap-2 px-1.5 py-0.5 rounded ${
+                                      detail.onsiteMet
+                                        ? 'bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                        : 'bg-rose-50/80 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
+                                    }`}>
+                                      <span>OS: {formatShortDuration(detail.onsiteSeconds)} / {detail.onsiteMinHours}h</span>
+                                      {detail.onsiteMet ? <Check size={11} strokeWidth={3} /> : <X size={11} strokeWidth={3} />}
+                                    </div>
+                                  )}
+                                  {detail.wfhAllocated && (
+                                    <div className={`flex items-center justify-between gap-2 px-1.5 py-0.5 rounded ${
+                                      detail.wfhMet
+                                        ? 'bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                        : 'bg-rose-50/80 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300'
+                                    }`}>
+                                      <span>WFH: {formatShortDuration(detail.wfhSeconds)} / {detail.wfhMinHours}h</span>
+                                      {detail.wfhMet ? <Check size={11} strokeWidth={3} /> : <X size={11} strokeWidth={3} />}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </td>
                           );

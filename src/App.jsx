@@ -38,9 +38,11 @@ const MentorManagement = lazy(() => import('./pages/admin/MentorManagement'));
 const PortalDirectory = lazy(() => import('./pages/admin/PortalDirectory'));
 const AccessDisciplinaryRecords = lazy(() => import('./pages/admin/AccessDisciplinaryRecords'));
 const SyllabusTracker = lazy(() => import('./pages/SyllabusTracker'));
+const PerformanceReports = lazy(() => import('./pages/admin/PerformanceReports'));
 
 // Student Pages
 const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'));
+const MyReports = lazy(() => import('./pages/student/MyReports'));
 const AvailableBatches = lazy(() => import('./pages/student/AvailableBatches'));
 const MyBatches = lazy(() => import('./pages/student/MyBatches'));
 const MyTasks = lazy(() => import('./pages/student/MyTasks'));
@@ -198,6 +200,15 @@ function App() {
             } />
             <Route path="student/disciplinary" element={
               <ProtectedRoute allowedRoles={['student', 'admin', 'mentor']}><AccessDisciplinaryRecords /></ProtectedRoute>
+            } />
+            <Route path="classroom-attendance" element={
+              <ProtectedRoute allowedRoles={['admin', 'mentor']}><FacultyAttendance /></ProtectedRoute>
+            } />
+            <Route path="performance-reports" element={
+              <ProtectedRoute allowedRoles={['admin', 'mentor']}><PerformanceReports /></ProtectedRoute>
+            } />
+            <Route path="student/reports" element={
+              <ProtectedRoute allowedRoles={['student']}><MyReports /></ProtectedRoute>
             } />
             <Route path="*" element={<div className="p-8"><h1 className="text-2xl">Page Under Construction</h1></div>} />
           </Route>

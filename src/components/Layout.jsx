@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, BookOpen, FileText, CheckCircle,
   LogOut, Menu, X, User as UserIcon, Sun, Moon, Clock, Gamepad2, MessageCircle, Bell, Code, Trophy, Calendar, Monitor,
   Briefcase, ChevronDown, ChevronRight, Palette, Network, ShieldCheck, ShieldAlert, Activity, Sparkles, Lock, UserCheck, ArrowLeftRight,
-  AlertTriangle, Share2, Building2
+  AlertTriangle, Share2, Building2, BarChart3
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import Swal from 'sweetalert2';
@@ -954,7 +954,10 @@ const Layout = () => {
       }
     };
     if (location.pathname.startsWith('/student/tasks')) updateSeen('tasks', pendingCount);
-    if (location.pathname.startsWith('/student/chat') || location.pathname.startsWith('/chat')) updateSeen('chats', chatCount);
+    if (location.pathname.startsWith('/student/chat') || location.pathname.startsWith('/chat')) {
+      updateSeen('chats', chatCount);
+      setChatCount(0);
+    }
     if (location.pathname.startsWith('/student/connections')) updateSeen('connections', friendRequestsCount);
     if (location.pathname.startsWith('/reviews')) updateSeen('reviews', pendingCount);
     if (location.pathname.startsWith('/enrollments')) updateSeen('joins', joinsCount);
@@ -1782,8 +1785,12 @@ const Layout = () => {
   };
 
   const getBadge = (key, count) => {
-    // If current count is greater than the seen count, show the new total count
-    return count > (seenCounts[key] || 0) ? count : 0;
+    if (key === 'chats' && (location.pathname.startsWith('/chat') || location.pathname.startsWith('/student/chat'))) {
+      return 0;
+    }
+    if (!count || count <= 0) return 0;
+    const seen = seenCounts[key] || 0;
+    return count > seen ? (count - seen) : 0;
   };
 
   const adminSections = [
@@ -1822,8 +1829,10 @@ const Layout = () => {
       label: 'Operations',
       links: [
         { name: 'Attendance', path: '/attendance-logs', icon: <Clock size={20} /> },
+        { name: 'Classroom Attendance', path: '/classroom-attendance', icon: <Users size={20} /> },
         { name: 'Check-In Permissions', path: '/checkin-permissions', icon: <ShieldCheck size={20} /> },
         { name: 'Attendance Tracker', path: '/attendance-tracker', icon: <Clock size={20} /> },
+        { name: 'Performance Reports', path: '/performance-reports', icon: <BarChart3 size={20} /> },
         { name: 'Leave Requests', path: '/leaves', icon: <Calendar size={20} />, badge: getBadge('leaves', leavesCount) },
         { name: 'Batch Chat', path: '/chat', icon: <MessageCircle size={20} />, badge: getBadge('chats', chatCount) },
         { name: 'Activity Logs', path: '/activity-logs', icon: <Activity size={20} /> },
@@ -1870,8 +1879,10 @@ const Layout = () => {
       label: 'Operations',
       links: [
         { name: 'Attendance Logs', path: '/attendance-logs', icon: <Clock size={20} /> },
+        { name: 'Classroom Attendance', path: '/classroom-attendance', icon: <Users size={20} /> },
         { name: 'Check-In Permissions', path: '/checkin-permissions', icon: <ShieldCheck size={20} /> },
         { name: 'Attendance Tracker', path: '/attendance-tracker', icon: <Clock size={20} /> },
+        { name: 'Performance Reports', path: '/performance-reports', icon: <BarChart3 size={20} /> },
         { name: 'Leave Requests', path: '/leaves', icon: <Calendar size={20} />, badge: getBadge('leaves', leavesCount) },
         { name: 'Batch Chat', path: '/chat', icon: <MessageCircle size={20} />, badge: getBadge('chats', chatCount) },
         { name: 'Activity Logs', path: '/activity-logs', icon: <Activity size={20} /> },
@@ -1906,6 +1917,7 @@ const Layout = () => {
     {
       label: 'Performance',
       links: [
+        { name: 'My Performance Reports', path: '/student/reports', icon: <BarChart3 size={20} /> },
         { name: 'My Grades', path: '/student/grades', icon: <CheckCircle size={20} /> },
         { name: 'Mock Drives', path: '/student/grades?tab=mockDrives', icon: <Briefcase size={20} /> },
         { name: 'Leaderboard', path: '/student/leaderboard', icon: <Trophy size={20} /> },
@@ -2967,9 +2979,9 @@ const Layout = () => {
               >
                 <div className="relative">
                   {item.icon}
-                  {(item.name === 'Chat' || item.name === 'Batch Chat') && chatCount > 0 && (
+                  {(item.name === 'Chat' || item.name === 'Batch Chat') && getBadge('chats', chatCount) > 0 && (
                     <span className="absolute -top-1 -right-2 min-w-3.5 h-3.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-[8px] font-black rounded-full flex items-center justify-center px-0.5 shadow animate-pulse">
-                      {chatCount}
+                      {getBadge('chats', chatCount)}
                     </span>
                   )}
                   {(item.name === 'Reviews') && pendingCount > 0 && (

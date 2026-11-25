@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { Users, Clock, Search, RefreshCw, ArrowUpDown } from 'lucide-react';
+import { Users, Clock, Search, RefreshCw, ArrowUpDown, Calendar, AlertTriangle, Check, X, Building2, Home } from 'lucide-react';
 import Loader from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
 
 const FacultyAttendance = () => {
-  const { selectedBatchId, batchesList } = useAuth();
+  const { selectedBatchId } = useAuth();
+  const location = useLocation();
+  const urlParams = new URLSearchParams(location.search);
+  const urlBatchId = urlParams.get('batchId');
+  const urlDate = urlParams.get('date');
+
   const [batches, setBatches] = useState([]);
-  const [selectedBatch, setSelectedBatch] = useState('');
+  const [selectedBatch, setSelectedBatch] = useState(urlBatchId || '');
   const [attendance, setAttendance] = useState([]);
   const [totalClassStrength, setTotalClassStrength] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -17,16 +22,17 @@ const FacultyAttendance = () => {
   // Filters and Sorting
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('name-asc'); // name-asc, name-desc, id-asc, id-desc
-  const [presenceFilter, setPresenceFilter] = useState('all'); // all, present, absent
-  const [selectedDate, setSelectedDate] = useState(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]);
+  const [presenceFilter, setPresenceFilter] = useState('all'); // all, present, absent, invalid, permission, wfh
+  const [selectedDate, setSelectedDate] = useState(
+    urlDate || new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]
+  );
 
   const fetchBatches = async () => {
     try {
       const res = await axios.get('/public/batches');
       setBatches(res.data);
-      const targetBatchId = (selectedBatchId && selectedBatchId !== 'all')
-        ? selectedBatchId
-        : (res.data[0]?._id || '');
+      const targetBatchId = urlBatchId
+        || ((selectedBatchId && selectedBatchId !== 'all') ? selectedBatchId : (res.data[0]?._id || ''));
       setSelectedBatch(targetBatchId);
     } catch (err) {
       console.error('Error fetching batches:', err);
@@ -85,16 +91,19 @@ const FacultyAttendance = () => {
       if (!matchesSearch) return false;
 
       if (presenceFilter === 'present') {
-        return log.isActive === true;
+        return log.status === 'Present' || log.isActive === true;
       }
       if (presenceFilter === 'absent') {
-        return log.isCheckedIn === false && log.isLeave === false;
+        return log.status === 'Absent' && !log.isLeave && !log.isActive;
+      }
+      if (presenceFilter === 'invalid') {
+        return log.status === 'Invalid';
       }
       if (presenceFilter === 'permission') {
-        return log.isLeave === true && log.isActive === false && log.status !== 'Present';
+        return log.status === 'Leave' || (log.isLeave === true && log.isActive === false && log.status !== 'Present');
       }
       if (presenceFilter === 'wfh') {
-        return log.accessType === 'wfh';
+        return log.accessType === 'wfh' || (log.wfhSeconds || 0) > 0;
       }
       return true;
     })
@@ -120,9 +129,11 @@ const FacultyAttendance = () => {
 
   // Calculate statistics
   const activeNow = attendance.filter(log => log.isActive).length;
-  const totalOnLeave = attendance.filter(log => log.isLeave && !log.isActive && log.status !== 'Present').length;
-  const totalWfh = attendance.filter(log => log.accessType === 'wfh').length;
-  const totalAbsent = attendance.filter(log => !log.isActive && (!log.isLeave || log.status === 'Present') && (!log.isCheckedIn || log.status === 'Absent')).length;
+  const totalPresent = attendance.filter(log => log.status === 'Present' || log.isActive).length;
+  const totalInvalid = attendance.filter(log => log.status === 'Invalid').length;
+  const totalOnLeave = attendance.filter(log => log.status === 'Leave' || (log.isLeave && !log.isActive && log.status !== 'Present')).length;
+  const totalWfh = attendance.filter(log => log.accessType === 'wfh' || (log.wfhSeconds || 0) > 0).length;
+  const totalAbsent = attendance.filter(log => log.status === 'Absent' && !log.isActive && !log.isLeave).length;
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-4 sm:p-6 md:p-8 space-y-6 text-slate-800 light-theme-override">
@@ -160,16 +171,36 @@ const FacultyAttendance = () => {
       `}</style>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black tracking-tight">Classroom & Remote Attendance</h1>
           <p className="text-muted text-sm font-medium mt-1">Faculty real-time dashboard of student attendance status (On-Site & WFH)</p>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="px-3.5 py-2 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-bold border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 whitespace-nowrap shadow-xs">
-            <span>Scope:</span>
-            <span className="text-slate-800 dark:text-white font-extrabold">{selectedBatchId === 'all' ? 'All Batches' : (batches.find(b => b._id === selectedBatch)?.batchName || 'Active Batch')}</span>
+        <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+          {/* Batch Selector Dropdown */}
+          <select
+            value={selectedBatch}
+            onChange={(e) => setSelectedBatch(e.target.value)}
+            className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer max-w-[240px]"
+            title="Select Batch"
+          >
+            {batches.map(b => (
+              <option key={b._id} value={b._id}>{b.batchName}</option>
+            ))}
+          </select>
+
+          {/* Date Picker for Historical Date Records */}
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+            <Calendar size={14} className="text-indigo-500 shrink-0" />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              max={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]}
+              className="text-xs font-bold text-slate-800 border-0! p-0! focus:outline-none cursor-pointer"
+              title="Select Date Record"
+            />
           </div>
 
           <button
@@ -184,55 +215,65 @@ const FacultyAttendance = () => {
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
-        <div className="glass-card p-3 sm:p-5 rounded-2xl flex items-center gap-2 sm:gap-4">
-          <div className="hidden sm:flex w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl items-center justify-center shrink-0">
-            <Users size={24} />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4">
+        <div className="glass-card p-3 sm:p-4 rounded-2xl flex items-center gap-2 sm:gap-3">
+          <div className="hidden sm:flex w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl items-center justify-center shrink-0">
+            <Users size={22} />
           </div>
           <div>
             <p className="text-[10px] sm:text-xs font-bold text-muted uppercase tracking-wider">Strength</p>
-            <h3 className="text-sm sm:text-2xl font-black mt-0.5">{totalClassStrength} <span className="hidden md:inline text-xs font-medium text-muted">students</span></h3>
+            <h3 className="text-sm sm:text-xl font-black mt-0.5">{totalClassStrength} <span className="hidden xl:inline text-xs font-medium text-muted">students</span></h3>
           </div>
         </div>
 
-        <div className="glass-card p-3 sm:p-5 rounded-2xl flex items-center gap-2 sm:gap-4">
-          <div className="hidden sm:flex w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl items-center justify-center shrink-0 relative">
-            <div className="w-3.5 h-3.5 bg-emerald-500 rounded-full animate-ping absolute"></div>
-            <div className="w-3.5 h-3.5 bg-emerald-500 rounded-full relative"></div>
+        <div className="glass-card p-3 sm:p-4 rounded-2xl flex items-center gap-2 sm:gap-3">
+          <div className="hidden sm:flex w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl items-center justify-center shrink-0 relative">
+            <div className="w-3 h-3 bg-emerald-500 rounded-full animate-ping absolute"></div>
+            <div className="w-3 h-3 bg-emerald-500 rounded-full relative"></div>
           </div>
           <div>
             <p className="text-[10px] sm:text-xs font-bold text-muted uppercase tracking-wider">Present</p>
-            <h3 className="text-sm sm:text-2xl font-black mt-0.5">{activeNow} <span className="hidden md:inline text-xs font-medium text-muted">active</span></h3>
+            <h3 className="text-sm sm:text-xl font-black mt-0.5">{totalPresent} <span className="hidden xl:inline text-xs font-medium text-muted">({activeNow} active)</span></h3>
           </div>
         </div>
 
-        <div className="glass-card p-3 sm:p-5 rounded-2xl flex items-center gap-2 sm:gap-4">
-          <div className="hidden sm:flex w-12 h-12 bg-rose-50 text-rose-600 rounded-xl items-center justify-center shrink-0">
-            <Users size={24} className="text-rose-500" />
+        <div className="glass-card p-3 sm:p-4 rounded-2xl flex items-center gap-2 sm:gap-3">
+          <div className="hidden sm:flex w-11 h-11 bg-rose-50 text-rose-600 rounded-xl items-center justify-center shrink-0">
+            <Users size={22} className="text-rose-500" />
           </div>
           <div>
             <p className="text-[10px] sm:text-xs font-bold text-muted uppercase tracking-wider">Absent</p>
-            <h3 className="text-sm sm:text-2xl font-black mt-0.5">{totalAbsent} <span className="hidden md:inline text-xs font-medium text-muted">students</span></h3>
+            <h3 className="text-sm sm:text-xl font-black mt-0.5">{totalAbsent} <span className="hidden xl:inline text-xs font-medium text-muted">students</span></h3>
           </div>
         </div>
 
-        <div className="glass-card p-3 sm:p-5 rounded-2xl flex items-center gap-2 sm:gap-4">
-          <div className="hidden sm:flex w-12 h-12 bg-amber-50 text-amber-600 rounded-xl items-center justify-center shrink-0">
-            <Clock size={24} className="text-amber-500" />
+        <div className="glass-card p-3 sm:p-4 rounded-2xl flex items-center gap-2 sm:gap-3">
+          <div className="hidden sm:flex w-11 h-11 bg-amber-50 text-amber-600 rounded-xl items-center justify-center shrink-0">
+            <AlertTriangle size={22} className="text-amber-500" />
+          </div>
+          <div>
+            <p className="text-[10px] sm:text-xs font-bold text-muted uppercase tracking-wider">Invalid</p>
+            <h3 className="text-sm sm:text-xl font-black mt-0.5">{totalInvalid} <span className="hidden xl:inline text-xs font-medium text-muted">&gt;10h</span></h3>
+          </div>
+        </div>
+
+        <div className="glass-card p-3 sm:p-4 rounded-2xl flex items-center gap-2 sm:gap-3">
+          <div className="hidden sm:flex w-11 h-11 bg-purple-50 text-purple-600 rounded-xl items-center justify-center shrink-0">
+            <Clock size={22} className="text-purple-500" />
           </div>
           <div>
             <p className="text-[10px] sm:text-xs font-bold text-muted uppercase tracking-wider">Permission</p>
-            <h3 className="text-sm sm:text-2xl font-black mt-0.5">{totalOnLeave} <span className="hidden md:inline text-xs font-medium text-muted">students</span></h3>
+            <h3 className="text-sm sm:text-xl font-black mt-0.5">{totalOnLeave} <span className="hidden xl:inline text-xs font-medium text-muted">students</span></h3>
           </div>
         </div>
 
-        <div className="glass-card p-3 sm:p-5 rounded-2xl flex items-center gap-2 sm:gap-4">
-          <div className="hidden sm:flex w-12 h-12 bg-cyan-50 text-cyan-600 rounded-xl items-center justify-center shrink-0">
-            <Users size={24} className="text-cyan-500" />
+        <div className="glass-card p-3 sm:p-4 rounded-2xl flex items-center gap-2 sm:gap-3">
+          <div className="hidden sm:flex w-11 h-11 bg-cyan-50 text-cyan-600 rounded-xl items-center justify-center shrink-0">
+            <Home size={22} className="text-cyan-500" />
           </div>
           <div>
             <p className="text-[10px] sm:text-xs font-bold text-muted uppercase tracking-wider">WFH</p>
-            <h3 className="text-sm sm:text-2xl font-black mt-0.5">{totalWfh} <span className="hidden md:inline text-xs font-medium text-muted">students</span></h3>
+            <h3 className="text-sm sm:text-xl font-black mt-0.5">{totalWfh} <span className="hidden xl:inline text-xs font-medium text-muted">students</span></h3>
           </div>
         </div>
       </div>
@@ -251,43 +292,29 @@ const FacultyAttendance = () => {
         </div>
 
         {/* Filter & Sort Controls Row */}
-        <div className="flex flex-row items-center gap-2 w-full justify-between">
-          {/* Segmented Filter Buttons (Show All, Present, Absent) */}
-          <div className="flex flex-1 bg-slate-100 p-1 rounded-xl items-center max-w-[400px] sm:max-w-none">
-            <button
-              onClick={() => setPresenceFilter('all')}
-              className={`flex-1 text-center py-1.5 px-1 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${presenceFilter === 'all' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setPresenceFilter('present')}
-              className={`flex-1 text-center py-1.5 px-1 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${presenceFilter === 'present' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              Present
-            </button>
-            <button
-              onClick={() => setPresenceFilter('absent')}
-              className={`flex-1 text-center py-1.5 px-1 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${presenceFilter === 'absent' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              Absent
-            </button>
-            <button
-              onClick={() => setPresenceFilter('permission')}
-              className={`flex-1 text-center py-1.5 px-1 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${presenceFilter === 'permission' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              Permission
-            </button>
-            <button
-              onClick={() => setPresenceFilter('wfh')}
-              className={`flex-1 text-center py-1.5 px-1 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${presenceFilter === 'wfh' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
-            >
-              WFH
-            </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full justify-between">
+          {/* Segmented Filter Buttons */}
+          <div className="flex flex-1 bg-slate-100 p-1 rounded-xl items-center overflow-x-auto">
+            {[
+              { id: 'all', label: `All (${totalClassStrength})` },
+              { id: 'present', label: `Present (${totalPresent})` },
+              { id: 'absent', label: `Absent (${totalAbsent})` },
+              { id: 'invalid', label: `Invalid (${totalInvalid})` },
+              { id: 'permission', label: `Permission (${totalOnLeave})` },
+              { id: 'wfh', label: `WFH (${totalWfh})` }
+            ].map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setPresenceFilter(tab.id)}
+                className={`flex-1 text-center py-1.5 px-2 rounded-lg text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${presenceFilter === tab.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
           {/* Sort Selector */}
-          <div className="flex items-center gap-1.5 flex-1 max-w-[160px] sm:max-w-none justify-end">
+          <div className="flex items-center gap-1.5 justify-end shrink-0">
             <ArrowUpDown size={14} className="text-slate-400 shrink-0 hidden xs:inline" />
             <select
               className="w-full sm:w-[150px] px-2 py-1.5 rounded-xl text-xs sm:text-sm font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-sm border border-slate-200 bg-white text-slate-800"
@@ -309,21 +336,25 @@ const FacultyAttendance = () => {
       ) : filteredLogs.length === 0 ? (
         <div className="glass-card p-12 text-center rounded-2xl">
           <p className="text-muted font-bold text-base">No students found matching current filters.</p>
-          <p className="text-xs text-slate-400 mt-1 font-medium">Verify that the correct batch is selected and that students have checked in today.</p>
+          <p className="text-xs text-slate-400 mt-1 font-medium">Verify that the correct batch and date are selected.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredLogs.map(student => (
             <div key={student._id} className="glass-card p-5 rounded-2xl flex flex-col justify-between hover:translate-y-[-2px] transition-transform duration-200 bg-white">
-              <div className="flex justify-between items-start">
+              <div className="flex justify-between items-start gap-2">
                 <div>
                   <h3 className="font-bold text-base text-slate-900 leading-snug">{student.name}</h3>
                   <p className="text-xs font-semibold text-muted tracking-wide uppercase mt-0.5">{student.rollNumber || 'No ID'}</p>
                 </div>
-                 <div className="flex items-center gap-1.5">
-                  {student.accessType === 'wfh' && (
-                    <span className="bg-cyan-50 border border-cyan-200 px-2 py-0.5 rounded text-[9px] font-black text-cyan-600 uppercase tracking-wider shrink-0">
-                      WFH
+                 <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  {student.onsiteAllocated && student.wfhAllocated && (
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shrink-0 ${
+                      student.bothMet
+                        ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+                        : 'bg-slate-100 border border-slate-200 text-slate-600'
+                    }`}>
+                      {student.bothMet ? 'Both Met' : 'Incomplete'}
                     </span>
                   )}
                   {student.isActive ? (
@@ -332,43 +363,73 @@ const FacultyAttendance = () => {
                       <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full relative"></span>
                       Active
                     </span>
-                  ) : student.isLeave ? (
-                    <span className="bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-black text-amber-600 uppercase tracking-wider">
+                  ) : student.status === 'Present' ? (
+                    <span className="bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full text-[10px] font-black text-emerald-700 uppercase tracking-wider">
+                      Present
+                    </span>
+                  ) : student.status === 'Invalid' ? (
+                    <span className="bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full text-[10px] font-black text-amber-700 uppercase tracking-wider">
+                      Invalid (&gt;{student.maxHours || 10}h)
+                    </span>
+                  ) : student.status === 'Leave' || student.isLeave ? (
+                    <span className="bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-full text-[10px] font-black text-indigo-600 uppercase tracking-wider">
                       Permission
                     </span>
-                  ) : !student.isCheckedIn ? (
+                  ) : (
                     <span className="bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full text-[10px] font-black text-rose-600 uppercase tracking-wider">
                       Absent
-                    </span>
-                  ) : (
-                    <span className="bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                      Checked Out
                     </span>
                   )}
                 </div>
               </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
+              {/* On-Site & WFH Breakdown */}
+              <div className="mt-4 space-y-1.5 text-xs">
+                {student.onsiteAllocated && (
+                  <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl border ${
+                    student.onsiteMet
+                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-700'
+                      : 'bg-rose-50/70 border-rose-200 text-rose-700'
+                  }`}>
+                    <span className="flex items-center gap-1.5 font-bold">
+                      <Building2 size={13} /> On-Site: {formatDuration(student.onsiteSeconds)} / {student.onsiteMinHours || 4}h
+                    </span>
+                    {student.onsiteMet ? <Check size={13} strokeWidth={3} /> : <X size={13} strokeWidth={3} />}
+                  </div>
+                )}
+                {student.wfhAllocated && (
+                  <div className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl border ${
+                    student.wfhMet
+                      ? 'bg-emerald-50/70 border-emerald-200 text-emerald-700'
+                      : 'bg-rose-50/70 border-rose-200 text-rose-700'
+                  }`}>
+                    <span className="flex items-center gap-1.5 font-bold">
+                      <Home size={13} /> WFH: {formatDuration(student.wfhSeconds)} / {student.wfhMinHours || 4}h
+                    </span>
+                    {student.wfhMet ? <Check size={13} strokeWidth={3} /> : <X size={13} strokeWidth={3} />}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-4 border-t border-slate-100 pt-3">
                 <div>
                   <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Total Time Worked</p>
                   <p className="text-sm font-black text-slate-800 mt-0.5">{formatDuration(student.totalSeconds)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Check-in Status</p>
+                  <p className="text-[10px] font-bold text-muted uppercase tracking-wider">Day Status</p>
                   <p className={`text-sm font-black mt-0.5 ${
-                    student.isActive 
+                    student.status === 'Present' || student.isActive
                       ? 'text-emerald-600' 
-                      : (student.isLeave && student.status !== 'Present') 
-                        ? 'text-amber-600' 
-                        : student.status === 'Present'
-                          ? 'text-emerald-600'
-                          : student.status === 'Absent' 
-                            ? 'text-rose-600' 
-                            : 'text-indigo-600'
+                      : student.status === 'Invalid'
+                        ? 'text-amber-600'
+                        : student.status === 'Leave' || (student.isLeave && student.status !== 'Present') 
+                          ? 'text-indigo-600' 
+                          : 'text-rose-600'
                   }`}>
                     {student.isActive 
-                      ? 'Active' 
-                      : (student.isLeave && student.status !== 'Present') 
+                      ? 'Active (In Progress)' 
+                      : student.status === 'Leave'
                         ? 'Permission Leave' 
                         : student.status}
                   </p>
