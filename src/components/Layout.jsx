@@ -1142,7 +1142,7 @@ const Layout = () => {
             } else {
               setOnsiteSeconds(prev => prev + delta);
             }
-            lastTick = now;
+            lastTick += delta * 1000;
           }
         }, 1000);
       }
@@ -1191,24 +1191,11 @@ const Layout = () => {
         const todayRecord = todayRecords[0];
         const activeRecord = todayRecords.find(r => r.isActive);
 
-        let baseOnsite = todayRecord.onsiteSeconds || 0;
-        let baseWfh = todayRecord.wfhSeconds || 0;
-
-        let additionalSeconds = 0;
-        if (activeRecord && activeRecord.lastCheckInTime) {
-          const now = Date.now();
-          const lastCheckIn = new Date(activeRecord.lastCheckInTime).getTime();
-          if (now > lastCheckIn) {
-            additionalSeconds = Math.floor((now - lastCheckIn) / 1000);
-          }
-        }
+        // /attendance/my-summary already includes active session elapsed seconds in onsiteSeconds & wfhSeconds
+        const baseOnsite = todayRecord.onsiteSeconds || 0;
+        const baseWfh = todayRecord.wfhSeconds || 0;
 
         if (activeRecord) {
-          if (activeRecord.accessType === 'wfh') {
-            baseWfh += additionalSeconds;
-          } else {
-            baseOnsite += additionalSeconds;
-          }
           setSessionActive(true);
           setAttendanceId(activeRecord._id);
           attendanceIdRef.current = activeRecord._id;
@@ -1219,19 +1206,17 @@ const Layout = () => {
           localStorage.removeItem('sessionActive');
         }
 
-        setOnsiteSeconds(baseOnsite);
-        setWfhSeconds(baseWfh);
-
-        // Active mode: mentor-granted access mode takes priority, fallback to record mode
         const activeMode = grantedAccessType || activeRecord?.accessType || todayRecord?.accessType || 'on-site';
-        setCurrentAccessType(activeMode);
+        const targetSessionSeconds = activeMode === 'wfh' ? baseWfh : baseOnsite;
+        const isSameActiveSession = Boolean(activeRecord && attendanceIdRef.current === activeRecord._id && currentAccessTypeRef.current === activeMode);
+        const withinJitter = Math.abs(targetSessionSeconds - sessionSecondsRef.current) <= 5;
 
-        // Session timer tracks CURRENT ACTIVE MODE (starts fresh from 0 when switching to fresh WFH!)
-        if (activeMode === 'wfh') {
-          setSessionSeconds(baseWfh);
-        } else {
-          setSessionSeconds(baseOnsite);
+        if (!isSameActiveSession || !withinJitter) {
+          setOnsiteSeconds(baseOnsite);
+          setWfhSeconds(baseWfh);
+          setSessionSeconds(targetSessionSeconds);
         }
+        setCurrentAccessType(activeMode);
       } else {
         setSessionActive(false);
         setAttendanceId(null);

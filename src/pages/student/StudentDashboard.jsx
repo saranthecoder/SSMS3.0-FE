@@ -141,10 +141,10 @@ const StudentDashboard = () => {
   const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, leave: 0, inProgress: 0, invalid: 0, total: 0, percentage: 0 });
   const [localCheckInAccess, setLocalCheckInAccess] = useState({ hasAccess: false, accessType: null });
 
-  // Prefer context-synced access from Layout socket listener, fallback to local state
-  const checkInAccess = (contextCheckInAccess && contextCheckInAccess.hasAccess !== undefined)
+  // Prefer whichever source has active access; fall back to contextCheckInAccess then localCheckInAccess
+  const checkInAccess = (contextCheckInAccess?.hasAccess)
     ? contextCheckInAccess
-    : localCheckInAccess;
+    : (localCheckInAccess?.hasAccess ? localCheckInAccess : (contextCheckInAccess?.policy ? contextCheckInAccess : localCheckInAccess));
 
   const [activeLeetcode, setActiveLeetcode] = useState([]);
   const [mockScores, setMockScores] = useState([]);
@@ -600,18 +600,19 @@ const StudentDashboard = () => {
             <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full -ml-8 -mb-8 blur-xl"></div>
 
             {/* Attendance Requirements Card (Matching User Specification) */}
-            {checkInAccess.hasAccess ? (() => {
+            {(checkInAccess.hasAccess || sessionActive) ? (() => {
+              const effectiveMode = checkInAccess.accessType || currentAccessType || 'on-site';
               const dw = checkInAccess.dailyWorkload || {};
               const isDualMode = Boolean(
                 (dw.onsiteAllocated && dw.wfhAllocated) ||
                 (onsiteSeconds > 0 && wfhSeconds > 0) ||
-                (checkInAccess.accessType === 'wfh' && onsiteSeconds > 0) ||
-                (checkInAccess.accessType === 'on-site' && wfhSeconds > 0)
+                (effectiveMode === 'wfh' && onsiteSeconds > 0) ||
+                (effectiveMode === 'on-site' && wfhSeconds > 0)
               );
-              const onsiteMin = Number(dw.onsiteMinHours || checkInAccess.onsiteMinHours || 2);
-              const onsiteMax = Number(dw.onsiteMaxHours || checkInAccess.onsiteMaxHours || 10);
-              const wfhMin = Number(dw.wfhMinHours || checkInAccess.wfhMinHours || 3);
-              const wfhMax = Number(dw.wfhMaxHours || checkInAccess.wfhMaxHours || 10);
+              const onsiteMin = Number(dw.onsiteMinHours || checkInAccess.onsiteMinHours || checkInAccess.policy?.onsiteMinHours || 2);
+              const onsiteMax = Number(dw.onsiteMaxHours || checkInAccess.onsiteMaxHours || checkInAccess.policy?.onsiteMaxHours || 10);
+              const wfhMin = Number(dw.wfhMinHours || checkInAccess.wfhMinHours || checkInAccess.policy?.wfhMinHours || 3);
+              const wfhMax = Number(dw.wfhMaxHours || checkInAccess.wfhMaxHours || checkInAccess.policy?.wfhMaxHours || 10);
 
               const onsiteSecsReq = onsiteMin * 3600;
               const wfhSecsReq = wfhMin * 3600;
@@ -632,7 +633,7 @@ const StudentDashboard = () => {
                           <Home size={10} />
                           Dual Mode ({onsiteMin}h + {wfhMin}h)
                         </>
-                      ) : checkInAccess.accessType === 'wfh' ? (
+                      ) : effectiveMode === 'wfh' ? (
                         <>
                           <Home size={10} />
                           WFH Mode
@@ -789,7 +790,7 @@ const StudentDashboard = () => {
                       return (
                         <div className="mt-2.5 p-2 rounded-xl bg-emerald-500/30 border border-emerald-300/40 text-xs font-bold text-emerald-100 flex items-center gap-2">
                           <CheckCircle2 size={15} className="text-emerald-300 shrink-0" />
-                          <span>Present Criteria Met for {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'}! You have logged {Math.floor(sessionSeconds / 3600)}h {Math.floor((sessionSeconds % 3600) / 60)}m.</span>
+                          <span>Present Criteria Met for {effectiveMode === 'wfh' ? 'WFH' : 'On-Site'}! You have logged {Math.floor(sessionSeconds / 3600)}h {Math.floor((sessionSeconds % 3600) / 60)}m.</span>
                         </div>
                       );
                     }
@@ -799,7 +800,7 @@ const StudentDashboard = () => {
                     return (
                       <div className="mt-2.5 p-2 rounded-xl bg-amber-500/25 border border-amber-300/40 text-xs font-bold text-amber-100 flex items-center gap-2">
                         <Clock size={15} className="text-amber-200 shrink-0" />
-                        <span>{remH > 0 ? `${remH}h ` : ''}{remM}m more needed to qualify as Present in {checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'} mode (Min {reqHours}h required).</span>
+                        <span>{remH > 0 ? `${remH}h ` : ''}{remM}m more needed to qualify as Present in {effectiveMode === 'wfh' ? 'WFH' : 'On-Site'} mode (Min {reqHours}h required).</span>
                       </div>
                     );
                   })()}
@@ -829,8 +830,8 @@ const StudentDashboard = () => {
             }`}>
               <div>
                 <p className={`text-xs mb-1 flex items-center gap-1.5 ${themeColor === 'Emerald' ? 'text-emerald-100' : 'text-primary-100'}`}>
-                  {checkInAccess.accessType === 'wfh' ? <Home size={12} className="shrink-0 text-sky-200" /> : <Building2 size={12} className="shrink-0 text-emerald-200" />}
-                  <span>Active Timer ({checkInAccess.accessType === 'wfh' ? 'WFH' : 'On-Site'})</span>
+                  {(checkInAccess.accessType || currentAccessType) === 'wfh' ? <Home size={12} className="shrink-0 text-sky-200" /> : <Building2 size={12} className="shrink-0 text-emerald-200" />}
+                  <span>Active Timer ({(checkInAccess.accessType || currentAccessType) === 'wfh' ? 'WFH' : 'On-Site'})</span>
                 </p>
                 <p className="font-mono font-bold text-2xl">{formatTime(sessionSeconds)}</p>
               </div>
