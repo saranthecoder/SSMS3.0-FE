@@ -299,19 +299,31 @@ const AttendanceLogs = () => {
   };
 
   const handleEditAttendance = async (log) => {
-    const currentHours = ((log.totalSeconds || 0) / 3600).toFixed(2);
+    const currentOnsiteHours = ((log.onsiteSeconds || 0) / 3600).toFixed(2);
+    const currentWfhHours = ((log.wfhSeconds || 0) / 3600).toFixed(2);
+    const currentTotalHours = (((log.onsiteSeconds || 0) + (log.wfhSeconds || 0)) / 3600 || (log.totalSeconds || 0) / 3600).toFixed(2);
     
     const { value: formValues } = await Swal.fire({
       title: `Edit Attendance for ${log.name}`,
       html: `
-        <div class="flex flex-col gap-4 text-left">
-          <div>
-            <label class="block text-sm font-bold mb-1 text-slate-700 dark:text-slate-300">Login Hours</label>
-            <input id="swal-input-hours" type="number" step="0.1" class="swal2-input !m-0 !w-full" value="${currentHours}" placeholder="Enter hours...">
+        <div class="flex flex-col gap-3.5 text-left">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold mb-1 text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">On-Site Hours</label>
+              <input id="swal-input-onsite" type="number" min="0" step="0.05" class="swal2-input !m-0 !w-full !text-sm" value="${currentOnsiteHours}" placeholder="0.00">
+            </div>
+            <div>
+              <label class="block text-xs font-bold mb-1 text-sky-600 dark:text-sky-400 uppercase tracking-wider">WFH Hours</label>
+              <input id="swal-input-wfh" type="number" min="0" step="0.05" class="swal2-input !m-0 !w-full !text-sm" value="${currentWfhHours}" placeholder="0.00">
+            </div>
+          </div>
+          <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center justify-between px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800/80">
+            <span>Combined Total Hours:</span>
+            <span id="swal-total-hours-preview" class="font-mono font-black text-slate-800 dark:text-white">${currentTotalHours} hrs</span>
           </div>
           <div>
-            <label class="block text-sm font-bold mb-1 text-slate-700 dark:text-slate-300">Attendance Status</label>
-            <select id="swal-input-status" class="swal2-select !m-0 !w-full">
+            <label class="block text-xs font-bold mb-1 text-slate-700 dark:text-slate-300 uppercase tracking-wider">Attendance Status</label>
+            <select id="swal-input-status" class="swal2-select !m-0 !w-full !text-sm">
               <option value="Present" ${log.status === 'Present' ? 'selected' : ''}>Present</option>
               <option value="Absent" ${log.status === 'Absent' ? 'selected' : ''}>Absent</option>
               <option value="Invalid" ${log.status === 'Invalid' ? 'selected' : ''}>Invalid</option>
@@ -321,6 +333,17 @@ const AttendanceLogs = () => {
           </div>
         </div>
       `,
+      didOpen: () => {
+        const osEl = document.getElementById('swal-input-onsite');
+        const wfhEl = document.getElementById('swal-input-wfh');
+        const previewEl = document.getElementById('swal-total-hours-preview');
+        const updatePreview = () => {
+          const sum = (Number(osEl?.value) || 0) + (Number(wfhEl?.value) || 0);
+          if (previewEl) previewEl.textContent = `${sum.toFixed(2)} hrs`;
+        };
+        osEl?.addEventListener('input', updatePreview);
+        wfhEl?.addEventListener('input', updatePreview);
+      },
       focusConfirm: false,
       showCancelButton: true,
       confirmButtonText: 'Save Changes',
@@ -329,10 +352,14 @@ const AttendanceLogs = () => {
       background: document.documentElement.classList.contains('dark') ? '#0f172a' : '#ffffff',
       color: document.documentElement.classList.contains('dark') ? '#f1f5f9' : '#0f172a',
       preConfirm: () => {
+        const onsiteHours = Number(document.getElementById('swal-input-onsite').value) || 0;
+        const wfhHours = Number(document.getElementById('swal-input-wfh').value) || 0;
         return {
-          hours: document.getElementById('swal-input-hours').value,
+          onsiteHours: Math.max(0, onsiteHours),
+          wfhHours: Math.max(0, wfhHours),
+          hours: Math.max(0, onsiteHours) + Math.max(0, wfhHours),
           status: document.getElementById('swal-input-status').value
-        }
+        };
       }
     });
 
@@ -341,7 +368,9 @@ const AttendanceLogs = () => {
         setLoading(true);
         const logId = log._id;
         await axios.put(`/attendance/${logId}`, {
-          hours: Number(formValues.hours),
+          onsiteHours: formValues.onsiteHours,
+          wfhHours: formValues.wfhHours,
+          hours: formValues.hours,
           status: formValues.status,
           dateStr: log.date
         });

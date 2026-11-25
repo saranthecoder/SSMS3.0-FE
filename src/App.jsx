@@ -8,7 +8,7 @@ import Loader from './components/Loader';
 const CHUNK_RELOAD_KEY = 'ssms_chunk_reload_at';
 const isChunkLoadError = (err) => {
   const msg = String(err?.message || err || '');
-  return /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk .* failed|ChunkLoadError/i.test(msg);
+  return /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Failed to load module script|Unable to preload CSS|Loading chunk .* failed|ChunkLoadError/i.test(msg);
 };
 
 const tryAutoReloadForChunk = () => {
