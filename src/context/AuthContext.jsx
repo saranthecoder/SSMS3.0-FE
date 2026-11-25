@@ -42,15 +42,15 @@ export const AuthProvider = ({ children }) => {
           .filter(s => s && s.url && normalizeUrl(s.url) !== normalizeUrl(primaryServer.url))
           .map(s => ({ ...s, isPrimary: false }));
         return {
-          policy: parsed.policy || 'failover',
+          policy: parsed.policy || 'round-robin',
           manualSelectedServerId: parsed.manualSelectedServerId || null,
           cpuThreshold: parsed.cpuThreshold || 80,
           servers: [primaryServer, ...secondaryServers]
         };
       }
-      return { policy: 'failover', manualSelectedServerId: null, cpuThreshold: 80, servers: [primaryServer] };
+      return { policy: 'round-robin', manualSelectedServerId: null, cpuThreshold: 80, servers: [primaryServer] };
     } catch (e) {
-      return { policy: 'failover', manualSelectedServerId: null, cpuThreshold: 80, servers: [primaryServer] };
+      return { policy: 'round-robin', manualSelectedServerId: null, cpuThreshold: 80, servers: [primaryServer] };
     }
   });
 
@@ -238,8 +238,13 @@ export const AuthProvider = ({ children }) => {
       async (error) => {
         const originalRequest = error.config;
         if (originalRequest && originalRequest.baseURL) {
-          const isNetworkOr5xx = !error.response || (error.response.status >= 502 && error.response.status <= 504);
-          if (isNetworkOr5xx) {
+          const status = error.response?.status;
+          const isNodeOrEdgeFailure =
+            !error.response ||
+            status >= 500 ||
+            status === 429 ||
+            (status === 403 && !error.response?.data?.isBlocked && !error.response?.data?.isSuspended);
+          if (isNodeOrEdgeFailure) {
             recordNodeFailure(originalRequest.baseURL, error);
           }
         }

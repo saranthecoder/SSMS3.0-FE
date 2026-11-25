@@ -671,48 +671,60 @@ const TrafficManagement = () => {
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Active Policy:</span>
             <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-black uppercase">
-              {policy === 'failover' ? 'Active-Backup Failover' : policy === 'round-robin' ? 'Round-Robin Rotation' : policy === 'latency' ? 'Latency-Optimized' : 'Static Node Assign'}
+              {policy === 'failover' ? 'Active-Backup Failover' : policy === 'round-robin' ? 'Round-Robin Rotation' : policy === 'cpu-adaptive' ? 'Dynamic CPU Auto-Scale' : policy === 'latency' ? 'Latency-Optimized' : 'Static Node Assign'}
             </span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
-          {servers.map((s) => {
+          {(() => {
+            const healthyActiveServers = servers.filter(srv => srv.isActive && srv.status !== 'offline' && srv.status !== 'unknown');
+            const fallbackActiveServers = healthyActiveServers.length > 0 ? healthyActiveServers : servers.filter(srv => srv.isActive && srv.status !== 'offline');
+            return servers.map((s) => {
+            const isHealthy = s.isActive && s.status !== 'offline' && s.status !== 'unknown';
+            const isEligible = fallbackActiveServers.some(srv => srv._id === s._id);
             let loadPercent = 0;
-            if (s.isActive && s.status !== 'offline') {
+            if (isEligible) {
               if (policy === 'failover') {
-                const primaryOnline = servers.find(srv => srv.isPrimary && srv.isActive && srv.status !== 'offline');
+                const primaryOnline = fallbackActiveServers.find(srv => srv.isPrimary);
                 if (primaryOnline) {
                   loadPercent = s._id === primaryOnline._id ? 100 : 0;
                 } else {
-                  const firstOnline = servers.find(srv => srv.isActive && srv.status !== 'offline');
+                  const firstOnline = fallbackActiveServers[0];
                   loadPercent = (firstOnline && s._id === firstOnline._id) ? 100 : 0;
                 }
               } else if (policy === 'round-robin') {
-                const activeCount = servers.filter(srv => srv.isActive && srv.status !== 'offline').length;
+                const activeCount = fallbackActiveServers.length;
                 loadPercent = activeCount > 0 ? Math.round(100 / activeCount) : 0;
               } else if (policy === 'latency') {
-                const activeOnline = servers.filter(srv => srv.isActive && srv.status !== 'offline');
-                const lowest = [...activeOnline].sort((a, b) => (a.responseTime || 999) - (b.responseTime || 999))[0];
+                const lowest = [...fallbackActiveServers].sort((a, b) => (a.responseTime || 999) - (b.responseTime || 999))[0];
                 loadPercent = (lowest && s._id === lowest._id) ? 100 : 0;
               } else if (policy === 'manual') {
                 loadPercent = s._id === manualSelectedServerId ? 100 : 0;
               } else if (policy === 'cpu-adaptive') {
-                const activeOnline = servers.filter(srv => srv.isActive && srv.status !== 'offline');
-                const lowestCpu = [...activeOnline].sort((a, b) => ((a.cpuUsage != null ? a.cpuUsage : 999) - (b.cpuUsage != null ? b.cpuUsage : 999)))[0];
+                const lowestCpu = [...fallbackActiveServers].sort((a, b) => ((a.cpuUsage != null ? a.cpuUsage : 999) - (b.cpuUsage != null ? b.cpuUsage : 999)))[0];
                 loadPercent = (lowestCpu && s._id === lowestCpu._id) ? 100 : 0;
               }
             }
 
             return (
-              <div key={s._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5 shadow-sm relative overflow-hidden">
+              <div key={s._id} className={`bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border ${!s.isActive || s.status === 'offline' ? 'border-rose-500/30 opacity-80' : 'border-slate-200 dark:border-slate-800'} space-y-2.5 shadow-sm relative overflow-hidden`}>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[150px]">{s.name}</span>
-                  <div className="flex items-center gap-1.5">
-                    {s.status === 'online' && (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[130px]">{s.name}</span>
+                    {!s.isActive ? (
+                      <span className="px-1.5 py-0.5 rounded bg-slate-500/10 text-slate-500 text-[9px] font-bold uppercase">Paused</span>
+                    ) : s.status === 'offline' ? (
+                      <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500 text-[9px] font-bold uppercase">Failed · Moved</span>
+                    ) : !isHealthy ? (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 text-[9px] font-bold uppercase">Unverified</span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {s.status === 'online' && s.isActive && (
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                     )}
-                    <span className="font-black text-amber-500">{loadPercent}% Target Share</span>
+                    <span className={`font-black ${loadPercent > 0 ? 'text-amber-500' : 'text-slate-400'}`}>{loadPercent}% Target Share</span>
                   </div>
                 </div>
                 <div className="w-full bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
@@ -727,7 +739,8 @@ const TrafficManagement = () => {
                 </div>
               </div>
             );
-          })}
+          });
+          })()}
         </div>
       </div>
 
@@ -1026,9 +1039,23 @@ const TrafficManagement = () => {
               </div>
             </div>
 
-            <div className="pt-1 border-t border-slate-200 dark:border-slate-800/80 flex justify-between items-center text-[10px]">
-              <span className="text-slate-400">Burn Rate:</span>
-              <span className="font-bold font-mono text-slate-300">~{renderUsage?.metrics?.hourlyBurnRate ? Number(renderUsage.metrics.hourlyBurnRate * 24).toFixed(1) : '20.5'} hrs/day</span>
+            <div className="pt-1 border-t border-slate-200 dark:border-slate-800/80 space-y-1 text-[10px]">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Active Cluster Burn:</span>
+                <span className="font-bold font-mono text-amber-500">
+                  {renderUsage?.metrics?.clusterCapacity?.estimatedDailyBurnHours
+                    ? `${renderUsage.metrics.clusterCapacity.estimatedDailyBurnHours} hrs/day (${renderUsage.metrics.clusterCapacity.activeServicesCount} active)`
+                    : `~${renderUsage?.metrics?.hourlyBurnRate ? Number(renderUsage.metrics.hourlyBurnRate * 24).toFixed(1) : '20.5'} hrs/day`}
+                </span>
+              </div>
+              {renderUsage?.metrics?.clusterCapacity?.estimatedDaysRemainingAtCurrentRate != null && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Pool Runway:</span>
+                  <span className={`font-bold font-mono ${renderUsage.metrics.clusterCapacity.estimatedDaysRemainingAtCurrentRate < (renderUsage?.metrics?.period?.daysRemaining ?? 2) ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    ~{renderUsage.metrics.clusterCapacity.estimatedDaysRemainingAtCurrentRate} days left
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1146,12 +1173,33 @@ const TrafficManagement = () => {
             ))}
           </div>
 
-          {/* Disclaimer & Explanation banner */}
-          <div className="p-3 bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2.5">
-            <Info size={16} className="text-indigo-400 mt-0.5 shrink-0" />
-            <div className="text-[11px] leading-relaxed">
-              <strong className="text-slate-800 dark:text-slate-200">How Render Free Tier Works:</strong> Render provides a shared pool of 750 free instance hours per calendar month across all free web services in your workspace. Free instance hours do not subtract per-service; running 2 free web services simultaneously consumes 2 instance hours per clock hour. When hours are depleted, all free web services spin down until the 1st of next month.
+          {/* Disclaimer & Capacity Recommendation banner */}
+          <div className={`p-3 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 border ${
+            renderUsage?.metrics?.clusterCapacity?.canAddNewServerInSameWorkspace === false
+              ? 'bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-300'
+              : 'bg-indigo-500/5 dark:bg-indigo-500/10 border-indigo-500/20 text-slate-600 dark:text-slate-400'
+          }`}>
+            <div className="flex items-start gap-2.5">
+              <Info size={16} className="text-indigo-400 mt-0.5 shrink-0" />
+              <div className="text-[11px] leading-relaxed space-y-1">
+                {renderUsage?.metrics?.clusterCapacity?.capacityRecommendation && (
+                  <div>
+                    <strong className="text-slate-800 dark:text-slate-200">Capacity & Scaling Status:</strong>{' '}
+                    {renderUsage.metrics.clusterCapacity.capacityRecommendation}
+                  </div>
+                )}
+                <div>
+                  <strong className="text-slate-800 dark:text-slate-200">How Render Free Tier Works:</strong> Render provides a shared pool of 750 free instance hours per calendar month across all free web services in your workspace. Running 2 free web services simultaneously consumes 2 instance hours per clock hour.
+                </div>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(true)}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-bold whitespace-nowrap shrink-0 cursor-pointer shadow-sm"
+            >
+              + Add Server Node
+            </button>
           </div>
         </div>
       </div>

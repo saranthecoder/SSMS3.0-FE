@@ -328,9 +328,20 @@ export const shouldRetryRequest = (error, originalRequest) => {
     return false;
   }
 
-  // Network drop or 502/503/504 Bad Gateway / Gateway Timeout
-  const isNetworkOr5xxError = !error.response || (error.response.status >= 502 && error.response.status <= 504);
-  return isNetworkOr5xxError;
+  if (!error.response) return true;
+  const status = error.response.status;
+
+  // Gateway / server errors / rate limits
+  if ((status >= 502 && status <= 504) || status === 429 || status === 500) {
+    return true;
+  }
+
+  // Cloudflare / edge 403 or stale-node 403 (exclude explicit student block/suspension)
+  if (status === 403 && !error.response.data?.isBlocked && !error.response.data?.isSuspended) {
+    return true;
+  }
+
+  return false;
 };
 
 /**
