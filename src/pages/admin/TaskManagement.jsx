@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { BookOpen, Plus, FileText as FileTextIcon, Edit, Trash2, Link as LinkIcon, RefreshCw, Search, RotateCcw, CheckCircle, Clock, Calendar, Award, Tag, X, ExternalLink, Download, Eye, Coins } from 'lucide-react';
+import { BookOpen, Plus, FileText as FileTextIcon, Edit, Trash2, Link as LinkIcon, RefreshCw, Search, RotateCcw, CheckCircle, Clock, Calendar, Award, Tag, X, ExternalLink, Download, Eye, Coins, FileSpreadsheet } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { useAuth } from '../../context/AuthContext';
 import { useGlobalBatch } from '../../context/GlobalBatchContext';
@@ -218,7 +218,13 @@ const TaskManagement = () => {
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Task Management</h1>
-        <div className="flex flex-col sm:flex-row items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <button
+            onClick={() => navigate('/tasks/bulk')}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-5 text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover:-translate-y-0.5 whitespace-nowrap w-full sm:w-auto cursor-pointer"
+          >
+            <FileSpreadsheet size={18} /> Bulk Task Allocator
+          </button>
           <button 
             onClick={openCreateModal} 
             className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white font-bold py-2.5 px-6 text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/30 transition-all hover:-translate-y-0.5 whitespace-nowrap w-full sm:w-auto cursor-pointer font-medium"

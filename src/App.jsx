@@ -39,6 +39,7 @@ const PortalDirectory = lazy(() => import('./pages/admin/PortalDirectory'));
 const AccessDisciplinaryRecords = lazy(() => import('./pages/admin/AccessDisciplinaryRecords'));
 const SyllabusTracker = lazy(() => import('./pages/SyllabusTracker'));
 const PerformanceReports = lazy(() => import('./pages/admin/PerformanceReports'));
+const BulkTaskAllocator = lazy(() => import('./pages/admin/BulkTaskAllocator'));
 
 // Student Pages
 const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'));
@@ -206,6 +207,9 @@ function App() {
             } />
             <Route path="performance-reports" element={
               <ProtectedRoute allowedRoles={['admin', 'mentor']}><PerformanceReports /></ProtectedRoute>
+            } />
+            <Route path="tasks/bulk" element={
+              <ProtectedRoute allowedRoles={['admin', 'mentor']}><BulkTaskAllocator /></ProtectedRoute>
             } />
             <Route path="student/reports" element={
               <ProtectedRoute allowedRoles={['student']}><MyReports /></ProtectedRoute>
