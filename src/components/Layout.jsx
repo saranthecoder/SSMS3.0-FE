@@ -765,9 +765,9 @@ const Layout = () => {
   }, []);
 
   const playNotifSound = useCallback(() => {
-    if ((user?.role === 'mentor' || user?.role === 'admin') && dndModeRef.current) return;
+    if (dndModeRef.current) return;
     soundManager.playNotification();
-  }, [user?.role]);
+  }, []);
 
   // Centralized Notification Navigation Engine: Opens the exact task, submission, leave, or chat
   const navigateToNotificationTarget = useCallback((notif) => {
@@ -912,7 +912,7 @@ const Layout = () => {
     submissionId = null,
     type = ''
   }) => {
-    if ((user?.role === 'mentor' || user?.role === 'admin') && dndModeRef.current) {
+    if (dndModeRef.current) {
       return;
     }
     const newId = Date.now() + Math.random().toString(36).substring(2, 7);
@@ -2507,22 +2507,20 @@ const Layout = () => {
               </div>
             )}
 
-            {/* DND Mode Toggle (Mentor & Admin) */}
-            {isMentorOrAdmin && (
-              <button
-                onClick={toggleDndMode}
-                title={dndMode ? 'Do Not Disturb is ON — Click to resume notification popups & sounds' : 'Enable Do Not Disturb (Mute notification popups & sounds)'}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                  dndMode
-                    ? 'bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white border-slate-300/40 dark:border-white/10 hover:bg-slate-500/10 dark:hover:bg-white/10'
-                }`}
-                aria-label="Toggle Do Not Disturb"
-              >
-                <BellOff size={15} className="sm:w-[16px] sm:h-[16px]" />
-                <span className="hidden sm:inline">{dndMode ? 'DND On' : 'DND'}</span>
-              </button>
-            )}
+            {/* DND Mode Toggle (All Roles) */}
+            <button
+              onClick={toggleDndMode}
+              title={dndMode ? 'Do Not Disturb is ON — Click to resume notification popups & sounds' : 'Enable Do Not Disturb (Mute notification popups & sounds)'}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                dndMode
+                  ? 'bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white border-slate-300/40 dark:border-white/10 hover:bg-slate-500/10 dark:hover:bg-white/10'
+              }`}
+              aria-label="Toggle Do Not Disturb"
+            >
+              <BellOff size={15} className="sm:w-[16px] sm:h-[16px]" />
+              <span className="hidden sm:inline">{dndMode ? 'DND On' : 'DND'}</span>
+            </button>
 
             {/* Notifications Bell */}
             <div className="relative" ref={notificationRef}>
@@ -2545,22 +2543,20 @@ const Layout = () => {
                     <div>
                       <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-white leading-none">Notifications</h3>
                       <span className="text-[10px] text-slate-500 font-medium">
-                        {notifications.length} Unread{isMentorOrAdmin && dndMode ? ' • DND Active' : ''}
+                        {notifications.length} Unread{dndMode ? ' • DND Active' : ''}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      {isMentorOrAdmin && (
-                        <button
-                          onClick={toggleDndMode}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
-                            dndMode
-                              ? 'bg-rose-500/15 text-rose-500 border-rose-500/30'
-                              : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600'
-                          }`}
-                        >
-                          {dndMode ? 'DND: ON' : 'DND: OFF'}
-                        </button>
-                      )}
+                      <button
+                        onClick={toggleDndMode}
+                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
+                          dndMode
+                            ? 'bg-rose-500/15 text-rose-500 border-rose-500/30'
+                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600'
+                        }`}
+                      >
+                        {dndMode ? 'DND: ON' : 'DND: OFF'}
+                      </button>
                       {notifications.length > 0 && (
                         <button onClick={clearAllNotifications} className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700">
                           Mark all as read
@@ -3059,7 +3055,7 @@ const Layout = () => {
       {(user?.role === 'admin' || user?.role === 'mentor') && <BatchSelectionModal />}
 
       {/* Floating Frosted Glass Notification Stack (macOS / iOS Notification Center Style) */}
-      {toastStack.length > 0 && !(isMentorOrAdmin && dndMode) && (
+      {toastStack.length > 0 && !dndMode && (
         <aside 
           aria-label="Notification Stack" 
           className="fixed top-16 sm:top-20 right-3 sm:right-6 z-[99999] flex flex-col gap-2.5 w-[360px] max-w-[calc(100vw-2rem)] pointer-events-none animate-in fade-in slide-in-from-top-4 duration-300"
