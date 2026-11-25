@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useOutletContext, useSearchParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
@@ -127,6 +127,7 @@ const MyTasks = () => {
   const [selectedTaskForDetails, setSelectedTaskForDetails] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [studentSubmittedLinks, setStudentSubmittedLinks] = useState([]);
+  const handledDeepLinkRef = useRef(null);
   const { themeColor, activeTheme, fetchCounts } = useOutletContext() || {};
   
   const [subData, setSubData] = useState({ 
@@ -177,18 +178,20 @@ const MyTasks = () => {
 
   useEffect(() => { fetchTasks(); }, []);
 
-  // Auto-open task details modal if navigating from a notification referencing a task
+  // Auto-open task details modal ONCE if navigating from a notification referencing a task
   useEffect(() => {
     const targetTaskId = searchParams.get('taskId') || location.state?.taskId;
     const targetTaskTitle = (searchParams.get('taskTitle') || location.state?.taskTitle || '').trim().toLowerCase();
-    
-    if ((targetTaskId || targetTaskTitle) && tasks.length > 0) {
+    const deepLinkKey = `${targetTaskId || ''}::${targetTaskTitle}`;
+
+    if ((targetTaskId || targetTaskTitle) && tasks.length > 0 && handledDeepLinkRef.current !== deepLinkKey) {
       const match = tasks.find(t => 
         (targetTaskId && t._id === targetTaskId) || 
         (targetTaskTitle && t.title?.toLowerCase() === targetTaskTitle) ||
         (targetTaskTitle && t.title?.toLowerCase().includes(targetTaskTitle))
       );
       if (match) {
+        handledDeepLinkRef.current = deepLinkKey;
         setSelectedTaskForDetails(match);
       }
     }
@@ -214,9 +217,11 @@ const MyTasks = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (uploading || !activeTask) return;
     setUploading(true);
     try {
       let fileUrl = null;
+      const submittedTaskMarks = activeTask.maxMarks || 0;
 
       const { data: resData } = await axios.post('/submissions', {
         taskId: activeTask._id,
@@ -229,12 +234,13 @@ const MyTasks = () => {
       });
 
       const coinsAwarded = resData?.coinsAwarded;
-      const allocatedMarks = resData?.taskMarks || activeTask.maxMarks || 0;
+      const allocatedMarks = resData?.taskMarks || submittedTaskMarks;
 
       setActiveTask(null);
+      setSelectedTaskForDetails(null);
       setSubData({ submissionType: 'text', textContent: '', linkUrl: '', remarks: '' });
       setStudentSubmittedLinks([]);
-      fetchTasks();
+      await fetchTasks();
       if (typeof fetchCounts === 'function') {
         fetchCounts();
       }
@@ -502,7 +508,7 @@ const MyTasks = () => {
       </div>
 
       {activeTask && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[9999] p-4">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-4xl overflow-hidden border border-slate-200 dark:border-slate-800">
             <div className="p-6 border-b border-slate-100 dark:border-white/10 flex justify-between items-center bg-slate-50 dark:bg-white/5">
               <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Submit Task</h2>
@@ -633,7 +639,7 @@ const MyTasks = () => {
 
       {/* Task Details Modal (In-App Rich View) */}
       {selectedTaskForDetails && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200 dark:border-slate-800 my-auto flex flex-col max-h-[90vh]">
             
             {/* Header */}
@@ -774,16 +780,28 @@ const MyTasks = () => {
               >
                 Close
               </button>
-              <button
-                onClick={() => {
-                  const taskToSubmit = selectedTaskForDetails;
-                  setSelectedTaskForDetails(null);
-                  handleOpenSubmitModal(taskToSubmit);
-                }}
-                className="px-5 py-2.5 bg-gradient-to-r from-primary-500 to-theme-accent hover:from-primary-600 hover:to-theme-accent text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-              >
-                <Upload size={14} /> Proceed to Submit
-              </button>
+              {(() => {
+                const detailSub = submissions.find(s => (s.taskId?._id === selectedTaskForDetails._id || s.taskId === selectedTaskForDetails._id));
+                if (detailSub && detailSub.status !== 'resubmit') {
+                  return (
+                    <span className="px-4 py-2 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/20 text-xs font-bold flex items-center gap-1.5">
+                      <CheckCircle size={14} /> Already Submitted
+                    </span>
+                  );
+                }
+                return (
+                  <button
+                    onClick={() => {
+                      const taskToSubmit = selectedTaskForDetails;
+                      setSelectedTaskForDetails(null);
+                      handleOpenSubmitModal(taskToSubmit);
+                    }}
+                    className="px-5 py-2.5 bg-gradient-to-r from-primary-500 to-theme-accent hover:from-primary-600 hover:to-theme-accent text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Upload size={14} /> {detailSub?.status === 'resubmit' ? 'Resubmit Task' : 'Proceed to Submit'}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>
