@@ -1188,12 +1188,16 @@ const Layout = () => {
       setCheckInAccess(accessRes.data);
 
       if (todayRecords.length > 0) {
-        const todayRecord = todayRecords[0];
         const activeRecord = todayRecords.find(r => r.isActive);
+        const primaryRecord = activeRecord || todayRecords[0];
+
+        // Capture previous session state BEFORE updating refs so initial mount/refresh always syncs!
+        const prevAttendanceId = attendanceIdRef.current;
+        const wasSessionActive = sessionSecondsRef.current > 0 || prevAttendanceId !== null;
 
         // /attendance/my-summary already includes active session elapsed seconds in onsiteSeconds & wfhSeconds
-        const baseOnsite = todayRecord.onsiteSeconds || 0;
-        const baseWfh = todayRecord.wfhSeconds || 0;
+        const baseOnsite = primaryRecord.onsiteSeconds || 0;
+        const baseWfh = primaryRecord.wfhSeconds || 0;
 
         if (activeRecord) {
           setSessionActive(true);
@@ -1206,12 +1210,12 @@ const Layout = () => {
           localStorage.removeItem('sessionActive');
         }
 
-        const activeMode = grantedAccessType || activeRecord?.accessType || todayRecord?.accessType || 'on-site';
+        const activeMode = grantedAccessType || activeRecord?.accessType || primaryRecord?.accessType || 'on-site';
         const targetSessionSeconds = activeMode === 'wfh' ? baseWfh : baseOnsite;
-        const isSameActiveSession = Boolean(activeRecord && attendanceIdRef.current === activeRecord._id && currentAccessTypeRef.current === activeMode);
+        const isSameActiveSession = Boolean(wasSessionActive && activeRecord && prevAttendanceId === activeRecord._id && currentAccessTypeRef.current === activeMode);
         const withinJitter = Math.abs(targetSessionSeconds - sessionSecondsRef.current) <= 5;
 
-        if (!isSameActiveSession || !withinJitter) {
+        if (!isSameActiveSession || !withinJitter || (sessionSecondsRef.current === 0 && targetSessionSeconds > 0)) {
           setOnsiteSeconds(baseOnsite);
           setWfhSeconds(baseWfh);
           setSessionSeconds(targetSessionSeconds);
