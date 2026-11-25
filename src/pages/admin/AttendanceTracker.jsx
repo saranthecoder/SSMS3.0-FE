@@ -96,8 +96,8 @@ const AttendanceTracker = () => {
       } else {
         if (r.onsiteAllocated) map[r.date].onsiteAllocated = true;
         if (r.wfhAllocated) map[r.date].wfhAllocated = true;
-        if (r.onsiteMinHours) map[r.date].onsiteMinHours = r.onsiteMinHours;
-        if (r.wfhMinHours) map[r.date].wfhMinHours = r.wfhMinHours;
+        if (r.onsiteMinHours && r.onsiteMinHours > map[r.date].onsiteMinHours) map[r.date].onsiteMinHours = r.onsiteMinHours;
+        if (r.wfhMinHours && r.wfhMinHours > map[r.date].wfhMinHours) map[r.date].wfhMinHours = r.wfhMinHours;
       }
     });
     return map;
@@ -124,10 +124,10 @@ const AttendanceTracker = () => {
       };
     }
 
-    const onsiteAlloc = Boolean(record.onsiteAllocated || (record.onsiteSeconds || 0) > 0);
-    const wfhAlloc = Boolean(record.wfhAllocated || (record.wfhSeconds || 0) > 0);
-    const onsiteMin = record.onsiteMinHours ?? dateMeta.onsiteMinHours ?? 2;
-    const wfhMin = record.wfhMinHours ?? dateMeta.wfhMinHours ?? 3;
+    const onsiteAlloc = Boolean(record.onsiteAllocated || dateMeta.onsiteAllocated || (record.onsiteSeconds || 0) > 0);
+    const wfhAlloc = Boolean(record.wfhAllocated || dateMeta.wfhAllocated || (record.wfhSeconds || 0) > 0);
+    const onsiteMin = Math.max(record.onsiteMinHours || 0, dateMeta.onsiteMinHours || 0) || 2;
+    const wfhMin = Math.max(record.wfhMinHours || 0, dateMeta.wfhMinHours || 0) || 3;
     const onsiteSecs = record.onsiteSeconds || 0;
     const wfhSecs = record.wfhSeconds || 0;
 

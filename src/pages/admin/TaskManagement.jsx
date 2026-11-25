@@ -130,7 +130,7 @@ const TaskManagement = () => {
   };
 
   const handleEdit = (task) => {
-    navigate(`/tasks/edit/${task._id}`);
+    navigate(`/tasks/edit/${task._id}`, { state: { task } });
   };
 
   const handleDelete = async (taskId) => {

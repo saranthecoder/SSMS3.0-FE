@@ -39,7 +39,7 @@ const SubmissionReviews = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [evaluating, setEvaluating] = useState(false);
-  const [evalProgress, setEvalProgress] = useState({ active: false, total: 0, completed: 0 });
+  const [evalProgress, setEvalProgress] = useState({ active: false, total: 0, completed: 0, evaluated: 0, failed: 0, sector: 0, totalSectors: 0, currentLabel: '' });
 
   const handleAutoEvaluate = async () => {
     const pendingSubmissions = submissions.filter(s => s.status === 'submitted');
@@ -49,9 +49,12 @@ const SubmissionReviews = () => {
       return Swal.fire('Info', 'There are no pending submissions to evaluate.', 'info');
     }
 
+    const SECTOR_SIZE = 100;
+    const totalSectors = Math.ceil(pendingCount / SECTOR_SIZE);
+
     const result = await Swal.fire({
       title: `Auto Evaluate ${pendingCount} Submissions?`,
-      text: `This will automatically evaluate and grade ${pendingCount} pending submission(s). Submissions past the due date (11:59 PM) will lose 1 mark per hour delayed.`,
+      text: `This will divide ${pendingCount} pending submission(s) into ${totalSectors} sector(s) of up to ${SECTOR_SIZE} to balance server load. Submissions past the due date will lose 1 mark per hour delayed.`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#10b981',
@@ -61,24 +64,83 @@ const SubmissionReviews = () => {
 
     if (result.isConfirmed) {
       setEvaluating(true);
-      setEvalProgress({ active: true, total: pendingCount, completed: 0 });
+      setEvalProgress({ active: true, total: pendingCount, completed: 0, evaluated: 0, failed: 0, sector: 1, totalSectors, currentLabel: '' });
       
       let successCount = 0;
+      let failedCount = 0;
+      let lastError = '';
+      let processedSoFar = 0;
       
-      for (let i = 0; i < pendingCount; i++) {
-        try {
-          await axios.post('/grades/auto-evaluate', { submissionId: pendingSubmissions[i]._id });
-          successCount++;
-        } catch (error) {
-          console.error('Error evaluating submission:', pendingSubmissions[i]._id, error);
+      for (let start = 0, sectorIdx = 0; start < pendingCount; start += SECTOR_SIZE, sectorIdx++) {
+        const sectorSlice = pendingSubmissions.slice(start, start + SECTOR_SIZE);
+        setEvalProgress(prev => ({ ...prev, sector: sectorIdx + 1, totalSectors }));
+
+        for (let j = 0; j < sectorSlice.length; j++) {
+          const sub = sectorSlice[j];
+          const label = `${sub.taskId?.title || 'Task'} — ${sub.studentId?.name || 'Student'}`;
+          setEvalProgress(prev => ({ ...prev, currentLabel: label }));
+
+          let evaluatedOk = false;
+          let attempt = 0;
+          const maxRetries = 2;
+
+          while (!evaluatedOk && attempt <= maxRetries) {
+            try {
+              const { data } = await axios.post('/grades/auto-evaluate', {
+                submissionId: sub._id
+              });
+              const gradedNow = Number(data?.count ?? 0);
+              successCount += gradedNow;
+              if (gradedNow > 0) {
+                setSubmissions(prev => prev.map(s => s._id === sub._id ? { ...s, status: 'graded' } : s));
+              }
+              evaluatedOk = true;
+            } catch (error) {
+              const status = error.response?.status;
+              const isTransient = !status || status === 403 || status === 429 || status >= 500;
+              attempt++;
+              if (isTransient && attempt <= maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
+                continue;
+              }
+              failedCount++;
+              lastError = error.response?.data?.message || error.message || 'Request failed';
+              console.error(`Error evaluating submission ${sub._id} (Sector ${sectorIdx + 1}):`, error);
+              break;
+            }
+          }
+
+          processedSoFar++;
+          setEvalProgress(prev => ({
+            ...prev,
+            completed: processedSoFar,
+            evaluated: successCount,
+            failed: failedCount
+          }));
+
+          // Pace requests (150ms) to avoid Cloudflare/Render burst-403 rate limits
+          if (j + 1 < sectorSlice.length) {
+            await new Promise(resolve => setTimeout(resolve, 150));
+          }
         }
-        setEvalProgress(prev => ({ ...prev, completed: i + 1 }));
+
+        // Cooldown between 100-item sectors to balance server load
+        if (start + SECTOR_SIZE < pendingCount) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
       
       setEvaluating(false);
-      setEvalProgress({ active: false, total: 0, completed: 0 });
+      setEvalProgress({ active: false, total: 0, completed: 0, evaluated: 0, failed: 0, sector: 0, totalSectors: 0, currentLabel: '' });
       fetchData();
-      Swal.fire('Success', `Successfully auto-evaluated ${successCount} out of ${pendingCount} submissions.`, 'success');
+
+      if (failedCount > 0 && successCount === 0) {
+        Swal.fire('Evaluation Failed', lastError || 'Could not evaluate submissions. Please check your server/database connection.', 'error');
+      } else if (failedCount > 0) {
+        Swal.fire('Partially Completed', `Auto-evaluated ${successCount} out of ${pendingCount} submissions (${failedCount} failed: ${lastError}).`, 'warning');
+      } else {
+        Swal.fire('Success', `Successfully auto-evaluated ${successCount} out of ${pendingCount} submissions across ${totalSectors} sector(s).`, 'success');
+      }
     }
   };
 
@@ -240,10 +302,11 @@ const SubmissionReviews = () => {
         });
         Swal.fire({ title: 'Graded!', text: 'Submission graded successfully.', icon: 'success' });
       }
+      const gradedId = activeReview._id;
+      setSubmissions(prev => prev.map(s => s._id === gradedId ? { ...s, status: 'graded' } : s));
       setActiveReview(null);
       setGradeData({ marksObtained: '', feedback: '' });
       setExistingGradeId(null);
-      fetchData();
     } catch (error) {
       Swal.fire({ title: 'Error', text: error.response?.data?.message || 'Error saving grade', icon: 'error' });
     } finally {
@@ -414,20 +477,35 @@ const SubmissionReviews = () => {
 
       {/* Floating Progress Indicator */}
       {evalProgress.active && (
-        <div className="fixed bottom-6 right-6 bg-white dark:bg-slate-800 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] border border-primary-200 dark:border-primary-800/50 p-4 z-50 flex items-center gap-4 transition-all duration-300 transform translate-y-0 opacity-100">
-          <div className="w-12 h-12 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400">
-            <Zap size={24} className="animate-pulse" />
+        <div className="fixed bottom-6 right-6 bg-white dark:bg-slate-800 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] border border-primary-200 dark:border-primary-800/50 p-4 z-50 flex items-center gap-4 min-w-[300px] max-w-[380px] transition-all duration-300">
+          <div className="w-11 h-11 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 shrink-0">
+            <Zap size={22} className="animate-pulse" />
           </div>
-          <div>
-            <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm mb-1">Evaluating Submissions</h4>
-            <div className="flex items-center gap-3">
-              <div className="w-32 h-2.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden shadow-inner">
-                <div 
-                  className="h-full bg-gradient-to-r from-primary-400 to-primary-500 transition-all duration-300 ease-out" 
-                  style={{ width: `${(evalProgress.completed / evalProgress.total) * 100}%` }}
-                ></div>
-              </div>
-              <span className="text-xs font-bold text-primary-600 dark:text-primary-400 min-w-[3ch]">{evalProgress.completed}/{evalProgress.total}</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2 mb-0.5">
+              <h4 className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                Evaluating {evalProgress.totalSectors > 1 ? `(Sector ${evalProgress.sector}/${evalProgress.totalSectors})` : 'Submissions'}
+              </h4>
+              <span className="text-[11px] font-black text-primary-600 dark:text-primary-400 font-mono">
+                {evalProgress.completed}/{evalProgress.total} ({evalProgress.total > 0 ? Math.round((evalProgress.completed / evalProgress.total) * 100) : 0}%)
+              </span>
+            </div>
+            {evalProgress.currentLabel && (
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mb-1.5">
+                {evalProgress.currentLabel}
+              </p>
+            )}
+            <div className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden shadow-inner mb-1.5">
+              <div 
+                className="h-full bg-gradient-to-r from-primary-400 to-primary-500 transition-all duration-200 ease-out" 
+                style={{ width: `${evalProgress.total > 0 ? (evalProgress.completed / evalProgress.total) * 100 : 0}%` }}
+              ></div>
+            </div>
+            <div className="flex items-center gap-3 text-[10px] font-bold">
+              <span className="text-emerald-600 dark:text-emerald-400">Evaluated: {evalProgress.evaluated}</span>
+              {evalProgress.failed > 0 && (
+                <span className="text-rose-500">Failed: {evalProgress.failed}</span>
+              )}
             </div>
           </div>
         </div>

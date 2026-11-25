@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import ReactQuill from 'react-quill-new';
@@ -31,6 +31,7 @@ const formatLocalDate = (dateStr) => {
 const TaskCreateEdit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isEditMode = !!id;
   const { selectedBatchId } = useGlobalBatch();
 
@@ -92,10 +93,16 @@ const TaskCreateEdit = () => {
 
         if (isEditMode) {
           const taskRes = await axios.get(`/tasks/${id}`);
-          const task = taskRes.data;
+          const fetched = taskRes.data;
+          const stateTask = location.state?.task;
+          const isPlaceholder = (d) => typeof d === 'string' && d.replace(/<[^>]*>/g, '').trim().toLowerCase() === 'locked until scheduled release';
+          const task = (fetched?.isLocked || isPlaceholder(fetched?.description)) && stateTask && !isPlaceholder(stateTask.description)
+            ? { ...fetched, ...stateTask }
+            : fetched;
+          const safeDesc = isPlaceholder(task.description) ? '' : (task.description || '');
           setFormData({
             title: task.title,
-            description: task.description,
+            description: safeDesc,
             dueDate: task.dueDate ? formatLocalISO(task.dueDate) : '',
             maxMarks: task.maxMarks,
             batchId: task.batchId?._id || task.batchId,
