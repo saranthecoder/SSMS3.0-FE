@@ -105,10 +105,17 @@ const format12HourDateTime = (dateString) => {
 const StudentDashboard = () => {
   const { user, customPanelName, customPanelSubheading } = useAuth();
   const { 
-    sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, checkInAccess: contextCheckInAccess, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus,
+    sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, checkInAccess: contextCheckInAccess, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus, isSyncing, attendanceSynced,
     themeColor, activeTheme, userCoins, gamificationData, fetchCounts
   } = useOutletContext();
-  const [analytics, setAnalytics] = useState(null);
+  const [analytics, setAnalytics] = useState(() => {
+    try {
+      const raw = user?._id ? sessionStorage.getItem(`ssms_student_analytics_${user._id}`) : null;
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const [clearedNotifs, setClearedNotifs] = useState(() => {
     try {
@@ -138,7 +145,15 @@ const StudentDashboard = () => {
     localStorage.setItem(key, JSON.stringify(updated));
     if (fetchCounts) fetchCounts();
   };
-  const [attendanceStats, setAttendanceStats] = useState({ present: 0, absent: 0, leave: 0, inProgress: 0, invalid: 0, total: 0, percentage: 0 });
+  const [attendanceStats, setAttendanceStats] = useState(() => {
+    try {
+      const raw = user?._id ? sessionStorage.getItem(`ssms_student_analytics_${user._id}`) : null;
+      const parsed = raw ? JSON.parse(raw) : null;
+      return parsed?.attendanceStats || { present: 0, absent: 0, leave: 0, inProgress: 0, invalid: 0, total: 0, percentage: 0 };
+    } catch {
+      return { present: 0, absent: 0, leave: 0, inProgress: 0, invalid: 0, total: 0, percentage: 0 };
+    }
+  });
   const [localCheckInAccess, setLocalCheckInAccess] = useState({ hasAccess: false, accessType: null });
 
   // Prefer whichever source has active access; fall back to contextCheckInAccess then localCheckInAccess
@@ -150,7 +165,8 @@ const StudentDashboard = () => {
   const [mockScores, setMockScores] = useState([]);
   const [leetcodeLinks, setLeetcodeLinks] = useState({});
   const [submittingLeetcode, setSubmittingLeetcode] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !analytics);
+  const [analyticsFailed, setAnalyticsFailed] = useState(false);
 
   // Auto-refresh access on window focus
   useEffect(() => {
@@ -165,34 +181,85 @@ const StudentDashboard = () => {
   }, [syncAttendanceSession]);
 
   useEffect(() => {
-    const fetchAnalytics = async () => {
+    let retryTimer;
+    let isMounted = true;
+    const fetchAnalytics = async (attempt = 0) => {
       try {
-        const [analyticsRes, leetcodeRes, accessRes, mockRes] = await Promise.all([
+        const [analyticsSettled, leetcodeSettled, accessSettled, mockSettled] = await Promise.allSettled([
           axios.get(`/analytics/student/${user._id}`),
           axios.get('/leetcode/active'),
-          axios.get('/checkin-access/my-status').catch(() => ({ data: { hasAccess: false } })),
-          axios.get(`/mock-drives/student/${user._id}`).catch(() => ({ data: [] }))
+          axios.get('/checkin-access/my-status'),
+          axios.get(`/mock-drives/student/${user._id}`)
         ]);
-        setAnalytics(analyticsRes.data);
-        setActiveLeetcode(leetcodeRes.data);
-        setLocalCheckInAccess(accessRes.data);
-        setMockScores(mockRes.data || []);
+        if (!isMounted) return;
 
-        if (analyticsRes.data.attendanceStats) {
-          setAttendanceStats(analyticsRes.data.attendanceStats);
+        if (analyticsSettled.status === 'fulfilled' && analyticsSettled.value?.data) {
+          const analyticsData = analyticsSettled.value.data;
+          setAnalytics(analyticsData);
+          setAnalyticsFailed(false);
+          if (analyticsData.attendanceStats) {
+            setAttendanceStats(analyticsData.attendanceStats);
+          }
+          try {
+            sessionStorage.setItem(`ssms_student_analytics_${user._id}`, JSON.stringify(analyticsData));
+          } catch {}
+          setLoading(false);
+        } else if (attempt < 2) {
+          retryTimer = setTimeout(() => fetchAnalytics(attempt + 1), 1500);
+        } else {
+          setAnalyticsFailed(true);
+          setLoading(false);
+        }
+
+        if (leetcodeSettled.status === 'fulfilled' && Array.isArray(leetcodeSettled.value?.data)) {
+          setActiveLeetcode(leetcodeSettled.value.data);
+        }
+        if (accessSettled.status === 'fulfilled' && accessSettled.value?.data) {
+          setLocalCheckInAccess(accessSettled.value.data);
+        }
+        if (mockSettled.status === 'fulfilled' && Array.isArray(mockSettled.value?.data)) {
+          setMockScores(mockSettled.value.data);
         }
       } catch (error) {
         console.error('Error fetching analytics:', error);
-      } finally {
-        setLoading(false);
+        if (attempt < 2 && isMounted) {
+          retryTimer = setTimeout(() => fetchAnalytics(attempt + 1), 1500);
+        } else if (isMounted) {
+          setAnalyticsFailed(true);
+          setLoading(false);
+        }
       }
     };
     if (user) {
       fetchAnalytics();
     }
+    return () => {
+      isMounted = false;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [user]);
 
-  if (loading) return <SkeletonLoader type="student-dashboard" />;
+  if (loading || (!analytics && !analyticsFailed) || (isSyncing && !attendanceSynced)) {
+    return <SkeletonLoader type="student-dashboard" />;
+  }
+
+  if (analyticsFailed && !analytics) {
+    return (
+      <div className="max-w-xl mx-auto mt-12 p-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-4 shadow-lg">
+        <AlertTriangle className="mx-auto text-amber-500" size={36} />
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Loading Your Dashboard Data...</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          The server is taking a moment to respond. Please tap retry to load your latest attendance and task progress.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold cursor-pointer"
+        >
+          Retry Now
+        </button>
+      </div>
+    );
+  }
 
   const completionData = [
     { name: 'Completed', value: analytics?.completedTasks || 0 },
@@ -830,8 +897,8 @@ const StudentDashboard = () => {
             }`}>
               <div>
                 <p className={`text-xs mb-1 flex items-center gap-1.5 ${themeColor === 'Emerald' ? 'text-emerald-100' : 'text-primary-100'}`}>
-                  {(checkInAccess.accessType || currentAccessType) === 'wfh' ? <Home size={12} className="shrink-0 text-sky-200" /> : <Building2 size={12} className="shrink-0 text-emerald-200" />}
-                  <span>Active Timer ({(checkInAccess.accessType || currentAccessType) === 'wfh' ? 'WFH' : 'On-Site'})</span>
+                  {(sessionActive ? currentAccessType : (checkInAccess.accessType || currentAccessType)) === 'wfh' ? <Home size={12} className="shrink-0 text-sky-200" /> : <Building2 size={12} className="shrink-0 text-emerald-200" />}
+                  <span>Active Timer ({(sessionActive ? currentAccessType : (checkInAccess.accessType || currentAccessType)) === 'wfh' ? 'WFH' : 'On-Site'})</span>
                 </p>
                 <p className="font-mono font-bold text-2xl">{formatTime(sessionSeconds)}</p>
               </div>

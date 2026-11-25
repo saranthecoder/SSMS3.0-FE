@@ -355,7 +355,7 @@ const AttendanceTracker = () => {
 
   const isStudent = user?.role === 'student';
 
-  // Student-specific stats (excludes today from % calculation)
+  // Student-specific stats (excludes In Progress today from % calculation, but includes finalized today statuses in card totals)
   const studentStats = isStudent && students.length > 0 ? (() => {
     const sid = students[0]._id;
     let present = 0, absent = 0, leave = 0, inProg = 0, invalid = 0;
@@ -368,10 +368,16 @@ const AttendanceTracker = () => {
       else if (status === 'Invalid') invalid++;
       else absent++;
     });
-    // Today's status is tracked separately for display
+    // Today's status: reflect finalized Present/Leave/Invalid in totals so hero cards match Day-by-Day cards
     const todayStatus = uniqueAttendanceDates.includes(todayStr) ? getCellAttendanceStatus(sid, todayStr) : null;
+    if (todayStatus === 'Present') present++;
+    else if (todayStatus === 'Leave') leave++;
+    else if (todayStatus === 'Invalid') invalid++;
+    else if (todayStatus === 'In Progress') inProg++;
+
     const total = uniqueAttendanceDates.length;
-    const denom = pastDates.length - leave;
+    const finalizedTodayCount = (todayStatus === 'Present' || todayStatus === 'Invalid') ? 1 : 0;
+    const denom = (pastDates.length - (leave - (todayStatus === 'Leave' ? 1 : 0))) + finalizedTodayCount;
     const pct = denom > 0 ? Math.round((present / denom) * 100) : 0;
     return { present, absent, leave, inProg, invalid, total, pct, todayStatus };
   })() : null;
@@ -403,7 +409,7 @@ const AttendanceTracker = () => {
         </div>
 
         {loading && activeBatchId ? (
-          <div className="p-12"><Loader /></div>
+          <SkeletonLoader type="table" />
         ) : students.length === 0 ? (
           <div className="p-12 text-center text-slate-500 font-medium bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">No attendance data found for this batch.</div>
         ) : (
@@ -696,7 +702,7 @@ const AttendanceTracker = () => {
       {/* Tracker Table */}
       <div className="glass-panel p-0 overflow-hidden border border-slate-200 dark:border-slate-700/50 rounded-xl relative shadow-sm">
         {loading && activeBatchId ? (
-          <div className="p-12"><Loader /></div>
+          <SkeletonLoader type="table" />
         ) : students.length === 0 ? (
           <div className="p-12 text-center text-slate-500 font-medium">No students found in this batch.</div>
         ) : (

@@ -129,11 +129,10 @@ export const AuthProvider = ({ children }) => {
       await refreshTrafficConfig();
     };
 
-    const delayId = setTimeout(syncConfig, 1000);
+    syncConfig();
     const intervalId = setInterval(syncConfig, 60000);
 
     return () => {
-      clearTimeout(delayId);
       clearInterval(intervalId);
     };
   }, []);

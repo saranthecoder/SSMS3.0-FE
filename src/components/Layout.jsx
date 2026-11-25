@@ -640,19 +640,46 @@ const Layout = () => {
       return null;
     }
   });
-  const [sessionSeconds, setSessionSeconds] = useState(0);
-  const [onsiteSeconds, setOnsiteSeconds] = useState(0);
-  const [wfhSeconds, setWfhSeconds] = useState(0);
-  const [currentAccessType, setCurrentAccessType] = useState('on-site');
-  const [checkInAccess, setCheckInAccess] = useState({ hasAccess: false, accessType: null });
+  const getTodayKey = () => new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+  const readCachedStudentState = () => {
+    if (!user?._id || user?.role !== 'student') return null;
+    try {
+      const raw = sessionStorage.getItem(`ssms_student_session_${user._id}_${getTodayKey()}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  };
+  const initialCachedStudent = readCachedStudentState();
+
+  const [sessionSeconds, setSessionSeconds] = useState(() => initialCachedStudent?.sessionSeconds || 0);
+  const [onsiteSeconds, setOnsiteSeconds] = useState(() => initialCachedStudent?.onsiteSeconds || 0);
+  const [wfhSeconds, setWfhSeconds] = useState(() => initialCachedStudent?.wfhSeconds || 0);
+  const [currentAccessType, setCurrentAccessType] = useState(() => initialCachedStudent?.currentAccessType || 'on-site');
+  const [checkInAccess, setCheckInAccess] = useState(() => initialCachedStudent?.checkInAccess || { hasAccess: false, accessType: null });
   const currentAccessTypeRef = useRef('on-site');
   useEffect(() => { currentAccessTypeRef.current = currentAccessType; }, [currentAccessType]);
   const [isSyncing, setIsSyncing] = useState(user?.role === 'student');
-  const [userCoins, setUserCoins] = useState(0);
+  const [attendanceSynced, setAttendanceSynced] = useState(() => Boolean(initialCachedStudent));
+  const [coinsLoaded, setCoinsLoaded] = useState(() => {
+    try {
+      return Boolean(user?._id && sessionStorage.getItem(`ssms_coins_${user._id}`) !== null);
+    } catch {
+      return false;
+    }
+  });
+  const [userCoins, setUserCoins] = useState(() => {
+    try {
+      return user?._id ? (Number(sessionStorage.getItem(`ssms_coins_${user._id}`)) || 0) : 0;
+    } catch {
+      return 0;
+    }
+  });
   const [gamificationData, setGamificationData] = useState(null);
   const sessionSecondsRef = useRef(0);
   useEffect(() => { sessionSecondsRef.current = sessionSeconds; }, [sessionSeconds]);
   const attendanceIdRef = useRef(null);
+  const syncRetryCountRef = useRef(0);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme-color') || user?.currentTheme || 'Emerald';
@@ -1173,22 +1200,49 @@ const Layout = () => {
       }
 
       // Restore today's attendance session state and current check-in access mode
-      const [summaryRes, accessRes] = await Promise.all([
+      const [summarySettled, accessSettled] = await Promise.allSettled([
         axios.get('/attendance/my-summary'),
-        axios.get('/checkin-access/my-status').catch(() => ({ data: { hasAccess: false, accessType: null } }))
+        axios.get('/checkin-access/my-status')
       ]);
 
+      if (summarySettled.status !== 'fulfilled') {
+        throw summarySettled.reason || new Error('Attendance summary fetch failed');
+      }
+      syncRetryCountRef.current = 0;
+
+      const summaryRes = summarySettled.value;
+      const accessRes = accessSettled.status === 'fulfilled' ? accessSettled.value : null;
+
       const todayStr = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-      const todayRecords = summaryRes.data.filter(r => {
+      const todayRecords = (summaryRes.data || []).filter(r => {
         const rDate = r.date || (r.firstCheckIn ? new Date(r.firstCheckIn).toISOString().split('T')[0] : '');
         return rDate === todayStr;
       });
 
-      const grantedAccessType = accessRes.data?.hasAccess ? accessRes.data.accessType : null;
-      setCheckInAccess(accessRes.data);
+      const resolvedAccess = accessRes?.data ? accessRes.data : checkInAccess;
+      const grantedAccessType = resolvedAccess?.hasAccess ? resolvedAccess.accessType : null;
+      if (accessRes?.data) {
+        setCheckInAccess(accessRes.data);
+      }
 
       if (todayRecords.length > 0) {
-        const activeRecord = todayRecords.find(r => r.isActive);
+        let activeRecord = todayRecords.find(r => r.isActive);
+        if (activeRecord && grantedAccessType && activeRecord.accessType !== grantedAccessType) {
+          try {
+            await axios.post('/attendance/checkin');
+            const refreshedSummary = await axios.get('/attendance/my-summary');
+            const refreshedToday = (refreshedSummary.data || []).filter(r => {
+              const rDate = r.date || (r.firstCheckIn ? new Date(r.firstCheckIn).toISOString().split('T')[0] : '');
+              return rDate === todayStr;
+            });
+            if (refreshedToday.length > 0) {
+              todayRecords.splice(0, todayRecords.length, ...refreshedToday);
+              activeRecord = todayRecords.find(r => r.isActive);
+            }
+          } catch (switchErr) {
+            console.warn('Auto mode switch skipped:', switchErr?.response?.data?.message || switchErr.message);
+          }
+        }
         const primaryRecord = activeRecord || todayRecords[0];
 
         // Capture previous session state BEFORE updating refs so initial mount/refresh always syncs!
@@ -1223,6 +1277,16 @@ const Layout = () => {
           setSessionSeconds(targetSessionSeconds);
         }
         setCurrentAccessType(activeMode);
+
+        try {
+          sessionStorage.setItem(`ssms_student_session_${user._id}_${todayStr}`, JSON.stringify({
+            onsiteSeconds: baseOnsite,
+            wfhSeconds: baseWfh,
+            sessionSeconds: targetSessionSeconds,
+            currentAccessType: activeMode,
+            checkInAccess: resolvedAccess
+          }));
+        } catch {}
       } else {
         setSessionActive(false);
         setAttendanceId(null);
@@ -1231,11 +1295,28 @@ const Layout = () => {
         setOnsiteSeconds(0);
         setWfhSeconds(0);
         setCurrentAccessType(grantedAccessType || 'on-site');
+        try {
+          sessionStorage.setItem(`ssms_student_session_${user._id}_${todayStr}`, JSON.stringify({
+            onsiteSeconds: 0,
+            wfhSeconds: 0,
+            sessionSeconds: 0,
+            currentAccessType: grantedAccessType || 'on-site',
+            checkInAccess: resolvedAccess
+          }));
+        } catch {}
       }
+      setAttendanceSynced(true);
+      setIsSyncing(false);
     } catch (attErr) {
       console.error('Failed to restore attendance session:', attErr);
-    } finally {
-      setIsSyncing(false);
+      if (syncRetryCountRef.current < 2) {
+        syncRetryCountRef.current += 1;
+        setTimeout(() => {
+          syncAttendanceSession();
+        }, 1500);
+      } else {
+        setIsSyncing(false);
+      }
     }
   }, [user]);
 
@@ -1306,23 +1387,32 @@ const Layout = () => {
         setUserCoins(gamification.coins || 0);
         setGamificationData(gamification);
       } else if (user?.role === 'student') {
-        const [analyticsRes, gamificationRes, friendsRes] = await Promise.all([
+        const [analyticsSettled, gamificationSettled, friendsSettled] = await Promise.allSettled([
           axios.get(`/analytics/student/${user._id}?mini=true`),
           axios.get('/gamification/status'),
-          axios.get('/gamification/friends').catch(() => ({ data: { pendingIncoming: [] } }))
+          axios.get('/gamification/friends')
         ]);
-        const data = analyticsRes.data;
-        const gamification = gamificationRes.data;
-        const friendsData = friendsRes.data;
-        
-        setPendingCount(data.pendingTasks || 0);
-        setChatCount(data.recentChats || 0);
-        setFriendRequestsCount(friendsData?.pendingIncoming?.length || 0);
-        setUserCoins(gamification.coins || 0);
-        setGamificationData(gamification);
+        const data = analyticsSettled.status === 'fulfilled' ? analyticsSettled.value.data : null;
+        const gamification = gamificationSettled.status === 'fulfilled' ? gamificationSettled.value.data : null;
+        const friendsData = friendsSettled.status === 'fulfilled' ? friendsSettled.value.data : null;
+
+        if (data) {
+          setPendingCount(data.pendingTasks || 0);
+          setChatCount(data.recentChats || 0);
+        }
+        if (friendsData) {
+          setFriendRequestsCount(friendsData?.pendingIncoming?.length || 0);
+        }
+        if (gamification) {
+          const coinsVal = gamification.coins || 0;
+          setUserCoins(coinsVal);
+          setCoinsLoaded(true);
+          setGamificationData(gamification);
+          try { sessionStorage.setItem(`ssms_coins_${user._id}`, String(coinsVal)); } catch {}
+        }
 
         const seenIds = new Set();
-        const newNotifs = (data.notifications || []).filter(n => {
+        const newNotifs = ((data && data.notifications) || []).filter(n => {
           if (!n || !n.id || seenIds.has(n.id) || currentCleared.includes(n.id)) return false;
           seenIds.add(n.id);
           return true;
@@ -2494,7 +2584,11 @@ const Layout = () => {
             {user?.role === 'student' && (
               <div className="flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs font-extrabold border border-amber-500/20 shrink-0">
                 <span className="text-xs sm:text-base">🪙</span>
-                <span>{userCoins} <span className="hidden sm:inline">Coins</span></span>
+                {coinsLoaded ? (
+                  <span>{userCoins} <span className="hidden sm:inline">Coins</span></span>
+                ) : (
+                  <span className="inline-block w-10 h-3.5 bg-amber-500/20 rounded animate-pulse" />
+                )}
               </div>
             )}
 
@@ -2889,7 +2983,7 @@ const Layout = () => {
                 </div>
               )}
               <Outlet context={{ 
-                sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, checkInAccess, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus,
+                sessionActive, startSession, endSession, sessionSeconds, onsiteSeconds, wfhSeconds, currentAccessType, checkInAccess, syncAttendanceSession, formatTime, isCheckingIn, activeLeaveStatus, isSyncing, attendanceSynced,
                 themeColor, activeTheme: themes.find(t => t.name === themeColor) || themes[0],
                 userCoins, gamificationData, fetchCounts, showGlossyNotification
               }} />
