@@ -299,6 +299,7 @@ const BulkTaskAllocator = () => {
 
   const addEmptyRow = () => {
     setTasks(prev => [
+      ...prev,
       {
         _localId: `row_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         title: '',
@@ -311,8 +312,7 @@ const BulkTaskAllocator = () => {
         scheduledAt: staggerStart,
         dueDate: '',
         requiredLinks: ''
-      },
-      ...prev
+      }
     ]);
   };
 
@@ -532,7 +532,9 @@ const BulkTaskAllocator = () => {
           </div>
         ) : (
           <div className="p-4 space-y-3">
-            {tasks.map((t, i) => (
+            {[...tasks].reverse().map((t, revIdx) => {
+              const seqNum = tasks.length - revIdx;
+              return (
               <div
                 key={t._localId}
                 className="rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white/70 dark:bg-slate-900/60 p-4 space-y-3 hover:border-indigo-300 dark:hover:border-indigo-700/70 transition-colors"
@@ -541,7 +543,7 @@ const BulkTaskAllocator = () => {
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                   <div className="md:col-span-6">
                     <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
-                      #{i + 1} Task Title *
+                      #{seqNum} Task Title *
                     </label>
                     <input
                       type="text"
@@ -616,7 +618,7 @@ const BulkTaskAllocator = () => {
                         />
                         <button
                           type="button"
-                          onClick={() => setEditingDescRow({ _localId: t._localId, title: t.title || `Task #${i + 1}`, description: t.description || '' })}
+                          onClick={() => setEditingDescRow({ _localId: t._localId, title: t.title || `Task #${seqNum}`, description: t.description || '' })}
                           className="shrink-0 px-2.5 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                           title="Open Rich Text Editor"
                         >
@@ -702,7 +704,8 @@ const BulkTaskAllocator = () => {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
