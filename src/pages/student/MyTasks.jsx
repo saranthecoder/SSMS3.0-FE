@@ -4,7 +4,7 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { Loader2, Upload, ExternalLink, Lock, Calendar, FileText as FileTextIcon, UploadCloud, Link as LinkIcon, AlignLeft, Download, CheckCircle, ChevronDown, ChevronUp, Clock, AlertTriangle, X, Award, Eye, Coins } from 'lucide-react';
+import { Loader2, Upload, ExternalLink, Lock, Calendar, FileText as FileTextIcon, UploadCloud, Link as LinkIcon, AlignLeft, Download, CheckCircle, ChevronDown, ChevronUp, Clock, AlertTriangle, X, Award, Eye, Coins, Copy, Check } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { soundManager } from '../../utils/soundManager';
 import { sanitizeTaskHtml } from '../../utils/taskFormatter';
@@ -126,6 +126,7 @@ const MyTasks = () => {
   const [activeTask, setActiveTask] = useState(null);
   const [selectedTaskForDetails, setSelectedTaskForDetails] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [copiedInstructions, setCopiedInstructions] = useState(false);
   const [studentSubmittedLinks, setStudentSubmittedLinks] = useState([]);
   const handledDeepLinkRef = useRef(null);
   const { themeColor, activeTheme, fetchCounts } = useOutletContext() || {};
@@ -741,12 +742,30 @@ const MyTasks = () => {
 
               {/* Task Instructions */}
               <div className="space-y-3 min-w-0 w-full">
-                <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
-                  <FileTextIcon size={14} /> Task Instructions & Details
-                </h4>
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                    <FileTextIcon size={14} /> Task Instructions & Details
+                  </h4>
+                  {selectedTaskForDetails.description && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tmp = document.createElement('div');
+                        tmp.innerHTML = sanitizeTaskHtml(selectedTaskForDetails.description);
+                        const plainText = (tmp.textContent || tmp.innerText || '').trim();
+                        navigator.clipboard.writeText(plainText);
+                        setCopiedInstructions(true);
+                        setTimeout(() => setCopiedInstructions(false), 1800);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      {copiedInstructions ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy Text</>}
+                    </button>
+                  )}
+                </div>
                 <div className="bg-slate-50/90 dark:bg-slate-950/80 p-6 sm:p-8 rounded-2xl border border-slate-200 dark:border-slate-800/80 shadow-inner min-w-0 w-full overflow-hidden">
                   <div 
-                    className="prose dark:prose-invert max-w-none text-slate-900 dark:text-slate-100 font-medium text-sm sm:text-base leading-relaxed ql-editor !p-0 task-content-viewer min-w-0 w-full break-words"
+                    className="prose dark:prose-invert max-w-none text-slate-900 dark:text-slate-100 font-medium text-sm sm:text-base leading-relaxed !p-0 task-content-viewer min-w-0 w-full select-text"
                     dangerouslySetInnerHTML={{ __html: sanitizeTaskHtml(selectedTaskForDetails.description) || '<p class="text-slate-400 italic">No instructions provided.</p>' }}
                   />
                 </div>

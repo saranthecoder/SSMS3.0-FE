@@ -43,6 +43,14 @@
     background: linear-gradient(135deg, var(--bg-gradient-start, #dcfce7) 0%, var(--bg-gradient-middle, #f0fdf4) 40%, var(--bg-gradient-end, #ffffff) 100%);
     font-family: var(--font-family-theme, 'Inter'), sans-serif;
   }
+  ::selection {
+    background-color: rgba(99, 102, 241, 0.25);
+    color: inherit;
+  }
+  .dark ::selection {
+    background-color: rgba(129, 140, 248, 0.4);
+    color: #ffffff;
+  }
   .dark body {
     background: linear-gradient(135deg, var(--dark-bg-gradient-start, #052217) 0%, var(--dark-bg-gradient-middle, #02120c) 60%, var(--dark-bg-gradient-end, #010604) 100%);
   }
@@ -296,18 +304,34 @@ body.swal2-toast-shown .swal2-container.swal2-top-right {
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
   line-height: 1.75 !important;
   letter-spacing: 0.01em !important;
-  word-break: break-word !important;
-  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
   white-space: normal !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
 .task-content-viewer * {
   max-width: 100% !important;
   box-sizing: border-box !important;
-  word-break: break-word !important;
-  overflow-wrap: anywhere !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+.task-content-viewer *::selection,
+.task-content-viewer::selection {
+  background-color: rgba(99, 102, 241, 0.28) !important;
+  color: #0f172a !important;
+}
+
+.dark .task-content-viewer *::selection,
+.dark .task-content-viewer::selection {
+  background-color: rgba(129, 140, 248, 0.45) !important;
+  color: #ffffff !important;
 }
 
 .task-content-viewer p,
