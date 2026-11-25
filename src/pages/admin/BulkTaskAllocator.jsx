@@ -97,7 +97,7 @@ const mapRawRowsToTasks = (rows) => {
     const taskType = ['text', 'file', 'link'].includes(rawType)
       ? rawType
       : (linkUrl ? 'link' : (fileUrl ? 'file' : 'text'));
-    const maxMarks = Number(pickCol(row, ['Max Marks', 'Marks', 'Points', 'Score'])) || 100;
+    const maxMarks = Number(pickCol(row, ['Max Marks', 'Marks', 'Points', 'Score'])) || 10;
     const scheduledAt = formatDatetimeLocalIST(pickCol(row, ['Schedule Date', 'Schedule Release', 'Scheduled At', 'Unlock Date', 'Unlock Time', 'Schedule', 'Start Date']));
     const dueDate = formatDatetimeLocalIST(pickCol(row, ['Deadline', 'Due Date', 'Due', 'End Date', 'Submission Deadline']));
     const requiredLinks = String(pickCol(row, ['Required Links', 'Submission Links', 'Multiple Links Submissions', 'Submissions', 'Required Submissions']) || '').trim();
@@ -139,10 +139,10 @@ const BulkTaskAllocator = () => {
   // Auto-stagger controls
   const [staggerStart, setStaggerStart] = useState(() => {
     const d = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
-    return `${d.toISOString().slice(0, 10)}T09:00`;
+    return d.toISOString().slice(0, 16);
   });
-  const [staggerIntervalMinutes, setStaggerIntervalMinutes] = useState(60);
-  const [deadlineOffsetMinutes, setDeadlineOffsetMinutes] = useState(60);
+  const [staggerIntervalMinutes, setStaggerIntervalMinutes] = useState(5);
+  const [deadlineOffsetMinutes, setDeadlineOffsetMinutes] = useState(20);
 
   const handleDownloadTemplate = () => {
     const sampleRows = [
@@ -153,7 +153,7 @@ const BulkTaskAllocator = () => {
         'Task Type': 'link',
         'Link URL': 'https://leetcode.com/problems/two-sum/',
         'File URL': '',
-        'Max Marks': 100,
+        'Max Marks': 10,
         'Schedule Date': '2026-11-26 09:00',
         Deadline: '2026-11-26 23:59',
         'Required Links': 'GitHub Repo, Live Demo'
@@ -165,7 +165,7 @@ const BulkTaskAllocator = () => {
         'Task Type': 'text',
         'Link URL': '',
         'File URL': '',
-        'Max Marks': 100,
+        'Max Marks': 10,
         'Schedule Date': '2026-11-27 09:00',
         Deadline: '2026-11-27 23:59',
         'Required Links': 'GitHub Repo'
@@ -177,7 +177,7 @@ const BulkTaskAllocator = () => {
         'Task Type': 'file',
         'Link URL': '',
         'File URL': 'https://example.com/assignment-spec.pdf',
-        'Max Marks': 100,
+        'Max Marks': 10,
         'Schedule Date': '2026-11-28 09:00',
         Deadline: '2026-11-28 23:59',
         'Required Links': 'GitHub Repo, Loom Video'
@@ -299,20 +299,20 @@ const BulkTaskAllocator = () => {
 
   const addEmptyRow = () => {
     setTasks(prev => [
-      ...prev,
       {
-        _localId: `row_${Date.now()}_new`,
+        _localId: `row_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         title: '',
         description: '',
         category: 'General',
         taskType: 'text',
         linkUrl: '',
         fileUrl: '',
-        maxMarks: 100,
+        maxMarks: 10,
         scheduledAt: staggerStart,
         dueDate: '',
         requiredLinks: ''
-      }
+      },
+      ...prev
     ]);
   };
 

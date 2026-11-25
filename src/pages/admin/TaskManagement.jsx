@@ -198,19 +198,37 @@ const TaskManagement = () => {
     setFilterCategory('All');
   };
 
-  const filteredTasks = tasks.filter(task => {
-    const titleText = task.title || '';
-    const descText = task.description || '';
-    const matchesSearch = 
-      titleText.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      descText.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredTasks = tasks
+    .filter(task => {
+      const titleText = task.title || '';
+      const descText = task.description || '';
+      const matchesSearch = 
+        titleText.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        descText.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesCategory = 
-      filterCategory === 'All' || 
-      task.category === filterCategory;
+      const matchesCategory = 
+        filterCategory === 'All' || 
+        task.category === filterCategory;
 
-    return matchesSearch && matchesCategory;
-  });
+      return matchesSearch && matchesCategory;
+    })
+    .sort((a, b) => {
+      const now = Date.now();
+      const aSched = a.scheduledAt ? new Date(a.scheduledAt).getTime() : 0;
+      const bSched = b.scheduledAt ? new Date(b.scheduledAt).getTime() : 0;
+      const aIsScheduled = aSched > now;
+      const bIsScheduled = bSched > now;
+
+      // Keep upcoming scheduled tasks together in ascending unlock order (earliest first)
+      if (aIsScheduled && bIsScheduled) return aSched - bSched;
+      if (aIsScheduled !== bIsScheduled) return aIsScheduled ? -1 : 1;
+
+      // Active / released tasks: newest release time first
+      const aEff = aSched || new Date(a.createdAt).getTime();
+      const bEff = bSched || new Date(b.createdAt).getTime();
+      if (bEff !== aEff) return bEff - aEff;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
 
   if (loading) return <SkeletonLoader type="card-grid" />;
 

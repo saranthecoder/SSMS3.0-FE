@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useOutletContext, useSearchParams, useLocation } from 'react-router-dom';
+import { useOutletContext, useSearchParams, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import ReactQuill from 'react-quill-new';
@@ -117,8 +117,9 @@ const TaskCountdownTimer = ({ dueDate, isSubmitted, submission }) => {
 };
 
 const MyTasks = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -165,8 +166,13 @@ const MyTasks = () => {
         axios.get('/submissions') // Returns student's submissions
       ]);
       
-      // Sort tasks by allocation date (newest first)
-      const sortedTasks = tasksRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      // Sort tasks by effective release date (scheduledAt if present, else createdAt) newest first
+      const sortedTasks = tasksRes.data.sort((a, b) => {
+        const aEff = new Date(a.scheduledAt || a.createdAt).getTime();
+        const bEff = new Date(b.scheduledAt || b.createdAt).getTime();
+        if (bEff !== aEff) return bEff - aEff;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
       
       setTasks(sortedTasks);
       setSubmissions(subsRes.data);
@@ -179,24 +185,38 @@ const MyTasks = () => {
 
   useEffect(() => { fetchTasks(); }, []);
 
-  // Auto-open task details modal ONCE if navigating from a notification referencing a task
+  // Auto-open task details modal ONCE if navigating from a notification referencing a task,
+  // then immediately clear URL params & location.state so page refreshes never re-open it.
   useEffect(() => {
     const targetTaskId = searchParams.get('taskId') || location.state?.taskId;
     const targetTaskTitle = (searchParams.get('taskTitle') || location.state?.taskTitle || '').trim().toLowerCase();
     const deepLinkKey = `${targetTaskId || ''}::${targetTaskTitle}`;
 
     if ((targetTaskId || targetTaskTitle) && tasks.length > 0 && handledDeepLinkRef.current !== deepLinkKey) {
+      handledDeepLinkRef.current = deepLinkKey;
       const match = tasks.find(t => 
         (targetTaskId && t._id === targetTaskId) || 
         (targetTaskTitle && t.title?.toLowerCase() === targetTaskTitle) ||
         (targetTaskTitle && t.title?.toLowerCase().includes(targetTaskTitle))
       );
+
+      // Clear taskId/taskTitle from URL and state immediately so refresh won't re-trigger
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('taskId');
+      nextParams.delete('taskTitle');
+      const nextSearch = nextParams.toString();
+      navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`, { replace: true, state: null });
+
       if (match) {
-        handledDeepLinkRef.current = deepLinkKey;
-        setSelectedTaskForDetails(match);
+        const alreadySubmitted = submissions.some(
+          s => (s.taskId?._id === match._id || s.taskId === match._id) && s.status !== 'resubmit'
+        );
+        if (!alreadySubmitted) {
+          setSelectedTaskForDetails(match);
+        }
       }
     }
-  }, [tasks, searchParams, location.state]);
+  }, [tasks, submissions, searchParams, location.state, location.pathname, navigate]);
 
   const handleOpenSubmitModal = (task) => {
     setActiveTask(task);
