@@ -76,13 +76,18 @@ const MyAttendance = () => {
       if (day.status && day.status !== 'In Progress') return; // Keep authoritative backend evaluation
       const reqHours = day.requiredPresentHours !== undefined ? day.requiredPresentHours : (day.workHours || 4);
       const maxHours = day.maxValidHours !== undefined ? day.maxValidHours : 10;
+      const onsiteHrs = (day.onsiteSeconds || 0) / 3600;
+      const wfhHrs = (day.wfhSeconds || 0) / 3600;
+      const onsiteMax = day.onsiteMaxHours || maxHours;
+      const wfhMax = day.wfhMaxHours || maxHours;
       const hours = day.totalSeconds / 3600;
+      const isOvertime = (day.onsiteSeconds || day.wfhSeconds) ? (onsiteHrs > onsiteMax || wfhHrs > wfhMax) : (hours > maxHours);
       const minRequired = (day.isLeave && day.leaveHours > 0)
         ? Math.max(1, reqHours - day.leaveHours)
         : reqHours;
       
-      if (hours >= minRequired && hours <= maxHours) day.status = 'Present';
-      else if (hours > maxHours) day.status = 'Invalid';
+      if (isOvertime) day.status = 'Invalid';
+      else if (hours >= minRequired) day.status = 'Present';
       else if (day.isActive) day.status = 'In Progress';
       else day.status = day.isLeave ? 'Leave' : 'Absent';
     });

@@ -140,12 +140,13 @@ const AttendanceTracker = () => {
     const bothMet = onsiteMet && wfhMet;
 
     let status = 'Absent';
-    const maxHours = record.maxValidHours || 10;
-    const totalHours = (record.totalSeconds || 0) / 3600;
+    const onsiteMax = record.onsiteMaxHours || record.maxValidHours || 10;
+    const wfhMax = record.wfhMaxHours || record.maxValidHours || 10;
+    const isOvertime = (onsiteSecs / 3600) > onsiteMax || (wfhSecs / 3600) > wfhMax;
 
     if (record.status === 'Leave' || (record.isLeave && (record.leaveHours || 0) === 0)) {
       status = 'Leave';
-    } else if (record.status === 'Invalid' || totalHours > maxHours) {
+    } else if (record.status === 'Invalid' || isOvertime) {
       status = 'Invalid';
     } else if (bothMet && (onsiteSecs > 0 || wfhSecs > 0 || (record.leaveHours || 0) > 0)) {
       status = 'Present';

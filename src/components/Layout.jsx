@@ -1210,7 +1210,9 @@ const Layout = () => {
           localStorage.removeItem('sessionActive');
         }
 
-        const activeMode = grantedAccessType || activeRecord?.accessType || primaryRecord?.accessType || 'on-site';
+        const activeMode = activeRecord
+          ? (activeRecord.accessType || 'on-site')
+          : (grantedAccessType || primaryRecord?.accessType || 'on-site');
         const targetSessionSeconds = activeMode === 'wfh' ? baseWfh : baseOnsite;
         const isSameActiveSession = Boolean(wasSessionActive && activeRecord && prevAttendanceId === activeRecord._id && currentAccessTypeRef.current === activeMode);
         const withinJitter = Math.abs(targetSessionSeconds - sessionSecondsRef.current) <= 5;
