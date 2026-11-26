@@ -140,14 +140,24 @@ export const AuthProvider = ({ children }) => {
   // Background config sync for traffic routing (single effect without duplicate listeners)
   useEffect(() => {
     const syncConfig = async () => {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
       await refreshTrafficConfig();
+    };
+
+    const handleBackOnline = () => {
+      consecutiveGlobalFailures = 0;
+      lastOutagePopupAt = 0;
+      resetClientHealthRegistry();
+      refreshTrafficConfig();
     };
 
     syncConfig();
     const intervalId = setInterval(syncConfig, 60000);
+    window.addEventListener('online', handleBackOnline);
 
     return () => {
       clearInterval(intervalId);
+      window.removeEventListener('online', handleBackOnline);
     };
   }, []);
 
@@ -270,18 +280,20 @@ export const AuthProvider = ({ children }) => {
       async (error) => {
         const originalRequest = error.config;
         const status = error.response?.status;
+        const isBrowserOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        const isNetworkCut = !error.response;
         const isNodeOrEdgeFailure =
-          !error.response ||
+          isNetworkCut ||
           status >= 500 ||
           status === 429 ||
           (status === 403 && !error.response?.data?.isBlocked && !error.response?.data?.isSuspended);
 
-        if (originalRequest && originalRequest.baseURL && isNodeOrEdgeFailure) {
+        if (originalRequest && originalRequest.baseURL && isNodeOrEdgeFailure && !isBrowserOffline) {
           recordNodeFailure(originalRequest.baseURL, error);
         }
 
         // Idempotency check: only retry GET/HEAD/OPTIONS requests on network drops or server/edge failures
-        if (originalRequest && shouldRetryRequest(error, originalRequest)) {
+        if (!isBrowserOffline && originalRequest && shouldRetryRequest(error, originalRequest)) {
           originalRequest._retryCount = (originalRequest._retryCount || 0) + 1;
 
           const currentConfig = trafficConfigRef.current;
@@ -299,7 +311,7 @@ export const AuthProvider = ({ children }) => {
           }
         }
 
-        // Surface a helpful calm popup when all servers or repeated requests fail so users know to wait 5-10 min
+        // Distinguish between student's internet/network drop vs actual backend server error
         if (isNodeOrEdgeFailure && !originalRequest?._skipOutagePopup && !axios.isCancel?.(error)) {
           consecutiveGlobalFailures += 1;
           const currentConfig = trafficConfigRef.current;
@@ -316,16 +328,27 @@ export const AuthProvider = ({ children }) => {
 
           const now = Date.now();
           if (
-            (allNodesUnavailable || consecutiveGlobalFailures >= OUTAGE_FAILURE_THRESHOLD) &&
+            (isBrowserOffline || allNodesUnavailable || consecutiveGlobalFailures >= OUTAGE_FAILURE_THRESHOLD) &&
             !Swal.isVisible() &&
             now - lastOutagePopupAt > OUTAGE_POPUP_COOLDOWN_MS
           ) {
             lastOutagePopupAt = now;
+            const popupTitle = isBrowserOffline
+              ? 'No Internet Connection'
+              : isNetworkCut
+                ? 'Network / Connection Issue'
+                : 'Server Busy — Please Wait';
+            const popupHtml = isBrowserOffline
+              ? '<p style="font-size:14px;line-height:1.6;">Your device appears to be <strong>offline</strong>.<br/><br/>Please check your <strong>Wi-Fi or mobile internet</strong> and click <strong>Retry Connection</strong>. Your saved progress and attendance remain safe.</p>'
+              : isNetworkCut
+                ? '<p style="font-size:14px;line-height:1.6;">Unable to reach the platform from your current internet connection.<br/><br/>Please check your <strong>Wi-Fi, mobile data, VPN, or college firewall</strong> and try <strong>Retry Connection</strong> (or switch networks). Your saved progress remains safe.</p>'
+                : '<p style="font-size:14px;line-height:1.6;">The server is currently experiencing high traffic or restarting.<br/><br/>Please wait <strong>2 to 5 minutes</strong> before refreshing the page. Your saved progress and attendance records remain safe.</p>';
+
             Swal.fire({
-              icon: 'warning',
-              title: 'Server Temporarily Unavailable',
-              html: '<p style="font-size:14px;line-height:1.6;">Our servers are currently experiencing a temporary issue or restarting.<br/><br/>Please wait <strong>5 to 10 minutes</strong> before refreshing the page. Your saved progress and attendance records remain safe.</p>',
-              confirmButtonText: 'OK, I Will Wait',
+              icon: isNetworkCut ? 'info' : 'warning',
+              title: popupTitle,
+              html: popupHtml,
+              confirmButtonText: isNetworkCut ? 'OK' : 'OK, I Will Wait',
               showDenyButton: true,
               denyButtonText: 'Retry Connection',
               confirmButtonColor: '#10b981',
@@ -333,6 +356,7 @@ export const AuthProvider = ({ children }) => {
             }).then((result) => {
               if (result.isDenied) {
                 consecutiveGlobalFailures = 0;
+                lastOutagePopupAt = 0;
                 resetClientHealthRegistry();
                 refreshTrafficConfig();
               }

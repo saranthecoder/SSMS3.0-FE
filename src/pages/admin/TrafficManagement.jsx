@@ -9,18 +9,9 @@ import {
   ExternalLink, Calendar, Sliders
 } from 'lucide-react';
 import {
-  ResponsiveContainer, AreaChart, Area, LineChart, Line,
+  ResponsiveContainer, ComposedChart, Area, Line, BarChart, Bar,
   XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine
 } from 'recharts';
-
-const SERVER_PALETTE = [
-  { stroke: '#10b981' },
-  { stroke: '#0ea5e9' },
-  { stroke: '#8b5cf6' },
-  { stroke: '#f59e0b' },
-  { stroke: '#ec4899' },
-  { stroke: '#14b8a6' },
-];
 
 const POLICY_OPTIONS = [
   { id: 'round-robin', label: 'Equal Round-Robin', desc: 'Splits traffic equally across all healthy servers and skips crashed ones.' },
@@ -69,6 +60,8 @@ const TrafficManagement = () => {
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showCharts, setShowCharts] = useState(true);
+  const [selectedTelemetryServerId, setSelectedTelemetryServerId] = useState('all');
+  const [serverChartMode, setServerChartMode] = useState('resources');
 
   const isMountedRef = useRef(true);
   const initialScanDoneRef = useRef(false);
@@ -101,14 +94,25 @@ const TrafficManagement = () => {
   const recordTelemetrySnapshot = (currentServers) => {
     if (!currentServers || currentServers.length === 0) return;
     const timeLabel = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-    const point = { time: timeLabel };
+    const onlineList = currentServers.filter(s => s.isActive && s.status === 'online' && !s.isStale);
+    const clusterSpeed = onlineList.reduce((sum, s) => sum + (s.reqPerMin || 0), 0);
+    const clusterLatency = onlineList.length > 0
+      ? Math.round(onlineList.reduce((sum, s) => sum + (s.responseTime || 0), 0) / onlineList.length)
+      : 0;
+    const byId = {};
     currentServers.forEach(s => {
       const online = s.isActive && s.status === 'online' && !s.isStale;
-      point[`${s.name}_cpu`] = online && typeof s.cpuUsage === 'number' ? s.cpuUsage : null;
-      point[`${s.name}_lat`] = online ? (s.responseTime || 0) : 0;
-      point[`${s.name}_speed`] = online ? (s.reqPerMin || 0) : 0;
+      byId[s._id] = {
+        speed: online ? (s.reqPerMin || 0) : 0,
+        lat: online ? (s.responseTime || 0) : 0
+      };
     });
+    const point = { time: timeLabel, clusterSpeed, clusterLatency, byId };
     setTelemetryHistory(prev => {
+      // Update same-second snapshot in place so X-axis never shows duplicate timestamps
+      if (prev.length > 0 && prev[prev.length - 1].time === timeLabel) {
+        return [...prev.slice(0, -1), point];
+      }
       const next = [...prev, point];
       return next.length > 20 ? next.slice(-20) : next;
     });
@@ -141,7 +145,7 @@ const TrafficManagement = () => {
 
   useEffect(() => {
     fetchConfigAndServers();
-    const intervalMs = Math.max(10000, (pingIntervalSeconds || 60) * 1000);
+    const intervalMs = Math.min(Math.max(10000, (pingIntervalSeconds || 60) * 1000), 20000);
     const interval = setInterval(() => {
       if (!isMountedRef.current) return;
       axios.get('/traffic/servers').then(res => {
@@ -319,6 +323,10 @@ const TrafficManagement = () => {
     }
   };
 
+  const handleInternalRefresh = async () => {
+    await Promise.all([fetchConfigAndServers(), refreshTrafficConfig()]);
+  };
+
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     Swal.fire({ icon: 'success', title: 'Copied', timer: 900, showConfirmButton: false });
@@ -333,6 +341,38 @@ const TrafficManagement = () => {
   const resetDateText = sampleUsage?.nextReset
     ? new Date(sampleUsage.nextReset).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     : '1st UTC';
+
+  const selectedServerObj = selectedTelemetryServerId === 'all'
+    ? null
+    : servers.find(s => s._id === selectedTelemetryServerId) || null;
+  const effectiveScopeId = selectedServerObj ? selectedServerObj._id : 'all';
+
+  const trendChartData = telemetryHistory.map(pt => ({
+    time: pt.time,
+    speed: effectiveScopeId === 'all' ? pt.clusterSpeed : (pt.byId?.[effectiveScopeId]?.speed ?? 0),
+    latency: effectiveScopeId === 'all' ? pt.clusterLatency : (pt.byId?.[effectiveScopeId]?.lat ?? 0)
+  }));
+
+  const onlineHealthyNodes = servers.filter(s => s.isActive && s.status === 'online' && !s.isStale);
+  const currentScopeSpeed = selectedServerObj
+    ? (selectedServerObj.isActive && selectedServerObj.status === 'online' ? (selectedServerObj.reqPerMin || 0) : 0)
+    : totalRpm;
+  const currentScopeLatency = selectedServerObj
+    ? (selectedServerObj.isActive && selectedServerObj.status === 'online' ? (selectedServerObj.responseTime || 0) : 0)
+    : (onlineHealthyNodes.length > 0
+      ? Math.round(onlineHealthyNodes.reduce((sum, s) => sum + (s.responseTime || 0), 0) / onlineHealthyNodes.length)
+      : 0);
+
+  const serverComparisonData = servers.map(s => {
+    const online = s.isActive && s.status === 'online' && !s.isStale;
+    return {
+      name: s.name,
+      ram: online && typeof s.memoryUsage === 'number' ? s.memoryUsage : 0,
+      cpu: online && typeof s.cpuUsage === 'number' ? s.cpuUsage : 0,
+      speed: online ? (s.reqPerMin || 0) : 0,
+      latency: online ? (s.responseTime || 0) : 0
+    };
+  });
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fadeIn">
@@ -350,6 +390,15 @@ const TrafficManagement = () => {
           </div>
         </div>
         <div className="flex flex-wrap gap-2.5">
+          <button
+            onClick={handleInternalRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
+            title="Refresh live traffic stats, load share & server usage"
+          >
+            <RefreshCw size={14} className={isRefreshing ? 'animate-spin text-emerald-500' : ''} />
+            Refresh
+          </button>
           <a
             href="https://dashboard.render.com/billing"
             target="_blank"
@@ -364,7 +413,7 @@ const TrafficManagement = () => {
             disabled={isRefreshing || servers.length === 0}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500 hover:text-white border border-sky-500/20 rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
           >
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+            <Activity size={14} className={isRefreshing ? 'animate-pulse' : ''} />
             Scan Health
           </button>
           <button
@@ -656,65 +705,190 @@ const TrafficManagement = () => {
 
         {/* Live Telemetry Charts */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg space-y-4">
-          <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex flex-wrap justify-between items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
             <div className="flex items-center gap-2">
               <Activity className="text-emerald-500" size={18} />
-              <h2 className="text-base font-bold text-slate-800 dark:text-white">Live Speed & Latency Telemetry</h2>
+              <div>
+                <h2 className="text-base font-bold text-slate-800 dark:text-white">Live Speed & Health Telemetry</h2>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Only 2 simple lines (Traffic Speed + Response Time) and per-server RAM & CPU comparison
+                </p>
+              </div>
             </div>
-            <button
-              onClick={() => setShowCharts(!showCharts)}
-              className="text-xs font-bold text-slate-400 hover:text-slate-200 cursor-pointer flex items-center gap-1"
-            >
-              <Sliders size={13} /> {showCharts ? 'Hide' : 'Show'}
-            </button>
+            <div className="flex items-center gap-2">
+              {showCharts && (
+                <select
+                  value={effectiveScopeId}
+                  onChange={(e) => setSelectedTelemetryServerId(e.target.value)}
+                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
+                >
+                  <option value="all">All Servers (Cluster)</option>
+                  {servers.map(s => (
+                    <option key={s._id} value={s._id}>{s.name}</option>
+                  ))}
+                </select>
+              )}
+              <button
+                onClick={() => setShowCharts(!showCharts)}
+                className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer flex items-center gap-1 px-2 py-1"
+              >
+                <Sliders size={13} /> {showCharts ? 'Hide' : 'Show'}
+              </button>
+            </div>
           </div>
 
           {showCharts && (
             <div className="grid grid-cols-1 gap-4">
-              <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800 h-60">
-                {telemetryHistory.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-xs text-slate-400">Collecting live telemetry...</div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={telemetryHistory}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.25} />
-                      <XAxis dataKey="time" stroke="#64748b" fontSize={10} />
-                      <YAxis yAxisId="left" stroke="#38bdf8" fontSize={10} unit="ms" />
-                      <YAxis yAxisId="right" orientation="right" stroke="#10b981" fontSize={10} unit=" rpm" />
-                      <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '10px', fontSize: '11px' }} />
-                      {servers.map((s, idx) => {
-                        const color = SERVER_PALETTE[idx % SERVER_PALETTE.length].stroke;
-                        return (
-                          <Line key={`${s._id}_lat`} yAxisId="left" type="monotone" dataKey={`${s.name}_lat`} name={`${s.name} (ms)`} stroke={color} strokeWidth={2} dot={{ r: 2 }} connectNulls />
-                        );
-                      })}
-                      {servers.map((s, idx) => {
-                        const color = SERVER_PALETTE[idx % SERVER_PALETTE.length].stroke;
-                        return (
-                          <Line key={`${s._id}_spd`} yAxisId="right" type="monotone" dataKey={`${s.name}_speed`} name={`${s.name} (req/min)`} stroke={color} strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls />
-                        );
-                      })}
-                    </LineChart>
-                  </ResponsiveContainer>
-                )}
+              {/* Chart 1: Simple 2-Line Speed & Latency */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                    {selectedServerObj ? `${selectedServerObj.name} — Traffic Speed & Response Delay` : 'All Servers — Total Speed & Avg Response Delay'}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] font-bold">
+                    <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                      Speed: {currentScopeSpeed} req/min
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
+                      <span className="w-2.5 h-2.5 rounded-full bg-sky-500" />
+                      {selectedServerObj ? 'Response' : 'Avg Response'}: {currentScopeLatency} ms
+                    </span>
+                  </div>
+                </div>
+
+                <div className="h-52">
+                  {trendChartData.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-xs text-slate-400">Collecting live telemetry...</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={trendChartData}>
+                        <defs>
+                          <linearGradient id="speedFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" opacity={0.2} />
+                        <XAxis dataKey="time" stroke="#64748b" fontSize={10} />
+                        <YAxis yAxisId="speed" stroke="#10b981" fontSize={10} allowDecimals={false} unit=" rpm" />
+                        <YAxis yAxisId="lat" orientation="right" stroke="#0ea5e9" fontSize={10} allowDecimals={false} unit="ms" />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '10px', fontSize: '12px', color: '#f8fafc' }}
+                          itemStyle={{ fontWeight: 700 }}
+                        />
+                        <Area
+                          yAxisId="speed"
+                          type="monotone"
+                          dataKey="speed"
+                          name="Traffic Speed (req/min)"
+                          stroke="#10b981"
+                          strokeWidth={2.5}
+                          fill="url(#speedFill)"
+                          dot={{ r: 3, fill: '#10b981' }}
+                          activeDot={{ r: 5 }}
+                        />
+                        <Line
+                          yAxisId="lat"
+                          type="monotone"
+                          dataKey="latency"
+                          name={selectedServerObj ? 'Response Delay (ms)' : 'Avg Response Delay (ms)'}
+                          stroke="#0ea5e9"
+                          strokeWidth={2.5}
+                          dot={{ r: 3, fill: '#0ea5e9' }}
+                          activeDot={{ r: 5 }}
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
               </div>
 
-              <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200 dark:border-slate-800 h-44">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={telemetryHistory}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.25} />
-                    <XAxis dataKey="time" stroke="#64748b" fontSize={10} />
-                    <YAxis domain={[0, 100]} stroke="#64748b" fontSize={10} unit="%" />
-                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '10px', fontSize: '11px' }} />
-                    <ReferenceLine y={cpuThreshold} stroke="#f59e0b" strokeDasharray="4 4" />
-                    {servers.map((s, idx) => {
-                      const color = SERVER_PALETTE[idx % SERVER_PALETTE.length].stroke;
-                      return (
-                        <Area key={s._id} type="monotone" dataKey={`${s.name}_cpu`} name={`${s.name} CPU %`} stroke={color} fill={color} fillOpacity={0.15} connectNulls />
-                      );
-                    })}
-                  </AreaChart>
-                </ResponsiveContainer>
+              {/* Chart 2: Clear Per-Server Comparison Bars (RAM/CPU or Speed/Latency) */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      {serverChartMode === 'resources' ? 'Current Server Load (RAM & CPU)' : 'Current Load by Server (Speed & Latency)'}
+                    </span>
+                    <div className="flex items-center gap-3 text-[11px] font-bold">
+                      {serverChartMode === 'resources' ? (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 text-purple-600 dark:text-purple-400">
+                            <span className="w-2.5 h-2.5 rounded-sm bg-purple-500" /> RAM %
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                            <span className="w-2.5 h-2.5 rounded-sm bg-amber-500" /> CPU %
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> Speed (req/min)
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
+                            <span className="w-2.5 h-2.5 rounded-sm bg-sky-500" /> Latency (ms)
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="inline-flex rounded-lg bg-slate-200/70 dark:bg-slate-900 p-0.5 border border-slate-200 dark:border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setServerChartMode('resources')}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer ${
+                        serverChartMode === 'resources'
+                          ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      RAM & CPU
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setServerChartMode('traffic')}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer ${
+                        serverChartMode === 'traffic'
+                          ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      Speed & Delay
+                    </button>
+                  </div>
+                </div>
+
+                <div className="h-44">
+                  <ResponsiveContainer width="100%" height="100%">
+                    {serverChartMode === 'resources' ? (
+                      <BarChart data={serverComparisonData} barGap={4}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" opacity={0.2} />
+                        <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
+                        <YAxis domain={[0, 100]} stroke="#64748b" fontSize={10} unit="%" />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '10px', fontSize: '12px', color: '#f8fafc' }}
+                        />
+                        <ReferenceLine y={cpuThreshold} stroke="#f59e0b" strokeDasharray="4 4" label={{ value: `Alert ${cpuThreshold}%`, position: 'insideTopRight', fill: '#f59e0b', fontSize: 10 }} />
+                        <Bar dataKey="ram" name="RAM Usage (%)" fill="#8b5cf6" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                        <Bar dataKey="cpu" name="CPU Load (%)" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                      </BarChart>
+                    ) : (
+                      <BarChart data={serverComparisonData} barGap={4}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" opacity={0.2} />
+                        <XAxis dataKey="name" stroke="#64748b" fontSize={11} />
+                        <YAxis yAxisId="spd" stroke="#10b981" fontSize={10} allowDecimals={false} unit=" rpm" />
+                        <YAxis yAxisId="lat" orientation="right" stroke="#0ea5e9" fontSize={10} allowDecimals={false} unit="ms" />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '10px', fontSize: '12px', color: '#f8fafc' }}
+                        />
+                        <Bar yAxisId="spd" dataKey="speed" name="Speed (req/min)" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                        <Bar yAxisId="lat" dataKey="latency" name="Latency (ms)" fill="#0ea5e9" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                      </BarChart>
+                    )}
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           )}

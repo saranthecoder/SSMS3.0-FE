@@ -6,11 +6,11 @@ import {
   LayoutDashboard, Users, BookOpen, FileText, CheckCircle,
   LogOut, Menu, X, User as UserIcon, Sun, Moon, Clock, Gamepad2, MessageCircle, Bell, BellOff, Code, Trophy, Calendar, Monitor,
   Briefcase, ChevronDown, ChevronRight, Palette, Network, ShieldCheck, ShieldAlert, Activity, Sparkles, Lock, UserCheck, ArrowLeftRight,
-  AlertTriangle, Share2, Building2, BarChart3
+  AlertTriangle, Share2, Building2, BarChart3, Volume2, Play, RotateCcw
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import Swal from 'sweetalert2';
-import { soundManager } from '../utils/soundManager';
+import { soundManager, SOUND_PRESETS, NOTIFICATION_EVENT_TYPES } from '../utils/soundManager';
 import Loader from './Loader';
 import { useGlobalBatch } from '../context/GlobalBatchContext';
 import BatchSelectionModal from './BatchSelectionModal';
@@ -792,10 +792,47 @@ const Layout = () => {
     });
   }, []);
 
-  const playNotifSound = useCallback(() => {
+  const [showSoundStudio, setShowSoundStudio] = useState(false);
+  const [soundAllocations, setSoundAllocations] = useState(() => soundManager.getAllocations());
+  const [activePreviewSoundId, setActivePreviewSoundId] = useState(null);
+
+  const playNotifSound = useCallback((eventKey) => {
     if (dndModeRef.current) return;
-    soundManager.playNotification();
+    if (eventKey) {
+      soundManager.playForEvent(eventKey);
+    } else {
+      soundManager.playNotification();
+    }
   }, []);
+
+  const getNotifSoundKey = (item) => {
+    const t = (item?.type || '').toLowerCase();
+    if (t === 'submission') return 'submission';
+    if (t === 'leave') return 'leave_request';
+    if (t === 'task') return 'new_task';
+    if (t === 'grade') return 'task_graded';
+    return 'announcement';
+  };
+
+  const handlePreviewPreset = (presetId) => {
+    setActivePreviewSoundId(presetId);
+    soundManager.playPreset(presetId);
+    setTimeout(() => {
+      setActivePreviewSoundId((curr) => (curr === presetId ? null : curr));
+    }, 650);
+  };
+
+  const handleAssignSound = (eventKey, presetId) => {
+    const updated = soundManager.setEventSound(eventKey, presetId);
+    setSoundAllocations(updated);
+    soundManager.playPreset(presetId);
+  };
+
+  const handleResetSounds = () => {
+    const reset = soundManager.resetAllocations();
+    setSoundAllocations(reset);
+    soundManager.playNotification();
+  };
 
   // Centralized Notification Navigation Engine: Opens the exact task, submission, leave, or chat
   const navigateToNotificationTarget = useCallback((notif) => {
@@ -1368,7 +1405,7 @@ const Layout = () => {
           brandNew.forEach(n => knownNotifIdsRef.current.add(n.id));
 
           if (brandNew.length > 0) {
-            playNotifSound();
+            playNotifSound(getNotifSoundKey(brandNew[0]));
             brandNew.slice(0, 4).forEach((item) => {
               showGlossyNotification({
                 typeLabel: item.type === 'submission' ? 'New Submission' : item.type === 'task' ? 'Task Notification' : item.type === 'leave' ? 'Leave Request' : item.type === 'grade' ? 'Academic Update' : 'Academic Alert',
@@ -1437,7 +1474,7 @@ const Layout = () => {
           brandNew.forEach(n => knownNotifIdsRef.current.add(n.id));
 
           if (brandNew.length > 0) {
-            playNotifSound();
+            playNotifSound(getNotifSoundKey(brandNew[0]));
             brandNew.slice(0, 4).forEach((item) => {
               showGlossyNotification({
                 typeLabel: item.type === 'task' ? 'New Task' : item.type === 'grade' ? 'Task Graded' : 'Academic Alert',
@@ -1502,6 +1539,7 @@ const Layout = () => {
   useEffect(() => {
     if (socket && user?.role === 'student') {
       const handleForceCheckout = (data) => {
+        playNotifSound('alert_warning');
         console.log('Force-checkout event received via socket:', data);
         setSessionActive(false);
         setAttendanceId(null);
@@ -1520,6 +1558,7 @@ const Layout = () => {
       };
 
       const handleAccessRestricted = (data) => {
+        playNotifSound('alert_warning');
         setSessionActive(false);
         setAttendanceId(null);
         attendanceIdRef.current = null;
@@ -1563,7 +1602,7 @@ const Layout = () => {
       };
 
       const handleAccessRestored = (data) => {
-        soundManager.playSuccess();
+        playNotifSound('task_graded');
         showGlossyNotification({
           typeLabel: 'Access Restored',
           title: 'Panel Access Restored',
@@ -1595,7 +1634,7 @@ const Layout = () => {
     const chatPath = user.role === 'student' ? '/student/chat' : '/chat';
 
     const handleDirectMessageNotif = (data) => {
-      soundManager.playWhatsAppIncoming();
+      playNotifSound('direct_message');
       setChatCount(prev => prev + 1);
 
       if (!location.pathname.includes('/chat')) {
@@ -1613,7 +1652,7 @@ const Layout = () => {
     };
 
     const handleGroupMessageNotif = (data) => {
-      soundManager.playWhatsAppIncoming();
+      playNotifSound('group_batch_message');
       setChatCount(prev => prev + 1);
 
       if (!location.pathname.includes('/chat')) {
@@ -1632,7 +1671,7 @@ const Layout = () => {
     };
 
     const handleBatchMessageNotif = (data) => {
-      soundManager.playWhatsAppIncoming();
+      playNotifSound('group_batch_message');
       setChatCount(prev => prev + 1);
 
       if (!location.pathname.includes('/chat')) {
@@ -1651,7 +1690,7 @@ const Layout = () => {
     };
 
     const handleAnnouncementNotif = (data) => {
-      playNotifSound();
+      playNotifSound('announcement');
       showGlossyNotification({
         typeLabel: 'Announcement',
         title: data.title ? `📢 ${data.title}` : '📢 Broadcast Announcement',
@@ -1667,7 +1706,7 @@ const Layout = () => {
 
     const handleFriendRequestReceived = (data) => {
       setFriendRequestsCount(prev => prev + 1);
-      playNotifSound();
+      playNotifSound('friend_request');
       showGlossyNotification({
         typeLabel: 'Friend Request',
         title: data.requester.name,
@@ -1682,7 +1721,7 @@ const Layout = () => {
     };
 
     const handleFriendRequestAccepted = (data) => {
-      soundManager.playSuccess();
+      playNotifSound('friend_request');
       setFriendRequestsCount(prev => Math.max(0, prev - 1));
       showGlossyNotification({
         typeLabel: 'Friend Connected',
@@ -1698,7 +1737,7 @@ const Layout = () => {
     };
 
     const handleCoinsReceived = (data) => {
-      soundManager.playReward();
+      playNotifSound('coins_reward');
       if (typeof data.newCoins === 'number') {
         setUserCoins(data.newCoins);
       } else if (typeof data.amount === 'number') {
@@ -1718,7 +1757,7 @@ const Layout = () => {
     };
 
     const handleNewTaskAssigned = (data) => {
-      playNotifSound();
+      playNotifSound('new_task');
       fetchCounts();
       showGlossyNotification({
         typeLabel: 'New Task Assigned',
@@ -1742,7 +1781,7 @@ const Layout = () => {
     };
 
     const handleTaskGraded = (data) => {
-      playNotifSound();
+      playNotifSound('task_graded');
       fetchCounts();
       showGlossyNotification({
         typeLabel: 'Task Graded',
@@ -2619,6 +2658,16 @@ const Layout = () => {
               <span className="hidden sm:inline">{dndMode ? 'DND On' : 'DND'}</span>
             </button>
 
+            {/* Notification Sound Studio Button */}
+            <button
+              onClick={() => setShowSoundStudio(true)}
+              title="Preview & Allocate Notification Sounds"
+              className="p-2 text-slate-500 hover:text-indigo-500 dark:text-slate-400 dark:hover:text-indigo-400 rounded-xl transition-all hover:bg-indigo-500/10 border border-slate-300/40 dark:border-white/10 cursor-pointer shrink-0"
+              aria-label="Notification Sounds"
+            >
+              <Volume2 size={16} className="sm:w-[18px] sm:h-[18px]" />
+            </button>
+
             {/* Notifications Bell */}
             <div className="relative" ref={notificationRef}>
               <button
@@ -3293,6 +3342,156 @@ const Layout = () => {
             </button>
           </div>
         </aside>
+      )}
+
+      {/* Notification Sound Studio & Allocation Modal */}
+      {showSoundStudio && (
+        <div
+          className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setShowSoundStudio(false)}
+        >
+          <div
+            className="w-full max-w-4xl max-h-[86vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/60">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                  <Volume2 size={18} />
+                </span>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-800 dark:text-white leading-tight">
+                    Notification Sound Studio
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Click Play on any sound to preview it live, or assign a different sound to each notification type
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetSounds}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-200/70 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer"
+                  title="Reset to default sound allocation"
+                >
+                  <RotateCcw size={12} /> Reset Defaults
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSoundStudio(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column: All 12 Available Sounds */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Available Sound Effects ({SOUND_PRESETS.length})
+                  </h4>
+                  <span className="text-[11px] text-indigo-500 font-semibold">Click ▶ to Listen</span>
+                </div>
+                <div className="space-y-2">
+                  {SOUND_PRESETS.map((preset) => {
+                    const isPlaying = activePreviewSoundId === preset.id;
+                    return (
+                      <div
+                        key={preset.id}
+                        className={`flex items-center justify-between gap-3 p-2.5 rounded-xl border transition-all ${
+                          isPlaying
+                            ? 'bg-indigo-500/10 border-indigo-500/40 shadow-sm'
+                            : 'bg-slate-50 dark:bg-slate-950 border-slate-200/80 dark:border-slate-800'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-[10px] font-black shrink-0">
+                              {preset.number}
+                            </span>
+                            <span className="text-xs font-bold text-slate-800 dark:text-white truncate">
+                              {preset.name}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200/80 dark:bg-slate-800 text-slate-500 dark:text-slate-400 shrink-0">
+                              {preset.category}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate pl-7">
+                            {preset.desc}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewPreset(preset.id)}
+                          className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
+                            isPlaying
+                              ? 'bg-indigo-600 text-white'
+                              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:border-indigo-500 hover:text-indigo-500'
+                          }`}
+                        >
+                          <Play size={11} className="fill-current" /> Play
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Right Column: Notification Event Allocation */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Allocated Notification Sounds
+                  </h4>
+                  <span className="text-[11px] text-emerald-500 font-semibold">Auto-Saved</span>
+                </div>
+                <div className="space-y-2">
+                  {NOTIFICATION_EVENT_TYPES.map((ev) => {
+                    const assignedId = soundAllocations[ev.key];
+                    return (
+                      <div
+                        key={ev.key}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-sm shrink-0">{ev.icon}</span>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                            {ev.label}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <select
+                            value={assignedId}
+                            onChange={(e) => handleAssignSound(ev.key, e.target.value)}
+                            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
+                          >
+                            {SOUND_PRESETS.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                #{p.number} {p.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewPreset(assignedId)}
+                            className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 cursor-pointer"
+                            title="Test allocated sound"
+                          >
+                            <Play size={11} className="fill-current" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

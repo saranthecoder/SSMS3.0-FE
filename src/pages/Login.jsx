@@ -65,7 +65,16 @@ const Login = () => {
           confirmButtonText: 'I Understand'
         });
       }
-      setError(data?.message || err.message || 'Failed to login');
+      const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+      const isNetworkIssue = !err.response;
+      setError(
+        data?.message ||
+        (isOffline
+          ? 'You are offline. Please check your Wi-Fi or mobile internet and try again.'
+          : isNetworkIssue
+            ? 'Unable to connect right now. Please check your internet / Wi-Fi connection and try again.'
+            : err.message || 'Failed to login')
+      );
     } finally {
       setLoading(false);
     }
