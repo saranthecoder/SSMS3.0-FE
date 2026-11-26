@@ -477,7 +477,7 @@ const SubmissionReviews = () => {
 
       {/* Floating Progress Indicator */}
       {evalProgress.active && (
-        <div className="fixed bottom-6 right-6 bg-white dark:bg-slate-800 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] border border-primary-200 dark:border-primary-800/50 p-4 z-50 flex items-center gap-4 min-w-[300px] max-w-[380px] transition-all duration-300">
+        <div className="fixed bottom-20 sm:bottom-6 left-3 right-3 sm:left-auto sm:right-6 bg-white dark:bg-slate-800 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)] border border-primary-200 dark:border-primary-800/50 p-3.5 sm:p-4 z-50 flex items-center gap-3 sm:gap-4 sm:min-w-[300px] sm:max-w-[380px] transition-all duration-300">
           <div className="w-11 h-11 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400 shrink-0">
             <Zap size={22} className="animate-pulse" />
           </div>

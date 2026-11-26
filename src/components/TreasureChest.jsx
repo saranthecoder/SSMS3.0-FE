@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { Package, Sparkles } from 'lucide-react';
+import GoldCoinIcon from './GoldCoinIcon';
 
 const CHEST_COLORS = {
   Bronze:    { from: '#CD7F32', to: '#8B5A2B', glow: 'shadow-amber-700/40' },
@@ -90,7 +91,7 @@ const TreasureChest = ({ chests = [], onChestOpened }) => {
           </h3>
           <div className="flex items-center justify-center gap-6">
             <div className="text-center">
-              <span className="text-2xl">🪙</span>
+              <div className="flex justify-center"><GoldCoinIcon size={28} /></div>
               <p className="text-amber-400 font-bold text-lg">+{openedLoot.coinsAwarded}</p>
               <p className="text-slate-500 text-xs">Coins</p>
             </div>

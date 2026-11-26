@@ -8,6 +8,17 @@ import { Loader2, Upload, ExternalLink, Lock, Calendar, FileText as FileTextIcon
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { soundManager } from '../../utils/soundManager';
 import { sanitizeTaskHtml } from '../../utils/taskFormatter';
+import GoldCoinIcon, { getGoldCoinHtml } from '../../components/GoldCoinIcon';
+
+const escapeHtml = (value) => {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
 
 const formatDateTime = (dateString) => {
   if (!dateString) return '';
@@ -236,6 +247,19 @@ const MyTasks = () => {
     }
   };
 
+  useEffect(() => {
+    window.__ssmsOpenTaskSubmit = (taskId) => {
+      const matched = tasks.find(t => t._id === taskId);
+      if (matched) {
+        handleOpenSubmitModal(matched);
+        window.focus();
+      }
+    };
+    return () => {
+      delete window.__ssmsOpenTaskSubmit;
+    };
+  }, [tasks, submissions]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (uploading || !activeTask) return;
@@ -275,7 +299,7 @@ const MyTasks = () => {
           title: '🎉 Task Submitted!',
           html: `
             <div class="space-y-3 py-2 text-center">
-              <div class="text-4xl animate-bounce">🪙</div>
+              <div class="flex justify-center animate-bounce">${getGoldCoinHtml(42)}</div>
               <p class="text-base font-bold text-slate-800 dark:text-slate-100">
                 You earned <span class="text-amber-500 font-extrabold text-xl">+${coinsAwarded} Coins</span>!
               </p>
@@ -366,7 +390,480 @@ const MyTasks = () => {
   };
 
   const handleViewTaskText = (task) => {
-    setSelectedTaskForDetails(task);
+    const newWin = window.open('about:blank', '_blank');
+    if (!newWin) {
+      // Fallback to modal only if the browser blocked window.open
+      setSelectedTaskForDetails(task);
+      return;
+    }
+
+    const isDark = document.documentElement.classList.contains('dark');
+    const detailSub = submissions.find(s => (s.taskId?._id === task._id || s.taskId === task._id));
+    const isSubmitted = !!detailSub;
+    const isAlreadySubmitted = !!(detailSub && detailSub.status !== 'resubmit');
+
+    const safeTitle = escapeHtml(task.title || 'Task Details');
+    const safeBatch = escapeHtml(task.batchId?.batchName || 'Active Batch');
+    const safeCategory = escapeHtml(task.category || 'General');
+    const deadlineText = escapeHtml(formatDateTime(task.dueDate) || '—');
+    const maxMarks = Number(task.maxMarks) || 0;
+    const rewardCoins = maxMarks * 10;
+    const descriptionHtml = sanitizeTaskHtml(task.description) || '<p style="color:#64748b;font-style:italic;">No instructions provided.</p>';
+    const startIso = (task.scheduledAt || task.createdAt) ? new Date(task.scheduledAt || task.createdAt).toISOString() : '';
+    const dueIso = task.dueDate ? new Date(task.dueDate).toISOString() : '';
+    const subIso = detailSub ? new Date(detailSub.submittedAt || detailSub.createdAt).toISOString() : '';
+    const latePenalty = Number(detailSub?.latePenalty || 0);
+
+    const requiredLinksHtml = task.requiredLinks && task.requiredLinks.length > 0
+      ? `<div class="section">
+          <h3 class="section-title">Required Submission Links</h3>
+          <div class="links-grid">
+            ${task.requiredLinks.map((rl) => `
+              <div class="link-card">
+                <span class="link-label">${escapeHtml(rl.label)}</span>
+                <span class="badge ${rl.isMandatory ? 'badge-red' : 'badge-slate'}">${rl.isMandatory ? 'Mandatory' : 'Optional'}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>`
+      : '';
+
+    const footerActionHtml = isAlreadySubmitted
+      ? `<span class="submitted-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          Already Submitted
+        </span>`
+      : `<button id="proceedSubmitBtn" class="submit-btn" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          ${detailSub?.status === 'resubmit' ? 'Resubmit Task' : 'Proceed to Submit'}
+        </button>`;
+
+    newWin.document.open();
+    newWin.document.write(`<!doctype html>
+<html lang="en" class="${isDark ? 'dark' : ''}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${safeTitle} — SSMS Task</title>
+    <link rel="stylesheet" href="https://cdn.quilljs.com/1.3.6/quill.snow.css" />
+    <style>
+      :root {
+        --bg-page: #f1f5f9;
+        --bg-card: #ffffff;
+        --bg-header: linear-gradient(90deg, #f8fafc 0%, #ffffff 60%, rgba(238, 242, 255, 0.55) 100%);
+        --bg-meta: #f1f5f9;
+        --bg-viewer: #f8fafc;
+        --bg-footer: #f8fafc;
+        --border-color: #e2e8f0;
+        --text-main: #0f172a;
+        --text-sub: #334155;
+        --text-muted: #64748b;
+        --divider: #cbd5e1;
+      }
+      html.dark {
+        --bg-page: #020617;
+        --bg-card: #0f172a;
+        --bg-header: linear-gradient(90deg, #0f172a 0%, #0f172a 60%, rgba(30, 27, 75, 0.45) 100%);
+        --bg-meta: rgba(30, 41, 59, 0.75);
+        --bg-viewer: rgba(2, 6, 23, 0.85);
+        --bg-footer: #0f172a;
+        --border-color: #1e293b;
+        --text-main: #f8fafc;
+        --text-sub: #cbd5e1;
+        --text-muted: #94a3b8;
+        --divider: #334155;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 28px 16px 40px;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg-page);
+        color: var(--text-main);
+        line-height: 1.65;
+      }
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 24px;
+        box-shadow: 0 24px 50px -12px rgba(15, 23, 42, 0.16);
+        overflow: hidden;
+      }
+      .header {
+        padding: 22px 26px;
+        border-bottom: 1px solid var(--border-color);
+        background: var(--bg-header);
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+      .pill {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 999px;
+      }
+      .pill-batch { background: rgba(148, 163, 184, 0.18); color: var(--text-sub); }
+      .pill-cat { background: rgba(16, 185, 129, 0.12); color: #059669; border: 1px solid rgba(16, 185, 129, 0.25); }
+      html.dark .pill-cat { color: #34d399; }
+      h1 { margin: 0; font-size: 24px; font-weight: 900; color: var(--text-main); line-height: 1.25; }
+      .meta-bar {
+        padding: 13px 26px;
+        background: var(--bg-meta);
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-sub);
+      }
+      .meta-group { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+      .meta-item { display: inline-flex; align-items: center; gap: 6px; }
+      .meta-divider { width: 1px; height: 16px; background: var(--divider); }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-main); }
+      .marks-val { color: #059669; font-weight: 800; }
+      html.dark .marks-val { color: #34d399; }
+      .coin-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(245, 158, 11, 0.12);
+        color: #d97706;
+        border: 1px solid rgba(245, 158, 11, 0.28);
+        padding: 3px 10px;
+        border-radius: 8px;
+      }
+      html.dark .coin-tag { color: #fcd34d; background: rgba(120, 53, 15, 0.35); }
+      .timer-pill {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 3px;
+        padding: 10px 18px;
+        border-radius: 16px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        border: 2px solid transparent;
+        flex-shrink: 0;
+        transition: all 0.25s ease;
+      }
+      .timer-label {
+        font-family: system-ui, -apple-system, sans-serif;
+        font-size: 10px;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .timer-value {
+        font-size: 20px;
+        font-weight: 900;
+        line-height: 1.1;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .timer-green {
+        background: #ecfdf5;
+        color: #059669;
+        border-color: #6ee7b7;
+        box-shadow: 0 6px 18px rgba(16, 185, 129, 0.14);
+      }
+      html.dark .timer-green {
+        background: rgba(6, 78, 59, 0.45);
+        color: #34d399;
+        border-color: rgba(16, 185, 129, 0.45);
+      }
+      .timer-yellow {
+        background: #fef9c3;
+        color: #b45309;
+        border-color: #facc15;
+        box-shadow: 0 6px 20px rgba(234, 179, 8, 0.22);
+      }
+      html.dark .timer-yellow {
+        background: rgba(113, 63, 18, 0.48);
+        color: #fde047;
+        border-color: rgba(250, 204, 21, 0.55);
+      }
+      .timer-red {
+        background: #fef2f2;
+        color: #dc2626;
+        border-color: #ef4444;
+        box-shadow: 0 6px 24px rgba(239, 68, 68, 0.3);
+        animation: redWarningPulse 1.15s ease-in-out infinite;
+      }
+      html.dark .timer-red {
+        background: rgba(127, 29, 29, 0.55);
+        color: #fca5a5;
+        border-color: #ef4444;
+      }
+      @keyframes redWarningPulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 6px 22px rgba(239, 68, 68, 0.28); }
+        50% { transform: scale(1.02); box-shadow: 0 8px 28px rgba(239, 68, 68, 0.5); }
+      }
+      .body { padding: 26px; }
+      .ql-editor { font-size: 15px; color: var(--text-main); line-height: 1.7; }
+      .instructions {
+        background: var(--bg-viewer);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        overflow-x: auto;
+        box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.04);
+      }
+      .instructions.ql-editor {
+        padding: 30px 34px !important;
+      }
+      .instructions p { margin: 8px 0; }
+      .instructions p:first-child, .instructions h1:first-child, .instructions h2:first-child, .instructions h3:first-child { margin-top: 0; }
+      .instructions p:last-child, .instructions ul:last-child, .instructions ol:last-child { margin-bottom: 0; }
+      .instructions ul, .instructions ol { padding-left: 22px; margin: 10px 0; }
+      .instructions pre {
+        background: #0f172a;
+        color: #e2e8f0;
+        border-radius: 10px;
+        padding: 14px;
+        overflow-x: auto;
+      }
+      .section { margin-top: 22px; }
+      .section-title {
+        margin: 0 0 12px;
+        font-size: 12px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #4f46e5;
+      }
+      .links-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+      .link-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: var(--bg-viewer);
+        border: 1px solid var(--border-color);
+      }
+      .link-label { font-size: 13px; font-weight: 700; color: var(--text-main); }
+      .badge { font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 999px; text-transform: uppercase; }
+      .badge-red { background: #fee2e2; color: #dc2626; }
+      .badge-slate { background: #e2e8f0; color: #475569; }
+      .footer {
+        padding: 16px 24px;
+        border-top: 1px solid var(--border-color);
+        background: var(--bg-footer);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .close-btn {
+        padding: 9px 16px;
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-card);
+        color: var(--text-sub);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .close-btn:hover { background: var(--bg-meta); }
+      .submit-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 10px 20px;
+        border: 0;
+        border-radius: 12px;
+        background: linear-gradient(90deg, #10b981, #059669);
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 800;
+        box-shadow: 0 6px 18px rgba(16, 185, 129, 0.28);
+        cursor: pointer;
+      }
+      .submit-btn:hover { opacity: 0.94; }
+      .submitted-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        border-radius: 12px;
+        background: rgba(16, 185, 129, 0.14);
+        color: #059669;
+        border: 1px solid rgba(16, 185, 129, 0.25);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      @media (max-width: 640px) {
+        body { padding: 10px 8px 28px; }
+        .header { flex-direction: column; align-items: stretch; }
+        .timer-pill { align-items: flex-start; width: 100%; }
+        .timer-value { font-size: 17px; }
+        .header, .meta-bar, .body, .footer { padding: 14px 16px; }
+        .instructions.ql-editor { padding: 18px !important; }
+        .meta-divider { display: none; }
+        h1 { font-size: 20px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div>
+          <div class="pills">
+            <span class="pill pill-batch">${safeBatch}</span>
+            <span class="pill pill-cat">${safeCategory}</span>
+          </div>
+          <h1>${safeTitle}</h1>
+        </div>
+        <div id="liveTimerPill" class="timer-pill"></div>
+      </div>
+
+      <div class="meta-bar">
+        <div class="meta-group">
+          <span class="meta-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Deadline: <strong class="mono">${deadlineText}</strong>
+          </span>
+          <span class="meta-divider"></span>
+          <span class="meta-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+            Marks: <strong class="marks-val">${maxMarks}</strong>
+          </span>
+          <span class="meta-divider"></span>
+          <span class="coin-tag">
+            ${getGoldCoinHtml(15)}
+            Reward: <strong class="mono">+${rewardCoins} Coins</strong>
+          </span>
+        </div>
+      </div>
+
+      <div class="body">
+        <div id="taskInstructions" class="instructions ql-editor">${descriptionHtml}</div>
+        ${requiredLinksHtml}
+      </div>
+
+      <div class="footer">
+        <button id="closeTabBtn" class="close-btn" type="button">Close</button>
+        ${footerActionHtml}
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var startIso = ${JSON.stringify(startIso)};
+        var dueIso = ${JSON.stringify(dueIso)};
+        var subIso = ${JSON.stringify(subIso)};
+        var isSubmitted = ${JSON.stringify(isSubmitted)};
+        var latePenalty = ${JSON.stringify(latePenalty)};
+        var taskId = ${JSON.stringify(task._id)};
+        var timerEl = document.getElementById('liveTimerPill');
+
+        function pad(n) { return String(n).padStart(2, '0'); }
+        function clockIcon() {
+          return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+        }
+        function warnIcon() {
+          return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>';
+        }
+
+        function renderTimer() {
+          if (!timerEl || !dueIso) {
+            if (timerEl) timerEl.style.display = 'none';
+            return;
+          }
+          var dueTime = new Date(dueIso).getTime();
+          if (isSubmitted && subIso) {
+            var subTime = new Date(subIso).getTime();
+            if (subTime > dueTime) {
+              var delayHours = Math.ceil((subTime - dueTime) / 3600000);
+              var pen = latePenalty || delayHours;
+              timerEl.className = 'timer-pill timer-red';
+              timerEl.innerHTML =
+                '<span class="timer-label">' + warnIcon() + ' LATE SUBMISSION</span>' +
+                '<span class="timer-value">' + clockIcon() + '<span>Submitted ' + delayHours + 'h late (-' + pen + ' mark' + (pen > 1 ? 's' : '') + ')</span></span>';
+            } else {
+              timerEl.className = 'timer-pill timer-green';
+              timerEl.innerHTML =
+                '<span class="timer-label">COMPLETED</span>' +
+                '<span class="timer-value">' + clockIcon() + '<span>Submitted on time</span></span>';
+            }
+            return;
+          }
+
+          var nowMs = Date.now();
+          var diffMs = dueTime - nowMs;
+          var startTime = startIso ? new Date(startIso).getTime() : 0;
+          var totalWindow = (startTime > 0 && dueTime > startTime) ? (dueTime - startTime) : 0;
+          var yellowThreshold = totalWindow > 0 ? Math.min(45 * 60000, Math.round(totalWindow * 0.5)) : 45 * 60000;
+          var redThreshold = totalWindow > 0 ? Math.min(15 * 60000, Math.round(totalWindow * 0.25)) : 15 * 60000;
+
+          if (diffMs > 0) {
+            var totalSec = Math.floor(diffMs / 1000);
+            var d = Math.floor(totalSec / 86400);
+            var h = Math.floor((totalSec % 86400) / 3600);
+            var m = Math.floor((totalSec % 3600) / 60);
+            var s = totalSec % 60;
+            var str = d > 0 ? (d + 'd ' + pad(h) + 'h ' + pad(m) + 'm ' + pad(s) + 's') : (pad(h) + 'h ' + pad(m) + 'm ' + pad(s) + 's');
+
+            if (diffMs <= redThreshold) {
+              timerEl.className = 'timer-pill timer-red';
+              timerEl.innerHTML =
+                '<span class="timer-label">' + warnIcon() + ' WARNING! FINAL MINUTES</span>' +
+                '<span class="timer-value">' + clockIcon() + '<span>' + str + '</span></span>';
+            } else if (diffMs <= yellowThreshold) {
+              timerEl.className = 'timer-pill timer-yellow';
+              timerEl.innerHTML =
+                '<span class="timer-label">HURRY UP • TIME LOW</span>' +
+                '<span class="timer-value">' + clockIcon() + '<span>' + str + '</span></span>';
+            } else {
+              timerEl.className = 'timer-pill timer-green';
+              timerEl.innerHTML =
+                '<span class="timer-label">TIME REMAINING</span>' +
+                '<span class="timer-value">' + clockIcon() + '<span>' + str + '</span></span>';
+            }
+          } else {
+            var overdueHours = Math.ceil(Math.abs(diffMs) / 3600000);
+            timerEl.className = 'timer-pill timer-red';
+            timerEl.innerHTML =
+              '<span class="timer-label">' + warnIcon() + ' WARNING! DEADLINE PASSED</span>' +
+              '<span class="timer-value">' + clockIcon() + '<span>Overdue ' + overdueHours + 'h (-' + overdueHours + ' mark' + (overdueHours > 1 ? 's' : '') + ')</span></span>';
+          }
+        }
+
+        renderTimer();
+        if (!isSubmitted && dueIso) {
+          setInterval(renderTimer, 1000);
+        }
+
+        document.getElementById('closeTabBtn')?.addEventListener('click', function () {
+          window.close();
+        });
+
+        document.getElementById('proceedSubmitBtn')?.addEventListener('click', function () {
+          try {
+            if (window.opener && typeof window.opener.__ssmsOpenTaskSubmit === 'function') {
+              window.opener.__ssmsOpenTaskSubmit(taskId);
+              window.opener.focus();
+            }
+          } catch (e) {}
+          window.close();
+        });
+      })();
+    </script>
+  </body>
+</html>`);
+    newWin.document.close();
   };
 
   if (loading) return <SkeletonLoader type="table" />;
@@ -454,8 +951,8 @@ const MyTasks = () => {
                     <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-2.5 py-0.5 rounded-md border border-slate-200/60 dark:border-slate-700/60">
                       🎯 {task.maxMarks} Marks
                     </span>
-                    <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/20 flex items-center gap-1 shadow-2xs">
-                      🪙 +{(Number(task.maxMarks) || 0) * 10} Coins on Submit
+                    <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/20 inline-flex items-center gap-1.5 shadow-2xs">
+                      <GoldCoinIcon size={14} /> +{(Number(task.maxMarks) || 0) * 10} Coins on Submit
                     </span>
                   </div>
                 </div>
@@ -493,7 +990,7 @@ const MyTasks = () => {
                     onClick={() => handleViewTaskText(task)}
                     className="flex items-center gap-2 text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 px-3 py-2 text-sm rounded-lg w-max hover:bg-primary-100 dark:hover:bg-primary-900/40 transition-colors font-bold shadow-sm cursor-pointer"
                   >
-                    <FileTextIcon size={16} /> View Task Details
+                    <ExternalLink size={16} /> View Task Details
                   </button>
                 </div>
               )}
@@ -541,8 +1038,8 @@ const MyTasks = () => {
                 <p className="font-semibold text-primary-900 dark:text-primary-300">{activeTask.title}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Marks: {activeTask.maxMarks}</span>
-                  <span className="text-xs font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 flex items-center gap-1">
-                    🪙 Earn +{(Number(activeTask.maxMarks) || 0) * 10} Gamification Coins
+                  <span className="text-xs font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20 inline-flex items-center gap-1.5">
+                    <GoldCoinIcon size={14} /> Earn +{(Number(activeTask.maxMarks) || 0) * 10} Gamification Coins
                   </span>
                 </div>
               </div>

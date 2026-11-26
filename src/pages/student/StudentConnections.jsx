@@ -8,6 +8,7 @@ import {
   UserX, Sparkles, Send, Gift, AlertCircle, Heart
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import GoldCoinIcon from '../../components/GoldCoinIcon';
 
 const StudentConnections = () => {
   const { user, socket } = useAuth();
@@ -327,8 +328,8 @@ const StudentConnections = () => {
 
             {/* Available Coins */}
             <div className="bg-white/80 dark:bg-slate-800/80 border border-slate-200/80 dark:border-white/10 px-4 py-3 rounded-2xl shadow-xs flex items-center gap-3 backdrop-blur-md">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center font-black text-lg">
-                🪙
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0">
+                <GoldCoinIcon size={22} />
               </div>
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Your Coins</p>
@@ -817,8 +818,8 @@ const StudentConnections = () => {
             </button>
 
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center font-black text-2xl shadow-xs">
-                🪙
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/15 text-amber-500 flex items-center justify-center shadow-xs shrink-0">
+                <GoldCoinIcon size={26} />
               </div>
               <div>
                 <h3 className="font-black text-lg text-slate-900 dark:text-white">Share Coins</h3>

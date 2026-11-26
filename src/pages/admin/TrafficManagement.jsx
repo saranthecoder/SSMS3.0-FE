@@ -375,25 +375,25 @@ const TrafficManagement = () => {
   });
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 animate-fadeIn">
+    <div className="p-3.5 sm:p-6 max-w-7xl mx-auto space-y-5 sm:space-y-6 animate-fadeIn overflow-x-hidden">
       {/* Compact Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg">
-        <div className="flex items-center gap-3">
-          <span className="p-2.5 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="p-2.5 bg-emerald-500/10 text-emerald-500 rounded-xl border border-emerald-500/20 shrink-0">
             <Network size={22} />
           </span>
-          <div>
-            <h1 className="text-2xl font-black text-slate-800 dark:text-white">Traffic Control</h1>
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white truncate">Traffic Control</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Equal load distribution, automatic crash failover & individual server free-tier tracking
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2.5">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2 w-full md:w-auto">
           <button
             onClick={handleInternalRefresh}
             disabled={isRefreshing}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
             title="Refresh live traffic stats, load share & server usage"
           >
             <RefreshCw size={14} className={isRefreshing ? 'animate-spin text-emerald-500' : ''} />
@@ -403,7 +403,7 @@ const TrafficManagement = () => {
             href="https://dashboard.render.com/billing"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700"
           >
             <ExternalLink size={14} className="text-indigo-400" />
             Render Billing
@@ -411,14 +411,14 @@ const TrafficManagement = () => {
           <button
             onClick={() => handleBackendPing(false)}
             disabled={isRefreshing || servers.length === 0}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500 hover:text-white border border-sky-500/20 rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500 hover:text-white border border-sky-500/20 rounded-xl text-xs font-bold cursor-pointer disabled:opacity-50"
           >
             <Activity size={14} className={isRefreshing ? 'animate-pulse' : ''} />
             Scan Health
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 cursor-pointer"
           >
             <PlusCircle size={15} />
             Add Server
@@ -715,12 +715,12 @@ const TrafficManagement = () => {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               {showCharts && (
                 <select
                   value={effectiveScopeId}
                   onChange={(e) => setSelectedTelemetryServerId(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
+                  className="flex-1 sm:flex-none bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
                 >
                   <option value="all">All Servers (Cluster)</option>
                   {servers.map(s => (

@@ -242,13 +242,13 @@ const TaskManagement = () => {
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Task Management</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3 min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Task Management</h1>
           {/* Inline Live vs Scheduled Switcher */}
-          <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-2xs">
+          <div className="grid grid-cols-2 sm:inline-flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-2xs w-full sm:w-auto">
             <button
               onClick={() => setTaskViewTab('live')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 taskViewTab === 'live'
                   ? 'bg-emerald-600 text-white shadow-2xs'
                   : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
@@ -265,7 +265,7 @@ const TaskManagement = () => {
 
             <button
               onClick={() => setTaskViewTab('scheduled')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 taskViewTab === 'scheduled'
                   ? 'bg-amber-500 text-white shadow-2xs'
                   : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
@@ -282,18 +282,18 @@ const TaskManagement = () => {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-2.5">
+        <div className="grid grid-cols-2 sm:flex sm:flex-row items-center gap-2 sm:gap-2.5 w-full lg:w-auto">
           <button
             onClick={() => navigate('/tasks/bulk')}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-emerald-500/20 transition-all hover:-translate-y-0.5 whitespace-nowrap w-full sm:w-auto cursor-pointer"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-3 sm:px-4 text-xs sm:text-sm rounded-xl flex items-center justify-center gap-1.5 sm:gap-2 shadow-md shadow-emerald-500/20 transition-all hover:-translate-y-0.5 whitespace-nowrap cursor-pointer"
           >
-            <FileSpreadsheet size={16} /> Bulk Task Allocator
+            <FileSpreadsheet size={15} /> <span className="truncate">Bulk Allocator</span>
           </button>
           <button 
             onClick={openCreateModal} 
-            className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white font-bold py-2 px-5 text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-indigo-500/25 transition-all hover:-translate-y-0.5 whitespace-nowrap w-full sm:w-auto cursor-pointer"
+            className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white font-bold py-2 px-3 sm:px-5 text-xs sm:text-sm rounded-xl flex items-center justify-center gap-1.5 sm:gap-2 shadow-md shadow-indigo-500/25 transition-all hover:-translate-y-0.5 whitespace-nowrap cursor-pointer"
           >
-            <Plus size={16} /> Assign Task
+            <Plus size={15} /> <span>Assign Task</span>
           </button>
         </div>
       </div>
@@ -320,9 +320,9 @@ const TaskManagement = () => {
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
 
-        <div className="px-3 py-1.5 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-bold border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 whitespace-nowrap">
-          <span>Scope:</span>
-          <span className="text-slate-800 dark:text-white font-extrabold">{selectedBatchName || (batchesList.find(b => b._id === selectedBatchId)?.batchName || 'Active Batch')}</span>
+        <div className="px-3 py-1.5 bg-indigo-50/80 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-bold border border-indigo-200 dark:border-indigo-800/60 flex items-center gap-1.5 max-w-full min-w-0">
+          <span className="shrink-0">Scope:</span>
+          <span className="text-slate-800 dark:text-white font-extrabold truncate">{selectedBatchName || (batchesList.find(b => b._id === selectedBatchId)?.batchName || 'Active Batch')}</span>
         </div>
 
         <select 

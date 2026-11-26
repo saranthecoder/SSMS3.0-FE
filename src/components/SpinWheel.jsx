@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { RotateCw } from 'lucide-react';
+import GoldCoinIcon from './GoldCoinIcon';
 
 const SEGMENTS = [
   { label: '10 Coins',    color: '#3B82F6' },
@@ -126,7 +127,7 @@ const SpinWheel = ({ isOpen, onClose, canSpin, onSpun }) => {
           <div className="mt-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-4 text-center">
             <p className="text-emerald-300 font-extrabold text-lg">{result.label}</p>
             <div className="flex items-center justify-center gap-4 mt-1">
-              {result.coinsWon > 0 && <span className="text-amber-400 font-bold">+{result.coinsWon} 🪙</span>}
+              {result.coinsWon > 0 && <span className="text-amber-400 font-bold inline-flex items-center gap-1">+{result.coinsWon} <GoldCoinIcon size={16} /></span>}
               {result.xpWon > 0 && <span className="text-violet-400 font-bold">+{result.xpWon} XP</span>}
               {result.ticketWon > 0 && <span className="text-pink-400 font-bold">+{result.ticketWon} 🎟️</span>}
               {!result.coinsWon && !result.xpWon && !result.ticketWon && (

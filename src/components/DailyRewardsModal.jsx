@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Gift, X, Sparkles, Star } from 'lucide-react';
 import Swal from 'sweetalert2';
+import GoldCoinIcon from './GoldCoinIcon';
 
 const DailyRewardsModal = ({ isOpen, onClose, onClaimed }) => {
   const [weekRewards, setWeekRewards] = useState([]);
@@ -107,7 +108,7 @@ const DailyRewardsModal = ({ isOpen, onClose, onClaimed }) => {
                   }`}>
                     Day {i + 1}
                   </span>
-                  <div className="text-lg mt-1">{i === 6 ? '🎁' : '🪙'}</div>
+                  <div className="mt-1 flex items-center justify-center">{i === 6 ? <span className="text-lg">🎁</span> : <GoldCoinIcon size={20} />}</div>
                   <span className={`text-xs font-bold mt-0.5 ${
                     isClaimed ? 'text-emerald-300' : isToday ? 'text-amber-300' : 'text-slate-400'
                   }`}>
@@ -131,7 +132,7 @@ const DailyRewardsModal = ({ isOpen, onClose, onClaimed }) => {
               <Sparkles className="mx-auto text-amber-400 mb-2" size={24} />
               <p className="text-emerald-300 font-bold text-sm">Reward Claimed!</p>
               <div className="flex items-center justify-center gap-4 mt-2">
-                <span className="text-amber-400 font-bold">+{claimedReward.coinsAwarded} 🪙</span>
+                <span className="text-amber-400 font-bold inline-flex items-center gap-1">+{claimedReward.coinsAwarded} <GoldCoinIcon size={16} /></span>
                 <span className="text-violet-400 font-bold">+{claimedReward.xpAwarded} XP</span>
               </div>
               {claimedReward.chestAwarded && (

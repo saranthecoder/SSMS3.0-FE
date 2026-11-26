@@ -6,6 +6,7 @@ import Loader from '../../components/Loader';
 import SpinWheel from '../../components/SpinWheel';
 import TreasureChest from '../../components/TreasureChest';
 import DailyRewardsModal from '../../components/DailyRewardsModal';
+import GoldCoinIcon, { getGoldCoinHtml } from '../../components/GoldCoinIcon';
 import { useAuth } from '../../context/AuthContext';
 import {
   Sparkles, Trophy, ShoppingBag, RotateCw, Package, Crown,
@@ -142,7 +143,7 @@ const GamificationShop = () => {
       title: `Share Coins with ${friend.name}`,
       html: `<div class="text-center font-semibold text-slate-600 dark:text-slate-300">
                <p>Send a coins gift to ${friend.name}.</p>
-               <p class="text-amber-500 font-bold mt-2">Available Coins: ${userCoins} 🪙</p>
+               <p class="text-amber-500 font-bold mt-2 inline-flex items-center justify-center gap-1.5">Available Coins: ${userCoins} ${getGoldCoinHtml(16)}</p>
              </div>`,
       input: 'number',
       inputPlaceholder: 'Enter amount to share',
@@ -199,7 +200,7 @@ const GamificationShop = () => {
         Swal.fire({
           icon: 'warning',
           title: 'Insufficient Coins',
-          html: `<p class="text-sm">You need <b class="text-amber-500">${item.cost - (userCoins || 0)} 🪙</b> more to purchase <b>${item.name}</b>.</p><p class="text-[11px] text-gray-400 mt-2">Complete attendance, daily quizzes, and LeetCode problems to earn coins!</p>`,
+          html: `<p class="text-sm">You need <b class="text-amber-500 inline-flex items-center gap-1">${item.cost - (userCoins || 0)} ${getGoldCoinHtml(15)}</b> more to purchase <b>${item.name}</b>.</p><p class="text-[11px] text-gray-400 mt-2">Complete attendance, daily quizzes, and LeetCode problems to earn coins!</p>`,
           confirmButtonColor: '#f59e0b'
         });
         return;
@@ -209,7 +210,7 @@ const GamificationShop = () => {
     const unlockCost = isStaff ? 0 : item.cost;
     const result = await Swal.fire({
       title: `Unlock ${item.name}?`,
-      html: `<div class="text-center"><p>Cost: <b class="text-amber-500">${unlockCost} 🪙</b></p><p class="text-sm text-gray-400 mt-1">Rarity: ${item.rarity}</p></div>`,
+      html: `<div class="text-center"><p>Cost: <b class="text-amber-500 inline-flex items-center gap-1">${unlockCost} ${getGoldCoinHtml(15)}</b></p><p class="text-sm text-gray-400 mt-1">Rarity: ${item.rarity}</p></div>`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#f59e0b',
@@ -254,7 +255,7 @@ const GamificationShop = () => {
     } else {
       explanation = `
         <div class="text-left space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          <p>🪙 <b>Shop Item:</b> Costs <span class="font-bold text-amber-500">${item.cost} Coins</span> to unlock.</p>
+          <p>${getGoldCoinHtml(15)} <b>Shop Item:</b> Costs <span class="font-bold text-amber-500">${item.cost} Coins</span> to unlock.</p>
           <p>💡 <b>Earn Coins:</b> Complete daily attendance, daily quizzes, and solve LeetCode assignments to pile up coins!</p>
         </div>
       `;
@@ -304,7 +305,7 @@ const GamificationShop = () => {
     const displayCost = isUserAdmin ? 0 : cost;
     const result = await Swal.fire({
       title: `Buy ${chestType} Chest?`,
-      html: `Spend <span class="text-amber-500 font-bold">${displayCost} 🪙</span> for a ${chestType} Chest?`,
+      html: `Spend <span class="text-amber-500 font-bold inline-flex items-center gap-1">${displayCost} ${getGoldCoinHtml(15)}</span> for a ${chestType} Chest?`,
       icon: 'question',
       showCancelButton: true,
       confirmButtonColor: '#f59e0b',
@@ -572,7 +573,7 @@ const GamificationShop = () => {
                                 : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border-amber-500/30'
                           } disabled:opacity-40 disabled:cursor-not-allowed`}
                         >
-                          {item.cost === 0 ? 'FREE' : `${item.cost} 🪙`}
+                          {item.cost === 0 ? 'FREE' : <span className="inline-flex items-center justify-center gap-1">{item.cost} <GoldCoinIcon size={13} /></span>}
                         </button>
                       )}
                     </div>
@@ -669,7 +670,7 @@ const GamificationShop = () => {
                 <div key={chest.type} className="flex flex-col items-center justify-center p-4 bg-slate-50 dark:bg-slate-900/30 border border-slate-200 dark:border-slate-700/50 rounded-2xl transition-all hover:scale-[1.02] hover:shadow-md">
                   <span className="text-3xl mb-1">{chest.icon}</span>
                   <span className={`text-sm font-extrabold ${chest.color}`}>{chest.type}</span>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-bold">Cost: {chest.cost} 🪙</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-bold inline-flex items-center gap-1">Cost: {chest.cost} <GoldCoinIcon size={12} /></p>
                   <button
                     onClick={() => handleBuyChest(chest.type, chest.cost)}
                     disabled={(userCoins || 0) < chest.cost}
@@ -720,7 +721,7 @@ const GamificationShop = () => {
                   }`}>
                     <p className={`text-2xl font-black ${reached ? 'text-emerald-400' : 'text-slate-400'}`}>{m.days}</p>
                     <p className="text-[10px] text-slate-500 font-bold uppercase">Days</p>
-                    <p className={`text-xs font-bold mt-1 ${reached ? 'text-emerald-400' : 'text-amber-500'}`}>+{m.coins} 🪙</p>
+                    <p className={`text-xs font-bold mt-1 inline-flex items-center justify-center gap-1 ${reached ? 'text-emerald-400' : 'text-amber-500'}`}>+{m.coins} <GoldCoinIcon size={13} /></p>
                     {reached && <span className="text-emerald-400 text-sm">✓</span>}
                   </div>
                 );
@@ -873,7 +874,7 @@ const GamificationShop = () => {
             <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-5 rounded-3xl shadow-sm text-center">
               <span className="text-3xl">📅</span>
               <h4 className="font-extrabold text-slate-900 dark:text-white mt-2">Daily Attendance</h4>
-              <p className="text-sm text-amber-500 font-black mt-1">+10 🪙 Coins</p>
+              <p className="text-sm text-amber-500 font-black mt-1 inline-flex items-center justify-center gap-1">+10 <GoldCoinIcon size={15} /> Coins</p>
               <p className="text-sm text-violet-400 font-black">+20 ⚡ XP</p>
               <p className="text-xs text-slate-400 mt-2">Awarded automatically on checking in for attendance daily.</p>
             </div>
@@ -881,7 +882,7 @@ const GamificationShop = () => {
             <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-5 rounded-3xl shadow-sm text-center">
               <span className="text-3xl">💻</span>
               <h4 className="font-extrabold text-slate-900 dark:text-white mt-2">LeetCode Problems</h4>
-              <p className="text-sm text-amber-500 font-black mt-1">+40 🪙 Coins</p>
+              <p className="text-sm text-amber-500 font-black mt-1 inline-flex items-center justify-center gap-1">+40 <GoldCoinIcon size={15} /> Coins</p>
               <p className="text-sm text-violet-400 font-black">+100 ⚡ XP</p>
               <p className="text-xs text-slate-400 mt-2">Per problem solved. Syncs directly from your LeetCode account daily.</p>
             </div>
@@ -889,9 +890,9 @@ const GamificationShop = () => {
             <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-5 rounded-3xl shadow-sm text-center">
               <span className="text-3xl">✍️</span>
               <h4 className="font-extrabold text-slate-900 dark:text-white mt-2">Assignment Grades</h4>
-              <p className="text-sm text-amber-500 font-black mt-1">Up to +250 🪙 Coins</p>
+              <p className="text-sm text-amber-500 font-black mt-1 inline-flex items-center justify-center gap-1">Up to +250 <GoldCoinIcon size={15} /> Coins</p>
               <p className="text-sm text-violet-400 font-black">Up to +500 ⚡ XP</p>
-              <p className="text-xs text-slate-400 mt-2">Based on grades. Project tasks scale up to +2500 🪙 / +5000 ⚡!</p>
+              <p className="text-xs text-slate-400 mt-2 inline-flex flex-wrap items-center justify-center gap-1">Based on grades. Project tasks scale up to +2500 <GoldCoinIcon size={12} /> / +5000 ⚡!</p>
             </div>
 
             <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-5 rounded-3xl shadow-sm text-center">
@@ -921,42 +922,42 @@ const GamificationShop = () => {
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50 font-medium text-slate-700 dark:text-slate-300">
                     <tr>
                       <td className="py-2 text-emerald-400 font-bold">S+ Grade (&gt;=950 marks)</td>
-                      <td className="py-2 text-amber-500 font-bold">+1200 🪙</td>
+                      <td className="py-2 text-amber-500 font-bold"><span className="inline-flex items-center gap-1">+1200 <GoldCoinIcon size={14} /></span></td>
                       <td className="py-2 text-violet-400 font-bold">+2500 ⚡</td>
                     </tr>
                     <tr>
                       <td className="py-2 text-emerald-400 font-bold">S Grade (900-949)</td>
-                      <td className="py-2 text-amber-500 font-bold">+1000 🪙</td>
+                      <td className="py-2 text-amber-500 font-bold"><span className="inline-flex items-center gap-1">+1000 <GoldCoinIcon size={14} /></span></td>
                       <td className="py-2 text-violet-400 font-bold">+2200 ⚡</td>
                     </tr>
                     <tr>
                       <td className="py-2 text-cyan-400 font-bold">A+ Grade (850-899)</td>
-                      <td className="py-2 text-amber-500 font-bold">+850 🪙</td>
+                      <td className="py-2 text-amber-500 font-bold"><span className="inline-flex items-center gap-1">+850 <GoldCoinIcon size={14} /></span></td>
                       <td className="py-2 text-violet-400 font-bold">+1900 ⚡</td>
                     </tr>
                     <tr>
                       <td className="py-2 text-cyan-400 font-bold">A Grade (800-849)</td>
-                      <td className="py-2 text-amber-500 font-bold">+700 🪙</td>
+                      <td className="py-2 text-amber-500 font-bold"><span className="inline-flex items-center gap-1">+700 <GoldCoinIcon size={14} /></span></td>
                       <td className="py-2 text-violet-400 font-bold">+1700 ⚡</td>
                     </tr>
                     <tr>
                       <td className="py-2 text-purple-400">B Grade (700-799)</td>
-                      <td className="py-2 text-amber-500">+500 🪙</td>
+                      <td className="py-2 text-amber-500"><span className="inline-flex items-center gap-1">+500 <GoldCoinIcon size={14} /></span></td>
                       <td className="py-2 text-violet-400">+1300 ⚡</td>
                     </tr>
                     <tr>
                       <td className="py-2 text-slate-500 dark:text-slate-400">C Grade (600-699)</td>
-                      <td className="py-2 text-amber-500">+350 🪙</td>
+                      <td className="py-2 text-amber-500"><span className="inline-flex items-center gap-1">+350 <GoldCoinIcon size={14} /></span></td>
                       <td className="py-2 text-violet-400">+900 ⚡</td>
                     </tr>
                     <tr>
                       <td className="py-2 text-slate-500 dark:text-slate-400">D Grade (500-599)</td>
-                      <td className="py-2 text-amber-500">+200 🪙</td>
+                      <td className="py-2 text-amber-500"><span className="inline-flex items-center gap-1">+200 <GoldCoinIcon size={14} /></span></td>
                       <td className="py-2 text-violet-400">+600 ⚡</td>
                     </tr>
                     <tr>
                       <td className="py-2 text-slate-500 dark:text-slate-400 text-xs">Participation / Absence</td>
-                      <td className="py-2 text-amber-500">+100 🪙</td>
+                      <td className="py-2 text-amber-500"><span className="inline-flex items-center gap-1">+100 <GoldCoinIcon size={14} /></span></td>
                       <td className="py-2 text-violet-400">+300 ⚡</td>
                     </tr>
                   </tbody>
@@ -976,7 +977,7 @@ const GamificationShop = () => {
                 <div className="mt-4 space-y-2">
                   <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/40 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
                     <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Daily Coins Cap</span>
-                    <span className="text-xs font-black text-amber-500">300 🪙 / day</span>
+                    <span className="text-xs font-black text-amber-500 inline-flex items-center gap-1">300 <GoldCoinIcon size={13} /> / day</span>
                   </div>
                   <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-900/40 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
                     <span className="text-xs font-bold text-slate-600 dark:text-slate-300">Daily XP Cap</span>
@@ -1048,8 +1049,8 @@ const GamificationShop = () => {
                 </div>
                 <div className="flex items-center gap-3">
                   {e.coinsChange !== 0 && (
-                    <span className={`text-sm font-bold ${e.coinsChange > 0 ? 'text-amber-500' : 'text-red-400'}`}>
-                      {e.coinsChange > 0 ? '+' : ''}{e.coinsChange} 🪙
+                    <span className={`text-sm font-bold inline-flex items-center gap-1 ${e.coinsChange > 0 ? 'text-amber-500' : 'text-red-400'}`}>
+                      {e.coinsChange > 0 ? '+' : ''}{e.coinsChange} <GoldCoinIcon size={14} />
                     </span>
                   )}
                   {e.xpChange !== 0 && (

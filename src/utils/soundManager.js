@@ -21,7 +21,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   { key: 'task_graded', label: 'Task Graded / Feedback', icon: '✅', roles: 'all' },
   { key: 'submission', label: 'Student Submission', icon: '📤', roles: 'mentor_admin' },
   { key: 'leave_request', label: 'Leave Request Alert', icon: '🏖️', roles: 'mentor_admin' },
-  { key: 'coins_reward', label: 'Coins / Reward Received', icon: '🪙', roles: 'all' },
+  { key: 'coins_reward', label: 'Coins / Reward Received', icon: '★', roles: 'all' },
   { key: 'friend_request', label: 'Friend Request / Accept', icon: '🤝', roles: 'all' },
   { key: 'alert_warning', label: 'Access / Checkout Warning', icon: '⚠️', roles: 'all' }
 ];

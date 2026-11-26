@@ -4,6 +4,7 @@ import { Trophy, Medal, Award, Flame, Eye, Lock, Star, Heart, Shield } from 'luc
 import Loader from '../../components/Loader';
 import { useAuth } from '../../context/AuthContext';
 import { useGlobalBatch } from '../../context/GlobalBatchContext';
+import GoldCoinIcon from '../../components/GoldCoinIcon';
 
 const formatScore = (val) => {
   if (val === undefined || val === null || isNaN(val)) return '0';
@@ -442,8 +443,8 @@ const StudentLeaderboard = () => {
 
                       {/* Coins */}
                       <div className="p-3 bg-slate-50/60 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/80 rounded-2xl flex items-center gap-3 hover:scale-[1.02] transition-transform">
-                        <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-lg font-black shrink-0">
-                          🪙
+                        <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+                          <GoldCoinIcon size={20} />
                         </div>
                         <div>
                           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase leading-none">Coins Balance</p>

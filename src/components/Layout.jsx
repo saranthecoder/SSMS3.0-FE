@@ -15,6 +15,7 @@ import Loader from './Loader';
 import { useGlobalBatch } from '../context/GlobalBatchContext';
 import BatchSelectionModal from './BatchSelectionModal';
 import StudentMobileBlocker from './StudentMobileBlocker';
+import GoldCoinIcon, { getGoldCoinHtml } from './GoldCoinIcon';
 
 const getBorderPreviewClass = (value) => {
   const map = {
@@ -1745,10 +1746,10 @@ const Layout = () => {
       }
       showGlossyNotification({
         typeLabel: 'Coins Received',
-        title: `+${data.amount} Coins 🪙`,
+        title: `+${data.amount} Coins`,
         subtitle: data.sender?.name || 'SSMS Rewards',
         text: data.reason || `${data.sender?.name || 'A friend'} shared ${data.amount} gamification coins with you!`,
-        iconLetter: '🪙',
+        iconLetter: <GoldCoinIcon size={22} />,
         gradient: 'linear-gradient(135deg, #f59e0b, #d97706)',
         confirmButtonText: user?.role === 'student' ? 'Shop Rewards 🛍️' : 'View Coins',
         timer: 7000,
@@ -2586,17 +2587,17 @@ const Layout = () => {
       </aside>
 
       {/* Main Content */}
-      <main className={`flex-1 flex flex-col min-w-0 lg:ml-64 relative ${location.pathname.includes('/chat') ? 'h-screen overflow-hidden' : ''}`}>
+      <main className={`flex-1 flex flex-col min-w-0 w-full overflow-x-clip lg:ml-64 relative ${location.pathname.includes('/chat') ? 'h-screen overflow-hidden' : ''}`}>
         {/* Frozen Top Bar Header */}
-        <header className="sticky top-0 z-40 h-16 lg:h-18 shrink-0 flex items-center justify-between px-4 sm:px-6 lg:px-8 bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl border-b border-slate-200/60 dark:border-white/10 transition-colors duration-300">
+        <header className="sticky top-0 z-40 h-16 lg:h-18 w-full shrink-0 flex items-center justify-between gap-2 px-3 sm:px-6 lg:px-8 bg-white/75 dark:bg-slate-900/75 backdrop-blur-2xl border-b border-slate-200/60 dark:border-white/10 transition-colors duration-300">
           {/* Left: Mobile Brand / Desktop Title & Badge */}
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
             {/* Mobile Branding */}
             <div className="lg:hidden flex items-center gap-2 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-white/80 dark:bg-slate-800/80 shadow-2xs p-1 flex items-center justify-center overflow-hidden shrink-0 border border-slate-200/60 dark:border-white/10">
                 <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
               </div>
-              <span className="font-black text-xs tracking-tight text-slate-800 dark:text-white uppercase truncate max-w-[120px]">
+              <span className="hidden sm:inline font-black text-xs tracking-tight text-slate-800 dark:text-white uppercase truncate max-w-[120px]">
                 {user?.role === 'admin' ? 'SRAC 2.0' : (user?.role === 'mentor' ? 'SSMS' : 'SSMS 2.0')}
               </span>
             </div>
@@ -2615,17 +2616,17 @@ const Layout = () => {
             </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-1.5 sm:gap-2.5 max-w-full">
+          <div className="ml-auto flex items-center justify-end gap-1.5 sm:gap-2.5 min-w-0 flex-1">
 
              {/* Online Students Count */}
-            <div className="hidden sm:flex items-center gap-2 bg-slate-500/10 dark:bg-white/5 text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-full text-xs font-semibold border border-slate-300/40 dark:border-white/10">
+            <div className="hidden md:flex items-center gap-2 bg-slate-500/10 dark:bg-white/5 text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-full text-xs font-semibold border border-slate-300/40 dark:border-white/10 shrink-0">
               <div className="w-2 h-2 rounded-full bg-theme-primary animate-pulse"></div>
               <span>{onlineStudentsCount} Online</span>
             </div>
 
             {/* Student Timer */}
             {user?.role === 'student' && sessionActive && (
-              <div className="hidden sm:flex items-center gap-2 bg-theme-primary/10 text-theme-primary px-3 py-1.5 rounded-full text-xs font-bold border border-theme-primary/20">
+              <div className="hidden sm:flex items-center gap-2 bg-theme-primary/10 text-theme-primary px-3 py-1.5 rounded-full text-xs font-bold border border-theme-primary/20 shrink-0">
                 <Clock size={16} className="animate-pulse" />
                 <span>{formatTime(sessionSeconds)}</span>
               </div>
@@ -2633,8 +2634,8 @@ const Layout = () => {
 
             {/* Student Coins Display */}
             {user?.role === 'student' && (
-              <div className="flex items-center gap-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs font-extrabold border border-amber-500/20 shrink-0">
-                <span className="text-xs sm:text-base">🪙</span>
+              <div className="flex items-center gap-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs font-extrabold border border-amber-500/20 shrink-0">
+                <GoldCoinIcon size={17} className="sm:w-[19px] sm:h-[19px]" />
                 {coinsLoaded ? (
                   <span>{userCoins} <span className="hidden sm:inline">Coins</span></span>
                 ) : (
@@ -2643,11 +2644,11 @@ const Layout = () => {
               </div>
             )}
 
-            {/* DND Mode Toggle (All Roles) */}
+            {/* DND Mode Toggle (Desktop/Tablet inline; mobile lives inside Notifications panel for zero overflow) */}
             <button
               onClick={toggleDndMode}
               title={dndMode ? 'Do Not Disturb is ON — Click to resume notification popups & sounds' : 'Enable Do Not Disturb (Mute notification popups & sounds)'}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 ${
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 sm:py-2 rounded-xl border text-xs font-bold transition-all cursor-pointer shrink-0 ${
                 dndMode
                   ? 'bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white border-slate-300/40 dark:border-white/10 hover:bg-slate-500/10 dark:hover:bg-white/10'
@@ -2655,59 +2656,79 @@ const Layout = () => {
               aria-label="Toggle Do Not Disturb"
             >
               <BellOff size={15} className="sm:w-[16px] sm:h-[16px]" />
-              <span className="hidden sm:inline">{dndMode ? 'DND On' : 'DND'}</span>
+              <span>{dndMode ? 'DND On' : 'DND'}</span>
             </button>
 
-            {/* Notification Sound Studio Button */}
+            {/* Notification Sound Studio Button (Desktop/Tablet inline; mobile inside Notifications panel) */}
             <button
               onClick={() => setShowSoundStudio(true)}
               title="Preview & Allocate Notification Sounds"
-              className="p-2 text-slate-500 hover:text-indigo-500 dark:text-slate-400 dark:hover:text-indigo-400 rounded-xl transition-all hover:bg-indigo-500/10 border border-slate-300/40 dark:border-white/10 cursor-pointer shrink-0"
+              className="hidden sm:flex items-center justify-center p-2 text-slate-500 hover:text-indigo-500 dark:text-slate-400 dark:hover:text-indigo-400 rounded-xl transition-all hover:bg-indigo-500/10 border border-slate-300/40 dark:border-white/10 cursor-pointer shrink-0"
               aria-label="Notification Sounds"
             >
-              <Volume2 size={16} className="sm:w-[18px] sm:h-[18px]" />
+              <Volume2 size={18} />
             </button>
 
             {/* Notifications Bell */}
-            <div className="relative" ref={notificationRef}>
+            <div className="relative shrink-0" ref={notificationRef}>
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
-                className="relative p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white rounded-xl transition-all hover:bg-slate-500/10 dark:hover:bg-white/10 border border-slate-300/40 dark:border-white/10 cursor-pointer"
+                className={`relative p-1.5 sm:p-2 rounded-xl transition-all border cursor-pointer ${
+                  dndMode
+                    ? 'bg-rose-500/10 text-rose-500 border-rose-500/30'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-500/10 dark:hover:bg-white/10 border-slate-300/40 dark:border-white/10'
+                }`}
                 aria-label="Notifications"
+                title={dndMode ? 'Notifications (DND Active)' : 'Notifications & Sound Controls'}
               >
-                <Bell size={16} className="sm:w-[18px] sm:h-[18px]" />
-                {notifications.length > 0 && (
-                  <span className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-rose-500 rounded-full text-[8px] sm:text-[9px] font-bold text-white flex items-center justify-center shadow-md animate-in zoom-in">
-                    {notifications.length}
+                {dndMode ? <BellOff size={16} className="sm:w-[18px] sm:h-[18px]" /> : <Bell size={16} className="sm:w-[18px] sm:h-[18px]" />}
+                {notifications.length > 0 && !dndMode && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center shadow-md animate-in zoom-in">
+                    {notifications.length > 99 ? '99+' : notifications.length}
                   </span>
                 )}
               </button>
 
               {showNotifications && (
-                <div className="fixed sm:absolute top-14 sm:top-auto right-3 sm:right-0 left-3 sm:left-auto sm:w-80 max-h-[70vh] flex flex-col bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700/80 overflow-hidden z-50 origin-top-right animate-in fade-in slide-in-from-top-2">
-                  <div className="p-3 sm:p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
-                    <div>
-                      <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-white leading-none">Notifications</h3>
-                      <span className="text-[10px] text-slate-500 font-medium">
-                        {notifications.length} Unread{dndMode ? ' • DND Active' : ''}
-                      </span>
+                <div className="fixed sm:absolute top-[4.25rem] sm:top-full sm:mt-2 right-2.5 sm:right-0 left-2.5 sm:left-auto sm:w-88 max-h-[calc(100dvh-6rem)] sm:max-h-[75vh] flex flex-col bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700/80 overflow-hidden z-50 origin-top-right animate-in fade-in slide-in-from-top-2">
+                  <div className="p-3 sm:p-4 border-b border-slate-100 dark:border-slate-700 flex flex-col gap-2.5 bg-slate-50 dark:bg-slate-800/50">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-white leading-none">Notifications</h3>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          {notifications.length} Unread{dndMode ? ' • DND Active' : ''}
+                        </span>
+                      </div>
+                      {notifications.length > 0 && (
+                        <button onClick={clearAllNotifications} className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 cursor-pointer shrink-0">
+                          Mark all read
+                        </button>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <button
+                        type="button"
                         onClick={toggleDndMode}
-                        className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-colors cursor-pointer ${
+                        className={`flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-colors cursor-pointer ${
                           dndMode
                             ? 'bg-rose-500/15 text-rose-500 border-rose-500/30'
-                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-600'
+                            : 'bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-200 border-slate-200 dark:border-slate-600'
                         }`}
                       >
+                        <BellOff size={12} />
                         {dndMode ? 'DND: ON' : 'DND: OFF'}
                       </button>
-                      {notifications.length > 0 && (
-                        <button onClick={clearAllNotifications} className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700">
-                          Mark all as read
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNotifications(false);
+                          setShowSoundStudio(true);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/20 transition-colors cursor-pointer"
+                      >
+                        <Volume2 size={12} />
+                        Sounds
+                      </button>
                     </div>
                   </div>
                   <div className="max-h-72 sm:max-h-80 overflow-y-auto custom-scrollbar">
@@ -2748,17 +2769,17 @@ const Layout = () => {
             </div>
 
             {/* Theme Selector Toggle */}
-            <div className="relative" ref={themeMenuRef}>
+            <div className="relative shrink-0" ref={themeMenuRef}>
               <button
                 onClick={() => setShowThemeMenu(!showThemeMenu)}
-                className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white rounded-xl transition-all hover:bg-slate-500/10 dark:hover:bg-white/10 border border-slate-300/40 dark:border-white/10 cursor-pointer"
+                className="p-1.5 sm:p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white rounded-xl transition-all hover:bg-slate-500/10 dark:hover:bg-white/10 border border-slate-300/40 dark:border-white/10 cursor-pointer"
                 aria-label="Select theme color"
               >
                 <Palette size={16} className="sm:w-[18px] sm:h-[18px]" />
               </button>
 
               {showThemeMenu && (
-                <div className="fixed sm:absolute top-14 sm:top-auto right-3 sm:right-0 left-3 sm:left-auto sm:w-[280px] max-h-[70vh] overflow-y-auto bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50 origin-top-right animate-in fade-in slide-in-from-top-2">
+                <div className="fixed sm:absolute top-[4.25rem] sm:top-full sm:mt-2 right-2.5 sm:right-0 left-2.5 sm:left-auto sm:w-[280px] max-h-[calc(100dvh-6rem)] sm:max-h-[70vh] overflow-y-auto bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 overflow-hidden z-50 origin-top-right animate-in fade-in slide-in-from-top-2">
                   <div className="p-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
                     <h3 className="text-xs font-bold text-slate-800 dark:text-white leading-none">Theme Colors</h3>
                     <span className="text-[10px] text-slate-400 font-medium">{themes.length + 1} themes</span>
@@ -2923,8 +2944,8 @@ const Layout = () => {
 
             {/* Read-Only Global Active Batch Indicator for Admin & Mentor */}
             {(user?.role === 'admin' || user?.role === 'mentor') && (
-              <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-500/10 dark:bg-white/5 border border-slate-300/40 dark:border-white/10 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl shadow-2xs">
-                <div className="flex items-center gap-1.5 min-w-0">
+              <div className="flex items-center gap-1 sm:gap-2 bg-slate-500/10 dark:bg-white/5 border border-slate-300/40 dark:border-white/10 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl shadow-2xs min-w-0 max-w-[140px] sm:max-w-none shrink">
+                <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
                   <span className="relative flex h-2 w-2 shrink-0">
                     {isBatchClosed ? (
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
@@ -2935,15 +2956,15 @@ const Layout = () => {
                       </>
                     )}
                   </span>
-                  <BookOpen size={13} className={isBatchClosed ? 'text-red-500 dark:text-red-400 shrink-0' : 'text-indigo-500 dark:text-indigo-400 shrink-0'} />
+                  <BookOpen size={12} className={`hidden sm:inline shrink-0 ${isBatchClosed ? 'text-red-500 dark:text-red-400' : 'text-indigo-500 dark:text-indigo-400'}`} />
                   <span 
-                    className="text-[10px] sm:text-[11px] font-black text-slate-800 dark:text-slate-100 truncate max-w-[90px] sm:max-w-[170px]"
+                    className="text-[10px] sm:text-[11px] font-black text-slate-800 dark:text-slate-100 truncate max-w-[76px] sm:max-w-[170px]"
                     title={selectedBatchName || activeBatch?.batchName || 'No Batch'}
                   >
                     {selectedBatchName || activeBatch?.batchName || 'No Batch'}
                   </span>
                   {isBatchClosed && (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-red-500/10 dark:bg-red-950/60 text-red-600 dark:text-red-400 border border-red-500/20 shrink-0">
+                    <span className="hidden sm:inline px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-red-500/10 dark:bg-red-950/60 text-red-600 dark:text-red-400 border border-red-500/20 shrink-0">
                       Closed
                     </span>
                   )}
@@ -2965,7 +2986,7 @@ const Layout = () => {
             {/* Dark Mode Toggle */}
             <button
               onClick={toggleDarkMode}
-              className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white rounded-xl transition-all hover:bg-slate-500/10 dark:hover:bg-white/10 border border-slate-300/40 dark:border-white/10 cursor-pointer"
+              className="p-1.5 sm:p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white rounded-xl transition-all hover:bg-slate-500/10 dark:hover:bg-white/10 border border-slate-300/40 dark:border-white/10 cursor-pointer shrink-0"
               aria-label="Toggle dark mode"
             >
               {darkMode ? <Sun size={16} className="sm:w-[18px] sm:h-[18px]" /> : <Moon size={16} className="sm:w-[18px] sm:h-[18px]" />}
@@ -3204,10 +3225,10 @@ const Layout = () => {
       {toastStack.length > 0 && !dndMode && (
         <aside 
           aria-label="Notification Stack" 
-          className="fixed top-16 sm:top-20 right-3 sm:right-6 z-[99999] flex flex-col gap-2.5 w-[360px] max-w-[calc(100vw-2rem)] pointer-events-none animate-in fade-in slide-in-from-top-4 duration-300"
+          className="fixed top-[4.25rem] sm:top-20 left-3 right-3 sm:left-auto sm:right-6 z-[99999] flex flex-col gap-2 sm:gap-2.5 sm:w-[360px] pointer-events-none animate-in fade-in slide-in-from-top-4 duration-300"
         >
           {/* Stacked Cards Container - Limited to 3 visible cards max, grouped if more */}
-          <div className="flex flex-col gap-2.5 max-h-[75vh] overflow-y-auto no-scrollbar pr-0.5 pb-1">
+          <div className="flex flex-col gap-2 sm:gap-2.5 max-h-[calc(100dvh-10rem)] sm:max-h-[75vh] overflow-y-auto no-scrollbar pr-0.5 pb-1">
             {/* Show top 2 latest notifications if more than 3, otherwise up to 3 */}
             {toastStack.slice(0, toastStack.length > 3 ? 2 : 3).map((toast) => (
               <div
@@ -3347,35 +3368,35 @@ const Layout = () => {
       {/* Notification Sound Studio & Allocation Modal */}
       {showSoundStudio && (
         <div
-          className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[100000] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-2.5 sm:p-4"
           onClick={() => setShowSoundStudio(false)}
         >
           <div
-            className="w-full max-w-4xl max-h-[86vh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95"
+            className="w-full max-w-4xl max-h-[88dvh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/60">
-              <div className="flex items-center gap-2.5">
-                <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+            <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-slate-950/60">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 shrink-0">
                   <Volume2 size={18} />
                 </span>
-                <div>
-                  <h3 className="text-base font-extrabold text-slate-800 dark:text-white leading-tight">
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-white leading-tight truncate">
                     Notification Sound Studio
                   </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Click Play on any sound to preview it live, or assign a different sound to each notification type
+                  <p className="text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400">
+                    Tap Play to preview, or assign a sound to each alert
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 ml-auto shrink-0">
                 <button
                   type="button"
                   onClick={handleResetSounds}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-200/70 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold bg-slate-200/70 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 cursor-pointer"
                   title="Reset to default sound allocation"
                 >
-                  <RotateCcw size={12} /> Reset Defaults
+                  <RotateCcw size={12} /> <span className="hidden sm:inline">Reset Defaults</span><span className="sm:hidden">Reset</span>
                 </button>
                 <button
                   type="button"
@@ -3387,7 +3408,7 @@ const Layout = () => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
               {/* Left Column: All 12 Available Sounds */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -3458,16 +3479,16 @@ const Layout = () => {
                         className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800"
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm shrink-0">{ev.icon}</span>
+                          <span className="text-sm shrink-0 flex items-center">{ev.key === 'coins_reward' ? <GoldCoinIcon size={16} /> : ev.icon}</span>
                           <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
                             {ev.label}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex items-center gap-1.5 w-full sm:w-auto shrink-0">
                           <select
                             value={assignedId}
                             onChange={(e) => handleAssignSound(ev.key, e.target.value)}
-                            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
+                            className="flex-1 min-w-0 sm:flex-none bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
                           >
                             {SOUND_PRESETS.map((p) => (
                               <option key={p.id} value={p.id}>

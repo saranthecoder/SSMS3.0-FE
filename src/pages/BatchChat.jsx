@@ -398,7 +398,7 @@ const BatchChat = () => {
     const friendName = friendContact.name;
 
     const { value: amount } = await Swal.fire({
-      title: `Gift Coins to ${friendName} 🪙`,
+      title: `Gift Coins to ${friendName}`,
       text: 'Share your coins with your friend! (1-week cooldown applies)',
       input: 'number',
       inputLabel: 'Amount of Coins',
