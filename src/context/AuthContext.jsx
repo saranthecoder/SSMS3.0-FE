@@ -186,6 +186,21 @@ export const AuthProvider = ({ children }) => {
         reconnectionDelayMax: 15000,
         randomizationFactor: 0.5
       });
+      let socketErrors = 0;
+      newSocket.on('connect', () => {
+        socketErrors = 0;
+        recordNodeSuccess(socketUrl);
+      });
+      newSocket.on('connect_error', (err) => {
+        socketErrors += 1;
+        recordNodeFailure(socketUrl, err);
+        if (socketErrors >= 2) {
+          socketErrors = 0;
+          setTrafficConfig(prev => ({ ...prev })); // Re-evaluate getSocketUrl() to fail over to a healthy node
+          refreshTrafficConfig();
+        }
+      });
+
       setSocket(newSocket);
 
       return () => {
@@ -271,9 +286,13 @@ export const AuthProvider = ({ children }) => {
 
           const currentConfig = trafficConfigRef.current;
           const currentBaseURL = originalRequest.baseURL;
-          const fallbackServer = getFallbackServer(currentConfig.servers, currentBaseURL, { isOnWebDomain });
+          const fallbackServer = getFallbackServer(currentConfig.servers, currentBaseURL, {
+            isOnWebDomain,
+            rrIndex
+          });
 
           if (fallbackServer) {
+            rrIndex = rrIndex + 1;
             originalRequest.baseURL = `${normalizeUrl(fallbackServer.url)}/api`;
             console.warn(`Idempotent request failed on ${currentBaseURL}. Retrying on fallback node: ${fallbackServer.name} (${fallbackServer.url})`);
             return axios(originalRequest);

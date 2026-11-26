@@ -345,18 +345,28 @@ export const shouldRetryRequest = (error, originalRequest) => {
 };
 
 /**
- * Finds an alternate healthy backup node excluding the failing URL.
+ * Finds an alternate healthy backup node excluding failing URL(s), distributing fallbacks evenly via rrIndex.
  */
-export const getFallbackServer = (servers, currentBaseURL, { isOnWebDomain = false, now = Date.now() } = {}) => {
+export const getFallbackServer = (
+  servers,
+  currentBaseURL,
+  { isOnWebDomain = false, now = Date.now(), rrIndex = 0, excludeUrls = [] } = {}
+) => {
   if (!Array.isArray(servers) || servers.length === 0) return null;
 
-  const currentClean = normalizeUrl(currentBaseURL || '').replace(/\/api$/, '');
+  const excluded = new Set(
+    [currentBaseURL, ...(Array.isArray(excludeUrls) ? excludeUrls : [])]
+      .filter(Boolean)
+      .map(u => normalizeUrl(u).replace(/\/api$/, ''))
+  );
 
   const candidates = servers.filter(s => {
     if (!isNodeEligible(s, { isOnWebDomain, now })) return false;
     const sClean = normalizeUrl(s.url);
-    return sClean !== currentClean;
+    return !excluded.has(sClean);
   });
 
-  return candidates.length > 0 ? candidates[0] : null;
+  if (candidates.length === 0) return null;
+  const idx = Math.abs(Number(rrIndex) || 0) % candidates.length;
+  return candidates[idx];
 };

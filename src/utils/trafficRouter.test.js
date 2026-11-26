@@ -240,3 +240,31 @@ test('getFallbackServer finds a healthy alternate node', () => {
   const fallback = getFallbackServer(servers, 'https://failing.io/api', { now });
   assert.strictEqual(fallback.url, 'https://healthy.io');
 });
+
+test('Equal Round-Robin and crash redirection distribute traffic evenly across 4 surviving servers', () => {
+  const now = Date.now();
+  const servers = [
+    { id: '1', url: 'https://s1.io', status: 'online', isActive: true, lastHealthCheck: new Date(now) },
+    { id: '2', url: 'https://s2.io', status: 'online', isActive: true, lastHealthCheck: new Date(now) },
+    { id: '3', url: 'https://s3.io', status: 'offline', isActive: true, lastHealthCheck: new Date(now) }, // Crashed
+    { id: '4', url: 'https://s4.io', status: 'online', isActive: true, lastHealthCheck: new Date(now) },
+    { id: '5', url: 'https://s5.io', status: 'online', isActive: true, lastHealthCheck: new Date(now) }
+  ];
+
+  // Equal rotation across remaining 4 nodes
+  let idx = 0;
+  const picked = [];
+  for (let i = 0; i < 4; i++) {
+    const res = selectBackendNode({ policy: 'round-robin', servers, rrIndex: idx, now });
+    picked.push(res.selectedUrl);
+    idx = res.nextRrIndex;
+  }
+  assert.deepStrictEqual(picked, ['https://s1.io', 'https://s2.io', 'https://s4.io', 'https://s5.io']);
+
+  // Fallback rotation spreads crashed requests across all healthy survivors instead of hitting only s1
+  const fb0 = getFallbackServer(servers, 'https://s3.io/api', { now, rrIndex: 0 });
+  const fb1 = getFallbackServer(servers, 'https://s3.io/api', { now, rrIndex: 1 });
+  const fb2 = getFallbackServer(servers, 'https://s3.io/api', { now, rrIndex: 2 });
+  const fb3 = getFallbackServer(servers, 'https://s3.io/api', { now, rrIndex: 3 });
+  assert.deepStrictEqual([fb0.url, fb1.url, fb2.url, fb3.url], ['https://s1.io', 'https://s2.io', 'https://s4.io', 'https://s5.io']);
+});
