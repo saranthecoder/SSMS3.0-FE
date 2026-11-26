@@ -75,6 +75,7 @@ const TaskManagement = () => {
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('All');
+  const [taskViewTab, setTaskViewTab] = useState('live'); // 'live' | 'scheduled'
 
   const fetchData = async () => {
     try {
@@ -198,62 +199,107 @@ const TaskManagement = () => {
     setFilterCategory('All');
   };
 
-  const filteredTasks = tasks
-    .filter(task => {
-      const titleText = task.title || '';
-      const descText = task.description || '';
-      const matchesSearch = 
-        titleText.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        descText.toLowerCase().includes(searchTerm.toLowerCase());
+  const nowMs = Date.now();
+  const matchingTasks = tasks.filter(task => {
+    const titleText = task.title || '';
+    const descText = task.description || '';
+    const matchesSearch =
+      titleText.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      descText.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = filterCategory === 'All' || task.category === filterCategory;
+    return matchesSearch && matchesCategory;
+  });
 
-      const matchesCategory = 
-        filterCategory === 'All' || 
-        task.category === filterCategory;
-
-      return matchesSearch && matchesCategory;
-    })
+  const liveTasks = matchingTasks
+    .filter(task => !task.scheduledAt || new Date(task.scheduledAt).getTime() <= nowMs)
     .sort((a, b) => {
-      const now = Date.now();
-      const aSched = a.scheduledAt ? new Date(a.scheduledAt).getTime() : 0;
-      const bSched = b.scheduledAt ? new Date(b.scheduledAt).getTime() : 0;
-      const aIsScheduled = aSched > now;
-      const bIsScheduled = bSched > now;
-
-      // Keep upcoming scheduled tasks together in ascending unlock order (earliest first)
-      if (aIsScheduled && bIsScheduled) return aSched - bSched;
-      if (aIsScheduled !== bIsScheduled) return aIsScheduled ? -1 : 1;
-
-      // Active / released tasks: newest release time first
-      const aEff = aSched || new Date(a.createdAt).getTime();
-      const bEff = bSched || new Date(b.createdAt).getTime();
+      const aEff = (a.scheduledAt ? new Date(a.scheduledAt).getTime() : 0) || new Date(a.createdAt).getTime();
+      const bEff = (b.scheduledAt ? new Date(b.scheduledAt).getTime() : 0) || new Date(b.createdAt).getTime();
       if (bEff !== aEff) return bEff - aEff;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
+  const scheduledTasks = matchingTasks
+    .filter(task => task.scheduledAt && new Date(task.scheduledAt).getTime() > nowMs)
+    .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+
+  const displayedTasks = taskViewTab === 'scheduled' ? scheduledTasks : liveTasks;
+
+  const formatDescriptionPreview = (html) => {
+    if (!html) return 'Text instructions provided for this task.';
+    return html
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   if (loading) return <SkeletonLoader type="card-grid" />;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Task Management</h1>
-        <div className="flex flex-col sm:flex-row items-center gap-3">
+    <div className="space-y-4 max-w-7xl mx-auto pb-12">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Task Management</h1>
+          {/* Inline Live vs Scheduled Switcher */}
+          <div className="inline-flex items-center gap-1 bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-2xs">
+            <button
+              onClick={() => setTaskViewTab('live')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                taskViewTab === 'live'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+              }`}
+            >
+              <CheckCircle size={13} />
+              <span>Live</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-extrabold leading-none ${
+                taskViewTab === 'live' ? 'bg-white/20 text-white' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+              }`}>
+                {liveTasks.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setTaskViewTab('scheduled')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                taskViewTab === 'scheduled'
+                  ? 'bg-amber-500 text-white shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+              }`}
+            >
+              <Clock size={13} />
+              <span>Scheduled</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-extrabold leading-none ${
+                taskViewTab === 'scheduled' ? 'bg-white/20 text-white' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+              }`}>
+                {scheduledTasks.length}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-2.5">
           <button
             onClick={() => navigate('/tasks/bulk')}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-5 text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all hover:-translate-y-0.5 whitespace-nowrap w-full sm:w-auto cursor-pointer"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-4 text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-emerald-500/20 transition-all hover:-translate-y-0.5 whitespace-nowrap w-full sm:w-auto cursor-pointer"
           >
-            <FileSpreadsheet size={18} /> Bulk Task Allocator
+            <FileSpreadsheet size={16} /> Bulk Task Allocator
           </button>
           <button 
             onClick={openCreateModal} 
-            className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white font-bold py-2.5 px-6 text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/30 transition-all hover:-translate-y-0.5 whitespace-nowrap w-full sm:w-auto cursor-pointer font-medium"
+            className="bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white font-bold py-2 px-5 text-sm rounded-xl flex items-center justify-center gap-2 shadow-md shadow-indigo-500/25 transition-all hover:-translate-y-0.5 whitespace-nowrap w-full sm:w-auto cursor-pointer"
           >
-            <Plus size={18} /> Assign Task
+            <Plus size={16} /> Assign Task
           </button>
         </div>
       </div>
 
       {/* Filter Bar */}
-      <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700/50 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2.5 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700/50 shadow-sm">
         <div className="relative w-full sm:w-auto sm:flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input 
@@ -301,14 +347,20 @@ const TaskManagement = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredTasks.length === 0 ? (
+        {displayedTasks.length === 0 ? (
           <div className="col-span-full glass-panel p-12 text-center text-slate-500 dark:text-slate-400">
             <CheckCircle className="w-16 h-16 mx-auto mb-4 text-emerald-400 opacity-50" />
-            <p className="text-xl font-bold text-slate-800 dark:text-slate-200">No tasks found</p>
-            <p className="text-sm mt-1 font-medium">Try adjusting your filters or search term.</p>
+            <p className="text-xl font-bold text-slate-800 dark:text-slate-200">
+              {taskViewTab === 'scheduled' ? 'No scheduled tasks' : 'No live tasks found'}
+            </p>
+            <p className="text-sm mt-1 font-medium">
+              {taskViewTab === 'scheduled'
+                ? 'All upcoming tasks have already been released or none are scheduled.'
+                : 'Try adjusting your filters or switch to Scheduled Tasks.'}
+            </p>
           </div>
         ) : (
-          filteredTasks.map(task => {
+          displayedTasks.map(task => {
             const isOverdue = task.dueDate && new Date() > new Date(task.dueDate);
             const isScheduled = task.scheduledAt && new Date(task.scheduledAt) > new Date();
             return (
@@ -394,7 +446,7 @@ const TaskManagement = () => {
                   ) : (
                     <div className="mb-4 p-3 bg-slate-50/80 dark:bg-slate-900/50 rounded-xl border border-slate-200/60 dark:border-slate-700/50 space-y-2">
                       <p className="text-xs font-medium text-slate-500 dark:text-slate-400 line-clamp-2">
-                        {task.description ? task.description.replace(/<[^>]*>/g, '') : 'Text instructions provided for this task.'}
+                        {formatDescriptionPreview(task.description)}
                       </p>
                       <button 
                         onClick={() => handleViewTaskText(task)}
