@@ -1049,14 +1049,20 @@ const GamificationManagement = () => {
                     <tr>
                       <td className="py-2.5 font-bold text-slate-700 dark:text-slate-200">LeetCode Problem Solved</td>
                       <td className="py-2.5 text-amber-500 font-extrabold"><span className="inline-flex items-center gap-1">+40 <GoldCoinIcon size={13} /></span></td>
-                      <td className="py-2.5 text-violet-400 font-extrabold">+80 ⚡</td>
+                      <td className="py-2.5 text-violet-400 font-extrabold">+100 ⚡</td>
                       <td className="py-2.5 text-emerald-500 font-bold">Standard</td>
                     </tr>
                     <tr>
-                      <td className="py-2.5 font-bold text-slate-700 dark:text-slate-200">Homework Task (90%+)</td>
-                      <td className="py-2.5 text-amber-500 font-extrabold"><span className="inline-flex items-center gap-1">+60 <GoldCoinIcon size={13} /></span></td>
-                      <td className="py-2.5 text-violet-400 font-extrabold">+150 ⚡</td>
-                      <td className="py-2.5 text-emerald-500 font-bold">Standard</td>
+                      <td className="py-2.5 font-bold text-slate-700 dark:text-slate-200">Task Submit &amp; Grade (per mark)</td>
+                      <td className="py-2.5 text-amber-500 font-extrabold"><span className="inline-flex items-center gap-1">+10 <GoldCoinIcon size={13} /> / mark</span></td>
+                      <td className="py-2.5 text-violet-400 font-extrabold">+15 ⚡ / mark</td>
+                      <td className="py-2.5 text-amber-400 font-bold">BYPASS (Yes)</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 font-bold text-slate-700 dark:text-slate-200">Late Task Deduction</td>
+                      <td className="py-2.5 text-rose-500 font-extrabold">-10 Coins / hr</td>
+                      <td className="py-2.5 text-rose-400 font-extrabold">-15 ⚡ / hr</td>
+                      <td className="py-2.5 text-slate-400 font-bold">-1 mark / hr</td>
                     </tr>
                     <tr>
                       <td className="py-2.5 font-bold text-slate-700 dark:text-slate-200">Project / Capstone Task</td>

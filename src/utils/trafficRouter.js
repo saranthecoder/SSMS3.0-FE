@@ -319,9 +319,9 @@ export const isIdempotentRequest = (config) => {
 /**
  * Evaluates whether an Axios request failure should trigger an automatic failover retry.
  */
-export const shouldRetryRequest = (error, originalRequest) => {
+export const shouldRetryRequest = (error, originalRequest, { maxRetries = 1 } = {}) => {
   if (!originalRequest) return false;
-  if (originalRequest._retryCount && originalRequest._retryCount > 0) return false;
+  if ((originalRequest._retryCount || 0) >= maxRetries) return false;
 
   // Strict idempotency safeguard
   if (!isIdempotentRequest(originalRequest)) {

@@ -889,18 +889,20 @@ const GamificationShop = () => {
 
             <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-5 rounded-3xl shadow-sm text-center">
               <span className="text-3xl">✍️</span>
-              <h4 className="font-extrabold text-slate-900 dark:text-white mt-2">Assignment Grades</h4>
-              <p className="text-sm text-amber-500 font-black mt-1 inline-flex items-center justify-center gap-1">Up to +250 <GoldCoinIcon size={15} /> Coins</p>
-              <p className="text-sm text-violet-400 font-black">Up to +500 ⚡ XP</p>
-              <p className="text-xs text-slate-400 mt-2 inline-flex flex-wrap items-center justify-center gap-1">Based on grades. Project tasks scale up to +2500 <GoldCoinIcon size={12} /> / +5000 ⚡!</p>
+              <h4 className="font-extrabold text-slate-900 dark:text-white mt-2">Tasks &amp; Allocated Marks</h4>
+              <p className="text-sm text-amber-500 font-black mt-1 inline-flex items-center justify-center gap-1">+10 <GoldCoinIcon size={15} /> / Mark</p>
+              <p className="text-sm text-violet-400 font-black">+15 ⚡ XP / Mark</p>
+              <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                Awarded on submit &amp; grading (e.g. 10 marks = 100 Coins + 150 XP). Late penalty deducts -1 mark (-10 Coins / -15 XP) per hr. Projects scale up to +2500 Coins / +5000 XP.
+              </p>
             </div>
 
             <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 p-5 rounded-3xl shadow-sm text-center">
               <span className="text-3xl">🎁</span>
               <h4 className="font-extrabold text-slate-900 dark:text-white mt-2">Daily Login Cycle</h4>
-              <p className="text-sm text-amber-500 font-black mt-1">Varies Daily</p>
-              <p className="text-sm text-violet-400 font-black">10-100 XP / Coins</p>
-              <p className="text-xs text-slate-400 mt-2">Claim every day you attend check-in. Day 7 awards a free Silver Chest!</p>
+              <p className="text-sm text-amber-500 font-black mt-1 inline-flex items-center justify-center gap-1">+10 <GoldCoinIcon size={15} /> Coins / Day</p>
+              <p className="text-sm text-violet-400 font-black">+20 ⚡ XP / Day</p>
+              <p className="text-xs text-slate-400 mt-2">Claim every day you check in. Day 7 awards a free Silver Chest!</p>
             </div>
           </div>
 
@@ -987,10 +989,10 @@ const GamificationShop = () => {
               </div>
               <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700 bg-amber-500/5 p-3 rounded-2xl border border-amber-500/20">
                 <p className="text-[11px] text-amber-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                  🌟 Cap Bypasses
+                  🌟 Cap Bypasses &amp; Late Penalties
                 </p>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 leading-normal">
-                  Streak milestones, project grading, and mock tests <b>always bypass daily limits</b>. You will never lose high-value milestone rewards!
+                  Task per-mark Coins/XP (+10 Coins &amp; +15 XP per mark), streak milestones, project grading, and mock tests <b>always bypass daily limits</b>. Late task submissions reduce remaining marks (-1 mark/hr), lowering both Coins (-10/hr) and XP (-15/hr).
                 </p>
               </div>
             </div>

@@ -279,7 +279,10 @@ const MyTasks = () => {
       });
 
       const coinsAwarded = resData?.coinsAwarded;
+      const xpAwarded = resData?.xpAwarded || 0;
       const allocatedMarks = resData?.taskMarks || submittedTaskMarks;
+      const responseLatePenalty = resData?.latePenalty || 0;
+      const effectiveMarks = resData?.effectiveMarks ?? Math.max(0, allocatedMarks - responseLatePenalty);
 
       setActiveTask(null);
       setSelectedTaskForDetails(null);
@@ -290,27 +293,36 @@ const MyTasks = () => {
         fetchCounts();
       }
 
-      if (coinsAwarded > 0) {
+      if (coinsAwarded > 0 || xpAwarded > 0) {
         try {
           soundManager.playSuccess();
         } catch (_) {}
 
         Swal.fire({
-          title: '🎉 Task Submitted!',
+          title: responseLatePenalty > 0 ? '⏰ Submitted Late!' : '🎉 Task Submitted!',
           html: `
             <div class="space-y-3 py-2 text-center">
               <div class="flex justify-center animate-bounce">${getGoldCoinHtml(42)}</div>
-              <p class="text-base font-bold text-slate-800 dark:text-slate-100">
-                You earned <span class="text-amber-500 font-extrabold text-xl">+${coinsAwarded} Coins</span>!
+              <p class="text-base font-bold text-slate-800 dark:text-slate-100 inline-flex items-center justify-center gap-2 flex-wrap">
+                You earned <span class="text-amber-500 font-extrabold text-xl">+${coinsAwarded} Coins</span>
+                ${xpAwarded > 0 ? `<span class="text-slate-400">&amp;</span> <span class="text-violet-500 font-extrabold text-xl">+${xpAwarded} XP</span>` : ''}!
               </p>
               <p class="text-xs text-slate-500 dark:text-slate-400">
-                10x multiplier awarded into your gamification balance based on ${allocatedMarks} allocated task marks.
+                ${responseLatePenalty > 0
+                  ? `Late penalty (-${responseLatePenalty} mark${responseLatePenalty > 1 ? 's' : ''}) reduced your rewards to ${effectiveMarks} remaining marks (10x Coins & 15x XP).`
+                  : `Awarded 10x Coins & 15x XP based on ${allocatedMarks} allocated task marks.`}
               </p>
             </div>
           `,
-          icon: 'success',
-          confirmButtonText: 'Awesome!',
+          icon: responseLatePenalty > 0 ? 'warning' : 'success',
+          confirmButtonText: responseLatePenalty > 0 ? 'OK' : 'Awesome!',
           confirmButtonColor: '#6366f1'
+        });
+      } else if (responseLatePenalty > 0) {
+        Swal.fire({
+          title: '⏰ Late Submission',
+          text: `Task submitted, but 0 coins & 0 XP were awarded because late penalty (-${responseLatePenalty} marks) exceeded the ${allocatedMarks} task marks.`,
+          icon: 'warning'
         });
       } else {
         Swal.fire({ title: 'Success', text: 'Task submitted successfully!', icon: 'success' });
@@ -323,69 +335,361 @@ const MyTasks = () => {
   };
 
   const handleViewSubmission = async (sub) => {
-    if (sub.submittedLinks && sub.submittedLinks.length > 0 || sub.submissionType === 'text') {
-      try {
-        Swal.fire({
-          title: 'Loading Submission...',
-          allowOutsideClick: false,
-          didOpen: () => {
-            Swal.showLoading();
-          }
-        });
-        const { data: fullSub } = await axios.get(`/submissions/${sub._id}`);
-        Swal.close();
-        
-        const newWin = window.open('', '_blank');
-        if (newWin) {
-          const linksHtml = fullSub.submittedLinks && fullSub.submittedLinks.length > 0
-            ? `<div style="margin: 20px 0; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; border-radius: 12px;">
-                <h3 style="margin-top: 0; color: #16a34a; font-size: 18px; font-family: inherit;">Submitted Links</h3>
-                <ul style="padding-left: 20px; margin: 0;">
-                  ${fullSub.submittedLinks.map(link => `
-                    <li style="margin-bottom: 10px; font-size: 15px;">
-                      <strong style="color: #1e293b;">${link.label}:</strong> 
-                      <a href="${link.url}" target="_blank" style="color: #2563eb; text-decoration: underline; word-break: break-all; font-weight: 500;">
-                        ${link.url}
-                      </a>
-                    </li>
-                  `).join('')}
-                </ul>
-              </div>`
-            : '';
+    const newWin = window.open('about:blank', '_blank');
+    if (!newWin) {
+      Swal.fire('Popup Blocked', 'Please allow popups for this site to view submitted work in a new tab.', 'warning');
+      return;
+    }
 
-          newWin.document.write(`
-            <html>
-              <head>
-                <title>Submitted Work</title>
-                <style>
-                  body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; line-height: 1.6; color: #333; }
-                  .ql-editor { font-size: 16px; }
-                  .remarks { background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-top: 20px; }
-                </style>
-                <link rel="stylesheet" href="https://cdn.quilljs.com/1.3.6/quill.snow.css" />
-              </head>
-              <body>
-                <h2 style="margin-bottom: 5px;">My Submitted Work</h2>
-                <p style="color: #666; margin-top: 0; font-size: 14px;">Submitted on: ${formatDateTime(fullSub.submittedAt || fullSub.createdAt)}</p>
-                <hr style="border: 0; border-top: 1px solid #e2e8f0; margin-bottom: 20px;" />
-                ${linksHtml}
-                ${fullSub.textContent && fullSub.textContent !== '<p><br></p>' && fullSub.textContent !== '' ? `<div class="ql-editor" style="padding: 0;">${fullSub.textContent}</div>` : ''}
-                ${fullSub.remarks ? `<div class="remarks"><h4 style="margin-top: 0;">Remarks</h4><p style="margin-bottom: 0;">${fullSub.remarks}</p></div>` : ''}
-              </body>
-            </html>
-          `);
-          newWin.document.close();
-        }
-      } catch (error) {
-        Swal.close();
-        console.error('Error fetching submission details:', error);
-        Swal.fire('Error', 'Could not fetch submission details.', 'error');
+    try {
+      newWin.document.open();
+      newWin.document.write('<html><body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;color:#64748b;background:#f8fafc;">Loading submission details...</body></html>');
+      newWin.document.close();
+
+      const { data: fullSub } = await axios.get(`/submissions/${sub._id}`);
+      const isDark = document.documentElement.classList.contains('dark');
+      const taskTitle = escapeHtml(fullSub.taskId?.title || sub.taskId?.title || 'My Submitted Work');
+      const taskCategory = escapeHtml(fullSub.taskId?.category || sub.taskId?.category || 'General');
+      const maxMarks = Number(fullSub.taskId?.maxMarks ?? sub.taskId?.maxMarks ?? 10) || 10;
+      const grade = fullSub.grade || null;
+      const latePenalty = Number(grade?.latePenalty ?? fullSub.latePenalty ?? 0);
+      const isLate = Boolean(fullSub.isLate || latePenalty > 0);
+      const coinsEarned = Number(fullSub.coinsAwarded ?? 0);
+      const xpEarned = Number(fullSub.xpAwarded ?? 0);
+      const submittedTimeText = escapeHtml(formatDateTime(fullSub.submittedAt || fullSub.createdAt) || '—');
+
+      const statusLabel = fullSub.status === 'graded' ? 'Graded' : fullSub.status === 'resubmit' ? 'Resubmit Requested' : 'Submitted';
+      const statusClass = fullSub.status === 'graded' ? 'pill-emerald' : fullSub.status === 'resubmit' ? 'pill-amber' : 'pill-blue';
+
+      const gradePct = grade && maxMarks > 0 ? Math.round((Number(grade.marksObtained) / maxMarks) * 100) : null;
+      const scoreSummaryText = grade
+        ? `${grade.marksObtained} / ${maxMarks}${gradePct !== null ? ` (${gradePct}%)` : ''}`
+        : 'Pending Mentor Review';
+
+      const gradeCardHtml = grade
+        ? `<div class="grade-card">
+            <div class="grade-head">
+              <div>
+                <div class="grade-eyebrow">Evaluation &amp; Mentor Feedback</div>
+                <div class="grade-score">Score: <strong>${escapeHtml(grade.marksObtained)}</strong> / ${maxMarks} Marks ${gradePct !== null ? `<span class="pct-pill">${gradePct}%</span>` : ''}</div>
+              </div>
+              <div class="grade-meta">
+                ${grade.reviewedBy?.name ? `<span>Reviewed by <strong>${escapeHtml(grade.reviewedBy.name)}</strong></span>` : ''}
+                ${grade.reviewedAt ? `<span>${escapeHtml(formatDateTime(grade.reviewedAt))}</span>` : ''}
+              </div>
+            </div>
+            ${latePenalty > 0 ? `<div class="penalty-note">Late Penalty Applied: -${latePenalty} mark${latePenalty > 1 ? 's' : ''}${grade.rawMarks !== undefined ? ` (Raw: ${escapeHtml(grade.rawMarks)} → Final: ${escapeHtml(grade.marksObtained)})` : ''}</div>` : ''}
+            ${grade.feedback ? `<div class="feedback-box">${escapeHtml(grade.feedback).replace(/\n/g, '<br/>')}</div>` : ''}
+          </div>`
+        : `<div class="pending-card">Awaiting mentor grading. Preliminary submission rewards shown above.</div>`;
+
+      const linksHtml = fullSub.submittedLinks && fullSub.submittedLinks.length > 0
+        ? `<div class="section">
+            <h3 class="section-title">Submitted Links</h3>
+            <div class="links-list">
+              ${fullSub.submittedLinks.map(link => `
+                <a class="link-item" href="${escapeHtml(link.url)}" target="_blank" rel="noreferrer">
+                  <span class="link-label">${escapeHtml(link.label)}</span>
+                  <span class="link-url">${escapeHtml(link.url)} ↗</span>
+                </a>
+              `).join('')}
+            </div>
+          </div>`
+        : '';
+
+      const singleLinkHtml = fullSub.submissionType === 'link' && fullSub.linkUrl
+        ? `<div class="section">
+            <h3 class="section-title">Submitted Reference Link</h3>
+            <a class="link-item" href="${escapeHtml(fullSub.linkUrl)}" target="_blank" rel="noreferrer">
+              <span class="link-label">Project / Task URL</span>
+              <span class="link-url">${escapeHtml(fullSub.linkUrl)} ↗</span>
+            </a>
+          </div>`
+        : '';
+
+      const fileHtml = fullSub.submissionType === 'file' && fullSub.fileUrl
+        ? (() => {
+            const fullUrl = fullSub.fileUrl.startsWith('http') ? fullSub.fileUrl : `${import.meta.env.VITE_API_URL}${fullSub.fileUrl}`;
+            return `<div class="section">
+              <h3 class="section-title">Submitted File</h3>
+              <a class="link-item" href="${escapeHtml(fullUrl)}" target="_blank" rel="noreferrer">
+                <span class="link-label">Download Submitted Attachment</span>
+                <span class="link-url">Open File ↗</span>
+              </a>
+            </div>`;
+          })()
+        : '';
+
+      const rawTextHtml = fullSub.textContent && fullSub.textContent !== '<p><br></p>' && fullSub.textContent.trim() !== ''
+        ? sanitizeTaskHtml(fullSub.textContent)
+        : '';
+      const hasDarkInlineBg = /background(-color)?\s*:/i.test(rawTextHtml);
+
+      const contentHtml = rawTextHtml
+        ? `<div class="section">
+            <h3 class="section-title">Submitted Answer / Code</h3>
+            <div class="work-viewer ql-editor ${hasDarkInlineBg ? 'work-code-dark' : ''}">${rawTextHtml}</div>
+          </div>`
+        : '';
+
+      const remarksHtml = fullSub.remarks
+        ? `<div class="section">
+            <h3 class="section-title">Student Remarks</h3>
+            <div class="remarks-box">${escapeHtml(fullSub.remarks)}</div>
+          </div>`
+        : '';
+
+      newWin.document.open();
+      newWin.document.write(`<!doctype html>
+<html lang="en" class="${isDark ? 'dark' : ''}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${taskTitle} — Submitted Work</title>
+    <link rel="stylesheet" href="https://cdn.quilljs.com/1.3.6/quill.snow.css" />
+    <style>
+      :root {
+        --bg-page: #f1f5f9;
+        --bg-card: #ffffff;
+        --bg-header: linear-gradient(90deg, #f8fafc 0%, #ffffff 65%, rgba(238, 242, 255, 0.55) 100%);
+        --bg-meta: #f1f5f9;
+        --bg-soft: #f8fafc;
+        --border: #e2e8f0;
+        --text-main: #0f172a;
+        --text-sub: #334155;
+        --text-muted: #64748b;
       }
-    } else if (sub.submissionType === 'link' && sub.linkUrl) {
-      window.open(sub.linkUrl, '_blank');
-    } else if (sub.submissionType === 'file' && sub.fileUrl) {
-      const url = sub.fileUrl.startsWith('http') ? sub.fileUrl : `${import.meta.env.VITE_API_URL}${sub.fileUrl}`;
-      window.open(url, '_blank');
+      html.dark {
+        --bg-page: #020617;
+        --bg-card: #0f172a;
+        --bg-header: linear-gradient(90deg, #0f172a 0%, #0f172a 65%, rgba(30, 27, 75, 0.45) 100%);
+        --bg-meta: rgba(30, 41, 59, 0.75);
+        --bg-soft: rgba(2, 6, 23, 0.85);
+        --border: #1e293b;
+        --text-main: #f8fafc;
+        --text-sub: #cbd5e1;
+        --text-muted: #94a3b8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 28px 16px 40px;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg-page);
+        color: var(--text-main);
+        line-height: 1.6;
+      }
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        box-shadow: 0 24px 50px -12px rgba(15, 23, 42, 0.16);
+        overflow: hidden;
+      }
+      .header {
+        padding: 22px 26px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg-header);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+      .pill { font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em; }
+      .pill-slate { background: rgba(148, 163, 184, 0.18); color: var(--text-sub); }
+      .pill-emerald { background: rgba(16, 185, 129, 0.14); color: #059669; border: 1px solid rgba(16, 185, 129, 0.25); }
+      .pill-blue { background: rgba(59, 130, 246, 0.14); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); }
+      .pill-amber { background: rgba(245, 158, 11, 0.14); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.28); }
+      .pill-rose { background: rgba(244, 63, 94, 0.12); color: #e11d48; border: 1px solid rgba(244, 63, 94, 0.25); }
+      h1 { margin: 0; font-size: 22px; font-weight: 900; color: var(--text-main); line-height: 1.25; }
+      .subline { margin: 4px 0 0; font-size: 12px; color: var(--text-muted); font-weight: 600; }
+      .reward-badges { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+      .coin-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 13px;
+        border-radius: 12px;
+        background: rgba(245, 158, 11, 0.12);
+        border: 1px solid rgba(245, 158, 11, 0.28);
+        color: #d97706;
+        font-size: 13px;
+        font-weight: 900;
+      }
+      html.dark .coin-pill { color: #fcd34d; background: rgba(120, 53, 15, 0.35); }
+      .xp-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 7px 13px;
+        border-radius: 12px;
+        background: rgba(139, 92, 246, 0.12);
+        border: 1px solid rgba(139, 92, 246, 0.28);
+        color: #7c3aed;
+        font-size: 13px;
+        font-weight: 900;
+      }
+      html.dark .xp-pill { color: #c4b5fd; }
+      .meta-bar {
+        padding: 12px 26px;
+        background: var(--bg-meta);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-sub);
+      }
+      .body { padding: 26px; space-y: 18px; }
+      .grade-card {
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.09), rgba(6, 182, 212, 0.08));
+        border: 1px solid rgba(16, 185, 129, 0.28);
+        border-radius: 18px;
+        padding: 18px 22px;
+        margin-bottom: 22px;
+      }
+      .grade-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+      .grade-eyebrow { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.07em; color: #059669; }
+      .grade-score { font-size: 20px; font-weight: 800; color: var(--text-main); margin-top: 2px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .pct-pill { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: #10b981; color: #fff; font-weight: 800; }
+      .grade-meta { font-size: 12px; color: var(--text-muted); display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+      .penalty-note { margin-top: 10px; font-size: 12px; font-weight: 700; color: #dc2626; background: rgba(239, 68, 68, 0.1); padding: 6px 10px; border-radius: 8px; display: inline-block; }
+      .feedback-box { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border); font-size: 13px; color: var(--text-sub); }
+      .pending-card {
+        background: rgba(59, 130, 246, 0.08);
+        border: 1px solid rgba(59, 130, 246, 0.22);
+        color: #2563eb;
+        border-radius: 14px;
+        padding: 13px 16px;
+        font-size: 13px;
+        font-weight: 700;
+        margin-bottom: 22px;
+      }
+      html.dark .pending-card { color: #93c5fd; }
+      .section { margin-top: 18px; }
+      .section:first-child { margin-top: 0; }
+      .section-title { margin: 0 0 10px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.07em; color: #4f46e5; }
+      html.dark .section-title { color: #818cf8; }
+      .links-list { display: grid; grid-template-columns: 1fr; gap: 8px; }
+      .link-item {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        border-radius: 12px;
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        text-decoration: none;
+      }
+      .link-label { font-size: 13px; font-weight: 800; color: var(--text-main); }
+      .link-url { font-size: 12px; font-weight: 700; color: #2563eb; word-break: break-all; }
+      .work-viewer.ql-editor {
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px 28px !important;
+        font-size: 14px;
+        line-height: 1.65;
+        overflow-x: auto;
+        color: var(--text-main);
+      }
+      .work-viewer.work-code-dark {
+        background: #0f172a !important;
+        border-color: #1e293b !important;
+        color: #e2e8f0 !important;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .work-viewer.work-code-dark * {
+        background: transparent !important;
+        background-color: transparent !important;
+      }
+      .remarks-box {
+        background: var(--bg-soft);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 14px 18px;
+        font-size: 14px;
+        color: var(--text-sub);
+      }
+      .footer {
+        padding: 14px 24px;
+        border-top: 1px solid var(--border);
+        background: var(--bg-soft);
+        display: flex;
+        justify-content: flex-end;
+      }
+      .close-btn {
+        padding: 9px 18px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--bg-card);
+        color: var(--text-sub);
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      @media (max-width: 640px) {
+        body { padding: 10px 8px 28px; }
+        .header, .meta-bar, .body, .footer { padding: 14px 16px; }
+        .work-viewer.ql-editor { padding: 16px !important; }
+        .grade-meta { align-items: flex-start; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <div>
+          <div class="pills">
+            <span class="pill pill-slate">${taskCategory}</span>
+            <span class="pill ${statusClass}">${statusLabel}</span>
+            <span class="pill ${isLate ? 'pill-rose' : 'pill-emerald'}">${isLate ? `Late (${latePenalty}m penalty)` : 'On Time'}</span>
+          </div>
+          <h1>${taskTitle}</h1>
+          <p class="subline">Submitted on: ${submittedTimeText}</p>
+        </div>
+        <div class="reward-badges">
+          <span class="coin-pill">${getGoldCoinHtml(16)} +${coinsEarned} Coins</span>
+          <span class="xp-pill">⚡ +${xpEarned} XP</span>
+        </div>
+      </div>
+
+      <div class="meta-bar">
+        <span>Grade: <strong>${escapeHtml(scoreSummaryText)}</strong></span>
+        <span>Type: <strong style="text-transform:uppercase;">${escapeHtml(fullSub.submissionType || 'text')}</strong></span>
+        <span>Max Marks: <strong>${maxMarks}</strong></span>
+      </div>
+
+      <div class="body">
+        ${gradeCardHtml}
+        ${linksHtml}
+        ${singleLinkHtml}
+        ${fileHtml}
+        ${contentHtml}
+        ${remarksHtml}
+      </div>
+
+      <div class="footer">
+        <button onclick="window.close()" class="close-btn" type="button">Close</button>
+      </div>
+    </div>
+  </body>
+</html>`);
+      newWin.document.close();
+    } catch (error) {
+      try { newWin.close(); } catch (_) {}
+      console.error('Error fetching submission details:', error);
+      Swal.fire('Error', 'Could not fetch submission details.', 'error');
     }
   };
 
@@ -407,7 +711,16 @@ const MyTasks = () => {
     const safeCategory = escapeHtml(task.category || 'General');
     const deadlineText = escapeHtml(formatDateTime(task.dueDate) || '—');
     const maxMarks = Number(task.maxMarks) || 0;
-    const rewardCoins = maxMarks * 10;
+    const currentOverdueHrs = (!isSubmitted && task.dueDate && Date.now() > new Date(task.dueDate).getTime())
+      ? Math.ceil((Date.now() - new Date(task.dueDate).getTime()) / 3600000)
+      : (detailSub?.latePenalty || 0);
+    const effectiveMarks = Math.max(0, maxMarks - currentOverdueHrs);
+    const rewardCoins = (isAlreadySubmitted && detailSub?.coinsAwarded !== undefined)
+      ? detailSub.coinsAwarded
+      : effectiveMarks * 10;
+    const rewardXp = (isAlreadySubmitted && detailSub?.xpAwarded !== undefined)
+      ? detailSub.xpAwarded
+      : effectiveMarks * 15;
     const descriptionHtml = sanitizeTaskHtml(task.description) || '<p style="color:#64748b;font-style:italic;">No instructions provided.</p>';
     const startIso = (task.scheduledAt || task.createdAt) ? new Date(task.scheduledAt || task.createdAt).toISOString() : '';
     const dueIso = task.dueDate ? new Date(task.dueDate).toISOString() : '';
@@ -745,6 +1058,10 @@ const MyTasks = () => {
             ${getGoldCoinHtml(15)}
             Reward: <strong class="mono">+${rewardCoins} Coins</strong>
           </span>
+          <span class="meta-divider"></span>
+          <span class="meta-item" style="color:#7c3aed;">
+            ⚡ <strong class="mono">+${rewardXp} XP</strong>
+          </span>
         </div>
       </div>
 
@@ -951,9 +1268,34 @@ const MyTasks = () => {
                     <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 px-2.5 py-0.5 rounded-md border border-slate-200/60 dark:border-slate-700/60">
                       🎯 {task.maxMarks} Marks
                     </span>
-                    <span className="text-[11px] font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-md border border-amber-500/20 inline-flex items-center gap-1.5 shadow-2xs">
-                      <GoldCoinIcon size={14} /> +{(Number(task.maxMarks) || 0) * 10} Coins on Submit
-                    </span>
+                    {(() => {
+                      const rawMax = Number(task.maxMarks) || 0;
+                      const overdueHrsNow = (!isSubmitted && task.dueDate && Date.now() > new Date(task.dueDate).getTime())
+                        ? Math.ceil((Date.now() - new Date(task.dueDate).getTime()) / 3600000)
+                        : (submission?.latePenalty || 0);
+                      const reducedMarks = Math.max(0, rawMax - overdueHrsNow);
+                      const displayCoins = (isSubmitted && submission?.coinsAwarded !== undefined)
+                        ? submission.coinsAwarded
+                        : reducedMarks * 10;
+                      const displayXp = (isSubmitted && submission?.xpAwarded !== undefined)
+                        ? submission.xpAwarded
+                        : reducedMarks * 15;
+                      return (
+                        <>
+                          <span className={`text-[11px] font-black px-2.5 py-0.5 rounded-md border inline-flex items-center gap-1.5 shadow-2xs ${
+                            overdueHrsNow > 0
+                              ? 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/25'
+                              : 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20'
+                          }`}>
+                            <GoldCoinIcon size={14} />
+                            {isSubmitted ? `Earned +${displayCoins} Coins` : `+${displayCoins} Coins${overdueHrsNow > 0 ? ' (Late)' : ''}`}
+                          </span>
+                          <span className="text-[11px] font-black px-2 py-0.5 rounded-md border text-violet-600 dark:text-violet-400 bg-violet-500/10 border-violet-500/20 inline-flex items-center gap-1 shadow-2xs">
+                            ⚡ +{displayXp} XP
+                          </span>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1036,11 +1378,29 @@ const MyTasks = () => {
             <div className="p-4 bg-primary-50/50 dark:bg-primary-900/10 border-b border-primary-100 dark:border-primary-900/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <p className="font-semibold text-primary-900 dark:text-primary-300">{activeTask.title}</p>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">Marks: {activeTask.maxMarks}</span>
-                  <span className="text-xs font-black text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20 inline-flex items-center gap-1.5">
-                    <GoldCoinIcon size={14} /> Earn +{(Number(activeTask.maxMarks) || 0) * 10} Gamification Coins
-                  </span>
+                  {(() => {
+                    const rawMax = Number(activeTask.maxMarks) || 0;
+                    const lateHrs = (activeTask.dueDate && Date.now() > new Date(activeTask.dueDate).getTime())
+                      ? Math.ceil((Date.now() - new Date(activeTask.dueDate).getTime()) / 3600000)
+                      : 0;
+                    const effMarks = Math.max(0, rawMax - lateHrs);
+                    return (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`text-xs font-black px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1.5 ${
+                          lateHrs > 0
+                            ? 'text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/25'
+                            : 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20'
+                        }`}>
+                          <GoldCoinIcon size={14} /> Earn +{effMarks * 10} Coins{lateHrs > 0 ? ` (-${lateHrs}h late)` : ''}
+                        </span>
+                        <span className="text-xs font-black px-2.5 py-0.5 rounded-full border text-violet-600 dark:text-violet-400 bg-violet-500/10 border-violet-500/20 inline-flex items-center gap-1">
+                          ⚡ +{effMarks * 15} XP
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               <div className="flex items-center gap-2">

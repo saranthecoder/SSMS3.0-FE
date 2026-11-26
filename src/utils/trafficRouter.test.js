@@ -226,8 +226,27 @@ test('shouldRetryRequest permits retry only for idempotent requests on 502-504 o
   // 400 Bad Request on GET -> MUST NOT retry
   assert.strictEqual(shouldRetryRequest({ response: { status: 400 } }, getReq), false);
 
-  // Already retried request -> MUST NOT retry again
+  // Already retried request -> MUST NOT retry again with default maxRetries=1
   assert.strictEqual(shouldRetryRequest({ response: { status: 503 } }, { method: 'GET', _retryCount: 1 }), false);
+
+  // Multi-hop failover permits additional retries up to maxRetries
+  assert.strictEqual(shouldRetryRequest({ response: { status: 503 } }, { method: 'GET', _retryCount: 1 }, { maxRetries: 3 }), true);
+  assert.strictEqual(shouldRetryRequest({ response: { status: 503 } }, { method: 'GET', _retryCount: 3 }, { maxRetries: 3 }), false);
+});
+
+test('getFallbackServer excludes all previously tried URLs during multi-hop failover', () => {
+  const now = Date.now();
+  const servers = [
+    { url: 'https://n1.io', status: 'online', isActive: true, lastHealthCheck: new Date(now) },
+    { url: 'https://n2.io', status: 'online', isActive: true, lastHealthCheck: new Date(now) },
+    { url: 'https://n3.io', status: 'online', isActive: true, lastHealthCheck: new Date(now) }
+  ];
+
+  const fallback = getFallbackServer(servers, 'https://n2.io/api', {
+    now,
+    excludeUrls: ['https://n1.io/api', 'https://n2.io/api']
+  });
+  assert.strictEqual(fallback.url, 'https://n3.io');
 });
 
 test('getFallbackServer finds a healthy alternate node', () => {

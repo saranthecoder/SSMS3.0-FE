@@ -24,9 +24,16 @@ export const useAuth = () => useContext(AuthContext);
 
 let rrIndex = 0; // Round-robin index counter
 let consecutiveGlobalFailures = 0;
+let lastFailureAt = 0;
 let lastOutagePopupAt = 0;
-const OUTAGE_FAILURE_THRESHOLD = 2;
+let lastResumeAt = Date.now();
+let activeOutageSwalOpen = false;
+let isProbingConnectivity = false;
+const OUTAGE_FAILURE_THRESHOLD = 4;
+const FAILURE_WINDOW_MS = 20 * 1000;
+const RESUME_GRACE_MS = 10000;
 const OUTAGE_POPUP_COOLDOWN_MS = 3 * 60 * 1000;
+const MAX_IDEMPOTENT_FAILOVER_RETRIES = 3;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -141,23 +148,60 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const syncConfig = async () => {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
       await refreshTrafficConfig();
     };
 
-    const handleBackOnline = () => {
+    const triggerWakeRecovery = () => {
+      lastResumeAt = Date.now();
       consecutiveGlobalFailures = 0;
-      lastOutagePopupAt = 0;
       resetClientHealthRegistry();
-      refreshTrafficConfig();
+      if (activeOutageSwalOpen) {
+        activeOutageSwalOpen = false;
+        Swal.close();
+      }
     };
+
+    const handleBackOnline = () => {
+      triggerWakeRecovery();
+      lastOutagePopupAt = 0;
+      setTimeout(() => refreshTrafficConfig(), 800);
+    };
+
+    const handleVisibilityResume = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        triggerWakeRecovery();
+      }
+    };
+
+    const handleWindowFocus = () => {
+      triggerWakeRecovery();
+    };
+
+    // Detect OS/tab sleep clock jumps even when the tab remained focused before sleep
+    let lastHeartbeatAt = Date.now();
+    const sleepDetectorId = setInterval(() => {
+      const now = Date.now();
+      if (now - lastHeartbeatAt > 10000) {
+        triggerWakeRecovery();
+      }
+      lastHeartbeatAt = now;
+    }, 2000);
 
     syncConfig();
     const intervalId = setInterval(syncConfig, 60000);
     window.addEventListener('online', handleBackOnline);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('pageshow', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityResume);
 
     return () => {
       clearInterval(intervalId);
+      clearInterval(sleepDetectorId);
       window.removeEventListener('online', handleBackOnline);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('pageshow', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityResume);
     };
   }, []);
 
@@ -272,6 +316,11 @@ export const AuthProvider = ({ children }) => {
       (response) => {
         // Record node success to clear cooldown upon recovery
         consecutiveGlobalFailures = 0;
+        lastFailureAt = 0;
+        if (activeOutageSwalOpen) {
+          activeOutageSwalOpen = false;
+          Swal.close();
+        }
         if (response.config && response.config.baseURL) {
           recordNodeSuccess(response.config.baseURL);
         }
@@ -280,7 +329,10 @@ export const AuthProvider = ({ children }) => {
       async (error) => {
         const originalRequest = error.config;
         const status = error.response?.status;
+        const now = Date.now();
         const isBrowserOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        const isTabHidden = typeof document !== 'undefined' && document.hidden;
+        const isInWakeGrace = (now - lastResumeAt) < RESUME_GRACE_MS;
         const isNetworkCut = !error.response;
         const isNodeOrEdgeFailure =
           isNetworkCut ||
@@ -288,35 +340,52 @@ export const AuthProvider = ({ children }) => {
           status === 429 ||
           (status === 403 && !error.response?.data?.isBlocked && !error.response?.data?.isSuspended);
 
-        if (originalRequest && originalRequest.baseURL && isNodeOrEdgeFailure && !isBrowserOffline) {
+        if (originalRequest && originalRequest.baseURL && isNodeOrEdgeFailure && !isBrowserOffline && !isInWakeGrace) {
           recordNodeFailure(originalRequest.baseURL, error);
         }
 
-        // Idempotency check: only retry GET/HEAD/OPTIONS requests on network drops or server/edge failures
-        if (!isBrowserOffline && originalRequest && shouldRetryRequest(error, originalRequest)) {
+        // Idempotency check: retry GET/HEAD/OPTIONS across up to MAX_IDEMPOTENT_FAILOVER_RETRIES distinct healthy nodes
+        if (!isBrowserOffline && originalRequest && shouldRetryRequest(error, originalRequest, { maxRetries: MAX_IDEMPOTENT_FAILOVER_RETRIES })) {
           originalRequest._retryCount = (originalRequest._retryCount || 0) + 1;
 
           const currentConfig = trafficConfigRef.current;
           const currentBaseURL = originalRequest.baseURL;
+          originalRequest._triedUrls = Array.isArray(originalRequest._triedUrls) ? originalRequest._triedUrls : [];
+          if (currentBaseURL) {
+            originalRequest._triedUrls.push(currentBaseURL);
+          }
+
           const fallbackServer = getFallbackServer(currentConfig.servers, currentBaseURL, {
             isOnWebDomain,
-            rrIndex
+            rrIndex,
+            excludeUrls: originalRequest._triedUrls
           });
 
           if (fallbackServer) {
             rrIndex = rrIndex + 1;
             originalRequest.baseURL = `${normalizeUrl(fallbackServer.url)}/api`;
-            console.warn(`Idempotent request failed on ${currentBaseURL}. Retrying on fallback node: ${fallbackServer.name} (${fallbackServer.url})`);
+            console.warn(`Idempotent request failed on ${currentBaseURL}. Retrying (${originalRequest._retryCount}/${MAX_IDEMPOTENT_FAILOVER_RETRIES}) on fallback node: ${fallbackServer.name} (${fallbackServer.url})`);
             return axios(originalRequest);
           }
         }
 
-        // Distinguish between student's internet/network drop vs actual backend server error
-        if (isNodeOrEdgeFailure && !originalRequest?._skipOutagePopup && !axios.isCancel?.(error)) {
+        // Ignore transient wake-up / hidden-tab errors and passive background polls
+        if (
+          isNodeOrEdgeFailure &&
+          !originalRequest?._skipOutagePopup &&
+          !axios.isCancel?.(error) &&
+          !isTabHidden &&
+          !isInWakeGrace
+        ) {
+          if (now - lastFailureAt > FAILURE_WINDOW_MS) {
+            consecutiveGlobalFailures = 0;
+          }
+          lastFailureAt = now;
           consecutiveGlobalFailures += 1;
+
           const currentConfig = trafficConfigRef.current;
           const primaryServer = getPrimaryEnvServer();
-          const { allNodesUnavailable } = selectBackendNode({
+          const { allNodesUnavailable, selectedUrl: probeBase } = selectBackendNode({
             policy: currentConfig.policy,
             servers: currentConfig.servers,
             manualSelectedServerId: currentConfig.manualSelectedServerId,
@@ -326,41 +395,64 @@ export const AuthProvider = ({ children }) => {
             primaryUrl: primaryServer.url
           });
 
-          const now = Date.now();
           if (
-            (isBrowserOffline || allNodesUnavailable || consecutiveGlobalFailures >= OUTAGE_FAILURE_THRESHOLD) &&
+            (isBrowserOffline || (allNodesUnavailable && consecutiveGlobalFailures >= 2) || consecutiveGlobalFailures >= OUTAGE_FAILURE_THRESHOLD) &&
             !Swal.isVisible() &&
+            !isProbingConnectivity &&
             now - lastOutagePopupAt > OUTAGE_POPUP_COOLDOWN_MS
           ) {
-            lastOutagePopupAt = now;
-            const popupTitle = isBrowserOffline
-              ? 'No Internet Connection'
-              : isNetworkCut
-                ? 'Network / Connection Issue'
-                : 'Server Busy — Please Wait';
-            const popupHtml = isBrowserOffline
-              ? '<p style="font-size:14px;line-height:1.6;">Your device appears to be <strong>offline</strong>.<br/><br/>Please check your <strong>Wi-Fi or mobile internet</strong> and click <strong>Retry Connection</strong>. Your saved progress and attendance remain safe.</p>'
-              : isNetworkCut
-                ? '<p style="font-size:14px;line-height:1.6;">Unable to reach the platform from your current internet connection.<br/><br/>Please check your <strong>Wi-Fi, mobile data, VPN, or college firewall</strong> and try <strong>Retry Connection</strong> (or switch networks). Your saved progress remains safe.</p>'
-                : '<p style="font-size:14px;line-height:1.6;">The server is currently experiencing high traffic or restarting.<br/><br/>Please wait <strong>2 to 5 minutes</strong> before refreshing the page. Your saved progress and attendance records remain safe.</p>';
-
-            Swal.fire({
-              icon: isNetworkCut ? 'info' : 'warning',
-              title: popupTitle,
-              html: popupHtml,
-              confirmButtonText: isNetworkCut ? 'OK' : 'OK, I Will Wait',
-              showDenyButton: true,
-              denyButtonText: 'Retry Connection',
-              confirmButtonColor: '#10b981',
-              denyButtonColor: '#6366f1'
-            }).then((result) => {
-              if (result.isDenied) {
+            let confirmedOutage = isBrowserOffline;
+            if (!confirmedOutage) {
+              isProbingConnectivity = true;
+              try {
+                await axios.get(`${normalizeUrl(probeBase || primaryServer.url)}/api/health/live`, {
+                  timeout: 5000,
+                  _skipOutagePopup: true,
+                  _retryCount: MAX_IDEMPOTENT_FAILOVER_RETRIES
+                });
+                // Platform IS reachable; failures were from stale sockets or a slow endpoint
                 consecutiveGlobalFailures = 0;
-                lastOutagePopupAt = 0;
-                resetClientHealthRegistry();
-                refreshTrafficConfig();
+                confirmedOutage = false;
+              } catch {
+                confirmedOutage = true;
+              } finally {
+                isProbingConnectivity = false;
               }
-            });
+            }
+
+            if (confirmedOutage && !Swal.isVisible()) {
+              lastOutagePopupAt = Date.now();
+              activeOutageSwalOpen = true;
+              const popupTitle = isBrowserOffline
+                ? 'No Internet Connection'
+                : isNetworkCut
+                  ? 'Network / Connection Issue'
+                  : 'Server Busy — Please Wait';
+              const popupHtml = isBrowserOffline
+                ? '<p style="font-size:14px;line-height:1.6;">Your device appears to be <strong>offline</strong>.<br/><br/>Please check your <strong>Wi-Fi or mobile internet</strong> and click <strong>Retry Connection</strong>. Your saved progress and attendance remain safe.</p>'
+                : isNetworkCut
+                  ? '<p style="font-size:14px;line-height:1.6;">Unable to reach the platform from your current internet connection.<br/><br/>Please check your <strong>Wi-Fi, mobile data, VPN, or college firewall</strong> and try <strong>Retry Connection</strong> (or switch networks). Your saved progress remains safe.</p>'
+                  : '<p style="font-size:14px;line-height:1.6;">The server is currently experiencing high traffic or restarting.<br/><br/>Please wait <strong>2 to 5 minutes</strong> before refreshing the page. Your saved progress and attendance records remain safe.</p>';
+
+              Swal.fire({
+                icon: isNetworkCut ? 'info' : 'warning',
+                title: popupTitle,
+                html: popupHtml,
+                confirmButtonText: isNetworkCut ? 'OK' : 'OK, I Will Wait',
+                showDenyButton: true,
+                denyButtonText: 'Retry Connection',
+                confirmButtonColor: '#10b981',
+                denyButtonColor: '#6366f1'
+              }).then((result) => {
+                activeOutageSwalOpen = false;
+                if (result.isDenied) {
+                  consecutiveGlobalFailures = 0;
+                  lastOutagePopupAt = 0;
+                  resetClientHealthRegistry();
+                  refreshTrafficConfig();
+                }
+              });
+            }
           }
         }
         return Promise.reject(error);

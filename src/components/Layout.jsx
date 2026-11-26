@@ -1374,15 +1374,15 @@ const Layout = () => {
   const fetchCounts = useCallback(async () => {
     try {
       const batchParam = selectedBatchId ? `?batchId=${selectedBatchId}` : '';
-      const { data: onlineData } = await axios.get(`/attendance/active-count${batchParam}`);
+      const { data: onlineData } = await axios.get(`/attendance/active-count${batchParam}`, { _skipOutagePopup: true });
       setOnlineStudentsCount(onlineData.activeCount || 0);
 
       const currentCleared = getPersistedClearedNotifs();
 
       if (user?.role === 'admin' || user?.role === 'mentor') {
         const [dashboardRes, gamificationRes] = await Promise.all([
-          axios.get('/analytics/dashboard'),
-          axios.get('/gamification/status').catch(e => ({ data: {} }))
+          axios.get('/analytics/dashboard', { _skipOutagePopup: true }),
+          axios.get('/gamification/status', { _skipOutagePopup: true }).catch(e => ({ data: {} }))
         ]);
         const data = dashboardRes.data;
         const gamification = gamificationRes.data;
@@ -1438,9 +1438,9 @@ const Layout = () => {
         setGamificationData(gamification);
       } else if (user?.role === 'student') {
         const [analyticsSettled, gamificationSettled, friendsSettled] = await Promise.allSettled([
-          axios.get(`/analytics/student/${user._id}?mini=true`),
-          axios.get('/gamification/status'),
-          axios.get('/gamification/friends')
+          axios.get(`/analytics/student/${user._id}?mini=true`, { _skipOutagePopup: true }),
+          axios.get('/gamification/status', { _skipOutagePopup: true }),
+          axios.get('/gamification/friends', { _skipOutagePopup: true })
         ]);
         const data = analyticsSettled.status === 'fulfilled' ? analyticsSettled.value.data : null;
         const gamification = gamificationSettled.status === 'fulfilled' ? gamificationSettled.value.data : null;
@@ -1508,6 +1508,7 @@ const Layout = () => {
       syncAttendanceSession();
       
       let intervalId;
+      let resumeTimeoutId;
       const startInterval = (ms) => {
         if (intervalId) clearInterval(intervalId);
         intervalId = setInterval(fetchCounts, ms);
@@ -1518,11 +1519,15 @@ const Layout = () => {
 
       const handleVisibilityChange = () => {
         if (document.hidden) {
+          if (resumeTimeoutId) clearTimeout(resumeTimeoutId);
           // Throttle background polling to 3 minutes to optimize free backend nodes
           startInterval(180000);
         } else {
-          // Resume normal 30s polling on tab focus
-          fetchCounts();
+          // Wait briefly after sleep/tab-resume so OS Wi-Fi & browser sockets settle before syncing
+          if (resumeTimeoutId) clearTimeout(resumeTimeoutId);
+          resumeTimeoutId = setTimeout(() => {
+            fetchCounts();
+          }, 1200);
           startInterval(30000);
         }
       };
@@ -1531,6 +1536,7 @@ const Layout = () => {
 
       return () => {
         if (intervalId) clearInterval(intervalId);
+        if (resumeTimeoutId) clearTimeout(resumeTimeoutId);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }

@@ -294,6 +294,9 @@ const Verification = () => {
     }
   });
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const [liveTick, setLiveTick] = useState(Date.now());
   const [verifyingPin, setVerifyingPin] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
@@ -541,9 +544,10 @@ const Verification = () => {
         activeStudents: activeStudents.length,
         offlineStudents: Math.max(0, (stats.totalStudents || students.length) - activeStudents.length),
         totalTasks: stats.totalTasks || tasks.length,
-        pendingReviews: stats.pendingReviews || submissions.filter(s => s.status === 'pending' || s.status === 'submitted').length,
-        completedReviews: stats.completedReviews || submissions.filter(s => s.status === 'graded').length,
-        totalSubmissions: stats.totalSubmissions || submissions.length,
+        pendingReviews: stats.pendingReviews ?? submissions.filter(s => s.status === 'pending' || s.status === 'submitted').length,
+        completedReviews: stats.completedReviews ?? submissions.filter(s => s.status === 'graded').length,
+        resubmitReviews: stats.resubmitReviews ?? submissions.filter(s => s.status === 'resubmit').length,
+        totalSubmissions: stats.totalSubmissions ?? submissions.length,
         avgAttendanceDays: stats.avgAttendanceDays || 0,
         avgPerformance: stats.avgPerformance || 0,
         avgMockDriveScore: stats.avgMockDriveScore || 0,
@@ -556,20 +560,33 @@ const Verification = () => {
     const activeCount = scopedActiveStudents.length;
     const offlineCount = Math.max(0, totalStudents - activeCount);
     const totalTasksCount = scopedTasks.length;
-    const pendingReviews = scopedSubmissions.filter(s => s.status === 'pending' || s.status === 'submitted').length;
-    const completedReviews = scopedSubmissions.filter(s => s.status === 'graded').length;
-    const totalSubmissionsCount = scopedSubmissions.length;
+
+    const hasTaskAgg = scopedTasks.some(t => t.submissionCount !== undefined);
+    const totalSubmissionsCount = hasTaskAgg
+      ? scopedTasks.reduce((sum, t) => sum + (t.submissionCount || 0), 0)
+      : scopedSubmissions.length;
+    const completedReviews = hasTaskAgg
+      ? scopedTasks.reduce((sum, t) => sum + (t.gradedCount || 0), 0)
+      : scopedSubmissions.filter(s => s.status === 'graded').length;
+    const pendingReviews = scopedTasks.some(t => t.pendingCount !== undefined)
+      ? scopedTasks.reduce((sum, t) => sum + (t.pendingCount || 0), 0)
+      : Math.max(0, totalSubmissionsCount - completedReviews);
+    const resubmitReviews = scopedTasks.some(t => t.resubmitCount !== undefined)
+      ? scopedTasks.reduce((sum, t) => sum + (t.resubmitCount || 0), 0)
+      : scopedSubmissions.filter(s => s.status === 'resubmit').length;
     
     const avgAttendance = totalStudents > 0
       ? Math.round(scopedStudents.reduce((sum, s) => sum + (s.daysPresent || 0), 0) / totalStudents)
       : (currentBatchObj?.avgAttendanceDays || 0);
     
-    const avgPerf = totalStudents > 0
-      ? Math.round(scopedStudents.reduce((sum, s) => sum + (s.overallScore || s.avgGrade || 0), 0) / totalStudents)
+    const gradedStudents = scopedStudents.filter(s => (s.gradedCount || 0) > 0 || (s.avgGrade || 0) > 0);
+    const avgPerf = gradedStudents.length > 0
+      ? Math.round(gradedStudents.reduce((sum, s) => sum + (s.avgGrade || 0), 0) / gradedStudents.length)
       : (currentBatchObj?.avgGrade || 0);
 
-    const avgMock = scopedMockScores.length > 0
-      ? Math.round(scopedMockScores.reduce((sum, m) => sum + (m.percentage || 0), 0) / scopedMockScores.length)
+    const attendedMockScores = scopedMockScores.filter(m => m.attended && m.percentage !== undefined);
+    const avgMock = attendedMockScores.length > 0
+      ? Math.round(attendedMockScores.reduce((sum, m) => sum + (m.percentage || 0), 0) / attendedMockScores.length)
       : 0;
 
     const topStreak = totalStudents > 0
@@ -587,6 +604,7 @@ const Verification = () => {
       totalTasks: totalTasksCount,
       pendingReviews,
       completedReviews,
+      resubmitReviews,
       totalSubmissions: totalSubmissionsCount,
       avgAttendanceDays: avgAttendance,
       avgPerformance: avgPerf,
@@ -629,8 +647,10 @@ const Verification = () => {
       // 1. Check with backend PIN verification API
       const { data: verifyRes } = await axios.post('/public/monitor/verify-pin', { pin: cleanCode });
       if (verifyRes && verifyRes.valid) {
-        setIsAuthenticated(true);
+        setError('');
+        setLoading(true);
         setPasscode(cleanCode);
+        setIsAuthenticated(true);
         try {
           localStorage.setItem('ssms_monitor_auth', 'true');
           localStorage.setItem('ssms_monitor_passcode', cleanCode);
@@ -638,24 +658,19 @@ const Verification = () => {
             localStorage.setItem('ssms_monitor_panel_name', verifyRes.panelName);
           }
         } catch (err) {}
-
-        const { data: d } = await axios.get(`/public/monitor?pin=${encodeURIComponent(cleanCode)}`);
-        setData(d);
         return;
       }
       setError('Invalid passcode.');
     } catch (err) {
       // Fallback for hardcoded keys if offline or legacy
       if (PASSCODES.includes(cleanCode)) {
-        setIsAuthenticated(true);
+        setError('');
+        setLoading(true);
         setPasscode(cleanCode);
+        setIsAuthenticated(true);
         try {
           localStorage.setItem('ssms_monitor_auth', 'true');
           localStorage.setItem('ssms_monitor_passcode', cleanCode);
-        } catch (e) {}
-        try {
-          const { data: d } = await axios.get(`/public/monitor?pin=${encodeURIComponent(cleanCode)}`);
-          setData(d);
         } catch (e) {}
         return;
       }
@@ -679,19 +694,34 @@ const Verification = () => {
     }
   };
 
-  const fetchData = async () => {
-    if (!data) {
+  const fetchData = async ({ forceFresh = false, silent = false } = {}) => {
+    if (!data && !silent) {
       setLoading(true);
+    }
+    setSyncing(true);
+    if (!silent) {
+      setError('');
     }
     try {
       const activePin = (passcode || '').trim() || localStorage.getItem('ssms_monitor_passcode') || '';
-      const query = activePin ? `?pin=${encodeURIComponent(activePin.toUpperCase())}` : '';
-      const { data: d } = await axios.get(`/public/monitor${query}`);
+      const params = new URLSearchParams();
+      if (activePin) params.set('pin', activePin.toUpperCase());
+      if (forceFresh) params.set('fresh', 'true');
+      const queryStr = params.toString();
+      const { data: d } = await axios.get(`/public/monitor${queryStr ? `?${queryStr}` : ''}`, {
+        timeout: 25000,
+        _skipOutagePopup: true
+      });
       setData(d);
-    } catch {
-      setError('Failed to load data.');
+      setLastSyncedAt(d?.serverTimestamp ? new Date(d.serverTimestamp) : new Date());
+      setError('');
+    } catch (err) {
+      if (!silent) {
+        setError(err.response?.data?.message || 'Failed to sync monitoring data. Please try again.');
+      }
     } finally {
       setLoading(false);
+      setSyncing(false);
     }
   };
 
@@ -703,23 +733,52 @@ const Verification = () => {
       const cleanUrlPin = urlPin.trim().toUpperCase();
       setPasscode(cleanUrlPin);
       axios.post('/public/monitor/verify-pin', { pin: cleanUrlPin })
-        .then(async (res) => {
+        .then((res) => {
           if (res.data?.valid) {
+            setLoading(true);
             setIsAuthenticated(true);
             try {
               localStorage.setItem('ssms_monitor_auth', 'true');
               localStorage.setItem('ssms_monitor_passcode', cleanUrlPin);
               if (res.data.panelName) localStorage.setItem('ssms_monitor_panel_name', res.data.panelName);
             } catch (e) {}
-            const { data: d } = await axios.get(`/public/monitor?pin=${encodeURIComponent(cleanUrlPin)}`);
-            setData(d);
           }
         })
         .catch(() => {});
     }
   }, []);
 
-  useEffect(() => { if (isAuthenticated) fetchData(); }, [isAuthenticated]);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    fetchData({ forceFresh: false, silent: false });
+
+    // Real-time background sync every 20 seconds when tab is visible
+    const pollId = setInterval(() => {
+      if (typeof document === 'undefined' || !document.hidden) {
+        fetchData({ forceFresh: false, silent: true });
+      }
+    }, 20000);
+
+    // Tick live logged timers every 15 seconds for accurate Live Tracking display
+    const tickId = setInterval(() => {
+      setLiveTick(Date.now());
+    }, 15000);
+
+    const handleVisibilityRefresh = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        setTimeout(() => {
+          fetchData({ forceFresh: true, silent: true });
+        }, 800);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityRefresh);
+
+    return () => {
+      clearInterval(pollId);
+      clearInterval(tickId);
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
+    };
+  }, [isAuthenticated]);
 
   const openStudentProfile = async (rollNumber) => {
     setSelectedStudent(rollNumber);
@@ -795,6 +854,28 @@ const Verification = () => {
               <span>{verifyingPin ? 'Verifying PIN...' : 'Access Monitoring Center'}</span>
             </button>
           </form>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !data && !loading) {
+    return (
+      <div className={`min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 ${theme === 'light' ? 'verify-panel' : theme === 'orange' ? 'verify-panel-orange' : ''}`}>
+        {theme === 'light' && <style>{VERIFY_LIGHT_CSS}</style>}
+        {theme === 'orange' && <style>{VERIFY_ORANGE_CSS}</style>}
+        <div className="max-w-md w-full bg-slate-800 border border-slate-700 rounded-2xl p-6 text-center space-y-4 shadow-xl">
+          <AlertTriangle size={36} className="mx-auto text-rose-500" />
+          <h2 className="text-lg font-bold text-white">Unable to Load Monitoring Data</h2>
+          <p className="text-sm text-slate-400">{error}</p>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button onClick={() => fetchData({ forceFresh: true })} className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold flex items-center gap-2 cursor-pointer">
+              <RefreshCw size={14} /> Retry
+            </button>
+            <button onClick={handleLogout} className="px-4 py-2 rounded-xl bg-slate-700 text-slate-300 text-sm font-bold cursor-pointer">
+              Back to PIN
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1813,7 +1894,7 @@ const Verification = () => {
                 {[
                   { label: 'Graded', count: dashboardStats.completedReviews, color: 'emerald' },
                   { label: 'Pending', count: dashboardStats.pendingReviews, color: 'amber' },
-                  { label: 'Resubmit', count: scopedSubmissions.filter(s => s.status === 'resubmit').length, color: 'rose' },
+                  { label: 'Resubmit', count: dashboardStats.resubmitReviews, color: 'rose' },
                 ].map((item, i) => (
                   <div key={i} className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-700">
                     <span className="text-xs text-slate-400 font-bold uppercase">{item.label}</span>
@@ -1959,7 +2040,7 @@ const Verification = () => {
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> Live Activity Center
             </h2>
-            <button onClick={fetchData} className="px-3 py-1.5 bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-700 flex items-center gap-1"><RefreshCw size={12} /> Refresh</button>
+            <button onClick={() => fetchData({ forceFresh: true })} className="px-3 py-1.5 bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-700 flex items-center gap-1"><RefreshCw size={12} className={syncing ? 'animate-spin' : ''} /> Refresh</button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -2348,12 +2429,14 @@ const Verification = () => {
                 .map(problem => {
                   const isScheduled = problem.scheduledAt && new Date(problem.scheduledAt) > new Date();
                   const isActive = new Date(problem.deadline) > new Date() && !isScheduled;
-                  const problemSubs = leetcodeSubmissions ? leetcodeSubmissions.filter(s => {
-                    const pId = s.problemId?._id || s.problemId;
-                    return pId && pId.toString() === problem._id.toString();
-                  }) : [];
+                  const problemSubCount = typeof problem.submissionCount === 'number'
+                    ? problem.submissionCount
+                    : (leetcodeSubmissions ? leetcodeSubmissions.filter(s => {
+                        const pId = s.problemId?._id || s.problemId;
+                        return pId && pId.toString() === problem._id.toString();
+                      }).length : 0);
                   const batchStudents = students.filter(s => s.batchId && problem.batchId && s.batchId.toString() === (problem.batchId._id || problem.batchId).toString());
-                  const completionPct = batchStudents.length > 0 ? Math.round((problemSubs.length / batchStudents.length) * 100) : 0;
+                  const completionPct = batchStudents.length > 0 ? Math.round((problemSubCount / batchStudents.length) * 100) : 0;
                   
                   return (
                     <div key={problem._id} className={`border rounded-2xl p-5 flex flex-col justify-between min-h-[190px] ${isScheduled ? 'border-amber-500/50 bg-amber-950/5' : 'bg-slate-800 border-slate-700'}`}>
@@ -2376,7 +2459,7 @@ const Verification = () => {
 
                       <div>
                         <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                          <span>Submissions: <strong className="text-white font-bold">{problemSubs.length}</strong> / {batchStudents.length}</span>
+                          <span>Submissions: <strong className="text-white font-bold">{problemSubCount}</strong> / {batchStudents.length}</span>
                           <span>{completionPct}% Complete</span>
                         </div>
                         <div className="w-full bg-slate-700 rounded-full h-1.5 mb-3">
@@ -2462,7 +2545,7 @@ const Verification = () => {
               const lowest = marks.length ? Math.min(...marks) : 0;
               const avg = marks.length ? Math.round(marks.reduce((a, b) => a + b, 0) / marks.length) : 0;
               return [
-                { label: 'Total Graded', value: graded.length, color: 'indigo' },
+                { label: 'Total Graded', value: dashboardStats.completedReviews, color: 'indigo' },
                 { label: 'Highest Score', value: highest, color: 'emerald' },
                 { label: 'Lowest Score', value: lowest, color: 'rose' },
                 { label: 'Average Score', value: avg, color: 'amber' },
@@ -2650,7 +2733,7 @@ const Verification = () => {
           <div className="flex items-center justify-between text-[10px] text-slate-500">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-              <span>Connected · {new Date().toLocaleTimeString()}</span>
+              <span>{syncing ? 'Syncing live data...' : `Live · ${lastSyncedAt ? lastSyncedAt.toLocaleTimeString() : 'Connecting...'}`}</span>
             </div>
           </div>
           <button
@@ -2700,9 +2783,10 @@ const Verification = () => {
               ))}
             </select>
             <div className="hidden sm:flex items-center gap-2 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-400">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>{new Date().toLocaleString()}
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+              <span>{lastSyncedAt ? `Synced ${lastSyncedAt.toLocaleString()}` : new Date(liveTick).toLocaleString()}</span>
             </div>
-            <button onClick={fetchData} title="Refresh Data" className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"><RefreshCw size={16} /></button>
+            <button onClick={() => fetchData({ forceFresh: true })} title="Force Refresh Live Data" className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-xl transition-colors cursor-pointer"><RefreshCw size={16} className={syncing ? 'animate-spin' : ''} /></button>
             <button 
               onClick={cycleTheme} 
               title={`Current Theme: ${theme.toUpperCase()} (Click to toggle Light / Orange / Dark)`} 
