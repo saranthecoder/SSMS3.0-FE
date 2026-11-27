@@ -173,7 +173,7 @@ const CheckInPermissions = () => {
     return `${hrs}hr ${mins}min`;
   };
 
-  const handleSaveAndApplyWorkload = async () => {
+  const handleSaveWorkload = async () => {
     if (isWorkloadLocked) return;
     if (!effectiveBatchId) {
       Swal.fire('No Batch', 'Please select a batch first.', 'warning');
@@ -181,10 +181,10 @@ const CheckInPermissions = () => {
     }
 
     const confirmResult = await Swal.fire({
-      title: 'Save & Apply Workload?',
+      title: 'Save Daily Workload Record?',
       html: `
         <div class="text-left text-xs space-y-1.5 mt-2">
-          <p><b>Batch Students:</b> ${allStudents.length} students</p>
+          <p class="text-slate-600">Saves today's workload settings without granting check-in access yet. Select eligible students below to activate Daily Workload for them.</p>
           <p><b>On-Site:</b> ${dailyWorkload.onsiteAllocated ? `Min ${dailyWorkload.onsiteMinHours}h / Max ${dailyWorkload.onsiteMaxHours}h` : 'Not Allocated'}${dailyWorkload.autoOnsiteCheckoutEnabled ? ` (Auto-Checkout @ ${format12Hour(dailyWorkload.autoOnsiteCheckoutTime || '17:00')})` : ''}</p>
           <p><b>WFH:</b> ${dailyWorkload.wfhAllocated ? `Min ${dailyWorkload.wfhMinHours}h / Max ${dailyWorkload.wfhMaxHours}h` : 'Not Allocated'}${dailyWorkload.autoWfhEnabled ? ` (Auto-Unlock @ ${format12Hour(dailyWorkload.autoWfhTime || '19:00')})` : ''}</p>
         </div>
@@ -193,18 +193,87 @@ const CheckInPermissions = () => {
       showCancelButton: true,
       confirmButtonColor: '#10b981',
       cancelButtonColor: '#64748b',
-      confirmButtonText: 'Yes, Save & Apply',
+      confirmButtonText: 'Yes, Save Workload',
       cancelButtonText: 'Cancel'
     });
 
     if (!confirmResult.isConfirmed) return;
 
     setSavingWorkload(true);
-    setGrantingAccess(true);
     try {
-      // 1. Save workload benchmark
       await axios.post('/checkin-access/workload', {
         batchId: effectiveBatchId,
+        onsiteAllocated: dailyWorkload.onsiteAllocated,
+        onsiteMinHours: Number(dailyWorkload.onsiteMinHours) || 4,
+        onsiteMaxHours: Number(dailyWorkload.onsiteMaxHours) || 10,
+        wfhAllocated: dailyWorkload.wfhAllocated,
+        wfhMinHours: Number(dailyWorkload.wfhMinHours) || 4,
+        wfhMaxHours: Number(dailyWorkload.wfhMaxHours) || 10,
+        autoWfhEnabled: Boolean(dailyWorkload.autoWfhEnabled),
+        autoWfhTime: dailyWorkload.autoWfhTime || '19:00',
+        autoOnsiteCheckoutEnabled: Boolean(dailyWorkload.autoOnsiteCheckoutEnabled),
+        autoOnsiteCheckoutTime: dailyWorkload.autoOnsiteCheckoutTime || '17:00',
+        notes: dailyWorkload.notes,
+        saveOnly: true
+      });
+
+      const summaryText = [
+        dailyWorkload.onsiteAllocated ? `On-Site: ${dailyWorkload.onsiteMinHours}h` : null,
+        dailyWorkload.wfhAllocated ? `WFH: ${dailyWorkload.wfhMinHours}h` : null,
+        dailyWorkload.autoWfhEnabled ? `Auto WFH: ${format12Hour(dailyWorkload.autoWfhTime)}` : null
+      ].filter(Boolean).join(' • ');
+
+      Swal.fire({
+        title: 'Workload Saved',
+        text: `Saved (${summaryText || 'Configured'}) and locked. Select eligible students below to activate Daily Workload for them.`,
+        icon: 'success',
+        timer: 1800,
+        showConfirmButton: false
+      });
+      setIsWorkloadLocked(true);
+      refreshAccessGrants();
+    } catch (err) {
+      console.error('Failed to save daily workload:', err);
+      Swal.fire('Error', err.response?.data?.message || 'Failed to save daily workload.', 'error');
+    } finally {
+      setSavingWorkload(false);
+    }
+  };
+
+  const handleActivateDailyWorkloadForSelected = async () => {
+    if (selectedStudents.length === 0) {
+      Swal.fire('No Selection', 'Please select at least one student first.', 'warning');
+      return;
+    }
+    if (!dailyWorkload.onsiteAllocated && !dailyWorkload.wfhAllocated) {
+      Swal.fire('No Workload Enabled', 'Enable On-Site Workload or WFH Workload in the Daily Workload Record panel first.', 'warning');
+      return;
+    }
+
+    const confirmResult = await Swal.fire({
+      title: `Activate Daily Workload for ${selectedStudents.length} Student(s)?`,
+      html: `
+        <div class="text-left text-xs space-y-1.5 mt-2">
+          <p><b>Selected Students Only:</b> ${selectedStudents.length} student(s) (unselected students will not receive access)</p>
+          <p><b>On-Site:</b> ${dailyWorkload.onsiteAllocated ? `Min ${dailyWorkload.onsiteMinHours}h / Max ${dailyWorkload.onsiteMaxHours}h` : 'Not Allocated'}${dailyWorkload.autoOnsiteCheckoutEnabled ? ` (Auto-Checkout @ ${format12Hour(dailyWorkload.autoOnsiteCheckoutTime || '17:00')})` : ''}</p>
+          <p><b>WFH:</b> ${dailyWorkload.wfhAllocated ? `Min ${dailyWorkload.wfhMinHours}h / Max ${dailyWorkload.wfhMaxHours}h` : 'Not Allocated'}${dailyWorkload.autoWfhEnabled ? ` (Auto-Unlock @ ${format12Hour(dailyWorkload.autoWfhTime || '19:00')})` : ''}</p>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#6366f1',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: `Activate for ${selectedStudents.length} Student(s)`,
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
+    setGrantingAccess(true);
+    try {
+      const { data } = await axios.post('/checkin-access/activate-workload', {
+        batchId: effectiveBatchId,
+        studentIds: selectedStudents,
         onsiteAllocated: dailyWorkload.onsiteAllocated,
         onsiteMinHours: Number(dailyWorkload.onsiteMinHours) || 4,
         onsiteMaxHours: Number(dailyWorkload.onsiteMaxHours) || 10,
@@ -218,49 +287,21 @@ const CheckInPermissions = () => {
         notes: dailyWorkload.notes
       });
 
-      // 2. Apply access grant to all students in batch
-      if (allStudents.length > 0) {
-        const allStudentIds = allStudents.map(s => s._id);
-        const primaryMode = dailyWorkload.wfhAllocated ? 'wfh' : 'on-site';
-        const primaryMin = primaryMode === 'wfh' ? dailyWorkload.wfhMinHours : dailyWorkload.onsiteMinHours;
-        const primaryMax = primaryMode === 'wfh' ? dailyWorkload.wfhMaxHours : dailyWorkload.onsiteMaxHours;
-
-        await axios.post('/checkin-access/grant', {
-          studentIds: allStudentIds,
-          accessType: primaryMode,
-          batchId: effectiveBatchId,
-          workHours: primaryMin,
-          minHours: primaryMin,
-          maxHours: primaryMax,
-          onsiteMinHours: dailyWorkload.onsiteMinHours,
-          onsiteMaxHours: dailyWorkload.onsiteMaxHours,
-          wfhMinHours: dailyWorkload.wfhMinHours,
-          wfhMaxHours: dailyWorkload.wfhMaxHours,
-          onsiteAllocated: dailyWorkload.onsiteAllocated,
-          wfhAllocated: dailyWorkload.wfhAllocated
-        });
-      }
-
-      const summaryText = [
-        dailyWorkload.onsiteAllocated ? `On-Site: ${dailyWorkload.onsiteMinHours}h` : null,
-        dailyWorkload.wfhAllocated ? `WFH: ${dailyWorkload.wfhMinHours}h` : null,
-        dailyWorkload.autoWfhEnabled ? `Auto WFH: ${format12Hour(dailyWorkload.autoWfhTime)}` : null
-      ].filter(Boolean).join(' • ');
-
       Swal.fire({
-        title: 'Workload Saved & Applied',
-        text: `Workload (${summaryText || 'Configured'}) saved and applied to all ${allStudents.length} students.`,
+        title: 'Daily Workload Activated',
+        text: data?.message || `Daily Workload activated for ${selectedStudents.length} selected student(s).`,
         icon: 'success',
         timer: 1800,
         showConfirmButton: false
       });
-      setIsWorkloadLocked(true);
+      setSelectedStudents([]);
+      setSelectAllPrevTasksCompleted(false);
+      setSelectPresentYesterday(false);
       refreshAccessGrants();
-    } catch (err) {
-      console.error('Failed to save and apply workload:', err);
-      Swal.fire('Error', err.response?.data?.message || 'Failed to save and apply daily workload.', 'error');
+    } catch (error) {
+      console.error('Failed to activate daily workload for selected students:', error);
+      Swal.fire('Error', error.response?.data?.message || 'Failed to activate Daily Workload.', 'error');
     } finally {
-      setSavingWorkload(false);
       setGrantingAccess(false);
     }
   };
@@ -568,6 +609,9 @@ const CheckInPermissions = () => {
   }, [allStudents, accessGrants, todayLeaves, todayAttendances]);
 
   // Filter students based on search and access filter
+  const selectedIdSet = new Set(selectedStudents);
+  const sortSelectedToTop = selectAllPrevTasksCompleted || selectPresentYesterday;
+
   const filteredStudents = allStudents.filter(student => {
     const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           (student.rollNumber && student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -588,6 +632,12 @@ const CheckInPermissions = () => {
 
     return matchesSearch && matchesAccess;
   }).sort((a, b) => {
+    if (sortSelectedToTop) {
+      const isSelA = selectedIdSet.has(a._id) ? 1 : 0;
+      const isSelB = selectedIdSet.has(b._id) ? 1 : 0;
+      if (isSelA !== isSelB) return isSelB - isSelA;
+    }
+
     if (sortBy === 'absent-first') {
       const isAbsentA = isStudentAbsent(a._id) ? 1 : 0;
       const isAbsentB = isStudentAbsent(b._id) ? 1 : 0;
@@ -684,17 +734,17 @@ const CheckInPermissions = () => {
             </button>
 
             <button
-              onClick={handleSaveAndApplyWorkload}
+              onClick={handleSaveWorkload}
               disabled={isWorkloadLocked || savingWorkload || grantingAccess}
               className="px-5 py-2.5 text-xs font-black bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl shadow-lg shadow-emerald-500/25 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 disabled:hover:translate-y-0"
-              title={isWorkloadLocked ? 'Unlock workload settings first to save changes' : 'Save & Apply Workload'}
+              title={isWorkloadLocked ? 'Unlock workload settings first to save changes' : 'Save Daily Workload Record'}
             >
-              {(savingWorkload || grantingAccess) ? (
+              {savingWorkload ? (
                 <Loader2 size={14} className="animate-spin" />
               ) : (
-                <ShieldCheck size={15} />
+                <Save size={15} />
               )}
-              Save & Apply Workload
+              Save Workload
             </button>
           </div>
         </div>
@@ -1185,6 +1235,15 @@ const CheckInPermissions = () => {
                   <Home size={13} /> Grant WFH ({selectedStudents.length})
                 </button>
                 <button
+                  onClick={handleActivateDailyWorkloadForSelected}
+                  disabled={grantingAccess}
+                  className="px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md shadow-indigo-500/20 transition-all cursor-pointer flex items-center gap-1.5"
+                  title="Activate the saved Daily Workload Record features exclusively for selected students"
+                >
+                  {grantingAccess && <Loader2 size={12} className="animate-spin" />}
+                  <Layers size={13} /> Activate Daily Workload ({selectedStudents.length})
+                </button>
+                <button
                   onClick={handleRevokeAccess}
                   disabled={grantingAccess}
                   className="px-4 py-2 text-xs font-black bg-rose-500 hover:bg-rose-600 text-white rounded-xl shadow-md shadow-rose-500/10 transition-all cursor-pointer flex items-center gap-1.5"
@@ -1219,6 +1278,11 @@ const CheckInPermissions = () => {
                 <label htmlFor="select_all_list" className="cursor-pointer">
                   Select All Filtered ({filteredStudents.length})
                 </label>
+                {sortSelectedToTop && (
+                  <span className="text-[10px] font-bold normal-case px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                    Selected Top ({filteredStudents.filter(s => selectedIdSet.has(s._id)).length}) • Others Bottom ({filteredStudents.filter(s => !selectedIdSet.has(s._id)).length})
+                  </span>
+                )}
               </div>
               <span>Assigned Workload & Logged Time</span>
             </div>
