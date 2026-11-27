@@ -4,7 +4,7 @@ import axios from 'axios';
 import { 
   Loader2, ShieldCheck, Search, CheckCircle2, XCircle, Users, 
   RefreshCw, Clock, Calendar, Building2, Home, Layers, Save,
-  Sliders, AlertCircle, Lock, Unlock
+  Sliders, AlertCircle, Lock, Unlock, ClipboardCheck, UserCheck
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 import Loader from '../../components/Loader';
@@ -48,10 +48,20 @@ const CheckInPermissions = () => {
     return `${String(hour).padStart(2, '0')}:${m || '00'} ${ampm}`;
   };
 
-  // Filters and Sorting
+  // Filters, Sorting & Quick-Select Eligibility Criteria
   const [searchTerm, setSearchTerm] = useState('');
   const [accessFilter, setAccessFilter] = useState('all'); // all, on-site, wfh, leave, none
   const [sortBy, setSortBy] = useState('name-asc'); // name-asc, name-desc, roll-asc, roll-desc
+  const [eligibilityByStudent, setEligibilityByStudent] = useState({});
+  const [eligibilitySummary, setEligibilitySummary] = useState({
+    totalPrevTasks: 0,
+    completedAllPrevTasksCount: 0,
+    presentYesterdayCount: 0,
+    bothSatisfiedCount: 0,
+    yesterdayDateStr: ''
+  });
+  const [selectAllPrevTasksCompleted, setSelectAllPrevTasksCompleted] = useState(false);
+  const [selectPresentYesterday, setSelectPresentYesterday] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -84,11 +94,23 @@ const CheckInPermissions = () => {
       const leaves = Array.isArray(accessRes.data?.leaves) ? accessRes.data.leaves : [];
       const dw = accessRes.data?.dailyWorkload;
       const atts = accessRes.data?.attendances || [];
+      const eligMap = accessRes.data?.eligibilityByStudent || {};
+      const eligSummary = accessRes.data?.eligibilitySummary || {
+        totalPrevTasks: 0,
+        completedAllPrevTasksCount: 0,
+        presentYesterdayCount: 0,
+        bothSatisfiedCount: 0,
+        yesterdayDateStr: ''
+      };
 
       setAllStudents(studentsRes.data);
       setAccessGrants(grants);
       setTodayLeaves(leaves);
       setTodayAttendances(atts);
+      setEligibilityByStudent(eligMap);
+      setEligibilitySummary(eligSummary);
+      setSelectAllPrevTasksCompleted(false);
+      setSelectPresentYesterday(false);
       setSelectedStudents([]);
 
       if (dw) {
@@ -285,6 +307,8 @@ const CheckInPermissions = () => {
         showConfirmButton: false
       });
       setSelectedStudents([]);
+      setSelectAllPrevTasksCompleted(false);
+      setSelectPresentYesterday(false);
       refreshAccessGrants();
     } catch (error) {
       console.error('Failed to grant access:', error);
@@ -348,6 +372,8 @@ const CheckInPermissions = () => {
         showConfirmButton: false
       });
       setSelectedStudents([]);
+      setSelectAllPrevTasksCompleted(false);
+      setSelectPresentYesterday(false);
       refreshAccessGrants();
     } catch (error) {
       console.error('Failed to revoke access:', error);
@@ -399,6 +425,8 @@ const CheckInPermissions = () => {
         showConfirmButton: false
       });
       setSelectedStudents([]);
+      setSelectAllPrevTasksCompleted(false);
+      setSelectPresentYesterday(false);
       refreshAccessGrants();
     } catch (error) {
       console.error('Failed to grant bulk access:', error);
@@ -416,9 +444,19 @@ const CheckInPermissions = () => {
       const leaves = Array.isArray(accessRes.data?.leaves) ? accessRes.data.leaves : [];
       const dw = accessRes.data?.dailyWorkload;
       const atts = accessRes.data?.attendances || [];
+      const eligMap = accessRes.data?.eligibilityByStudent || {};
+      const eligSummary = accessRes.data?.eligibilitySummary || {
+        totalPrevTasks: 0,
+        completedAllPrevTasksCount: 0,
+        presentYesterdayCount: 0,
+        bothSatisfiedCount: 0,
+        yesterdayDateStr: ''
+      };
       setAccessGrants(grants);
       setTodayLeaves(leaves);
       setTodayAttendances(atts);
+      setEligibilityByStudent(eligMap);
+      setEligibilitySummary(eligSummary);
       if (dw) {
         setDailyWorkload({
           onsiteAllocated: dw.onsiteAllocated ?? true,
@@ -455,6 +493,36 @@ const CheckInPermissions = () => {
     } else {
       setSelectedStudents([...new Set([...selectedStudents, ...filteredIds])]);
     }
+  };
+
+  const getEligibleStudentIds = (
+    requireAllTasks,
+    requirePresentYesterday,
+    studentList = filteredStudents,
+    eligMap = eligibilityByStudent
+  ) => {
+    if (!requireAllTasks && !requirePresentYesterday) return [];
+    return studentList
+      .filter(student => {
+        const info = eligMap[student._id];
+        if (!info) return false;
+        if (requireAllTasks && !info.completedAllPrevTasks) return false;
+        if (requirePresentYesterday && !info.presentYesterday) return false;
+        return true;
+      })
+      .map(student => student._id);
+  };
+
+  const handleToggleAllPrevTasksCheckbox = (checked) => {
+    setSelectAllPrevTasksCompleted(checked);
+    const nextIds = getEligibleStudentIds(checked, selectPresentYesterday);
+    setSelectedStudents(nextIds);
+  };
+
+  const handleTogglePresentYesterdayCheckbox = (checked) => {
+    setSelectPresentYesterday(checked);
+    const nextIds = getEligibleStudentIds(selectAllPrevTasksCompleted, checked);
+    setSelectedStudents(nextIds);
   };
 
   const isStudentAbsent = (studentId) => {
@@ -977,6 +1045,87 @@ const CheckInPermissions = () => {
           </div>
         </div>
 
+        {/* Eligibility Quick-Select Checkboxes for the Day */}
+        <div className="bg-slate-50/90 dark:bg-slate-900/40 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ClipboardCheck size={16} className="text-emerald-500 shrink-0" />
+              <span className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                Auto-Select Eligible Students for Today
+              </span>
+            </div>
+            {(selectAllPrevTasksCompleted && selectPresentYesterday) && (
+              <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                Both Conditions Active: {selectedStudents.length} matching student{selectedStudents.length === 1 ? '' : 's'} selected
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label
+              htmlFor="chk_all_prev_tasks"
+              className={`flex items-center justify-between gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+                selectAllPrevTasksCompleted
+                  ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-900 dark:text-emerald-100 shadow-xs'
+                  : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 hover:border-emerald-400/50'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <input
+                  id="chk_all_prev_tasks"
+                  type="checkbox"
+                  checked={selectAllPrevTasksCompleted}
+                  onChange={(e) => handleToggleAllPrevTasksCheckbox(e.target.checked)}
+                  className="rounded border-slate-300 dark:border-slate-600 text-emerald-500 focus:ring-emerald-500 cursor-pointer h-4 w-4 shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold flex items-center gap-1.5">
+                    <ClipboardCheck size={13} className="text-emerald-500 shrink-0" />
+                    <span className="truncate">Completed All Previous Class Tasks</span>
+                  </p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Students who submitted all {eligibilitySummary.totalPrevTasks || 0} previous task(s)
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-black px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                {eligibilitySummary.completedAllPrevTasksCount || 0}
+              </span>
+            </label>
+
+            <label
+              htmlFor="chk_present_yesterday"
+              className={`flex items-center justify-between gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+                selectPresentYesterday
+                  ? 'bg-sky-500/10 border-sky-500/50 text-sky-900 dark:text-sky-100 shadow-xs'
+                  : 'bg-white dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 hover:border-sky-400/50'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <input
+                  id="chk_present_yesterday"
+                  type="checkbox"
+                  checked={selectPresentYesterday}
+                  onChange={(e) => handleTogglePresentYesterdayCheckbox(e.target.checked)}
+                  className="rounded border-slate-300 dark:border-slate-600 text-sky-500 focus:ring-sky-500 cursor-pointer h-4 w-4 shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold flex items-center gap-1.5">
+                    <UserCheck size={13} className="text-sky-500 shrink-0" />
+                    <span className="truncate">Present Students Yesterday</span>
+                  </p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Marked Present on {eligibilitySummary.yesterdayDateStr || 'yesterday'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs font-black px-2 py-0.5 rounded-lg bg-sky-500/15 text-sky-600 dark:text-sky-400 shrink-0">
+                {eligibilitySummary.presentYesterdayCount || 0}
+              </span>
+            </label>
+          </div>
+        </div>
+
         {/* Selection Status & Bulk Action Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900/30 p-4 rounded-2xl border border-slate-100 dark:border-slate-800/50">
           <div className="flex items-center gap-2">
@@ -985,7 +1134,11 @@ const CheckInPermissions = () => {
             </span>
             {selectedStudents.length > 0 && (
               <button 
-                onClick={() => setSelectedStudents([])}
+                onClick={() => {
+                  setSelectedStudents([]);
+                  setSelectAllPrevTasksCompleted(false);
+                  setSelectPresentYesterday(false);
+                }}
                 className="text-xs text-slate-400 hover:text-rose-500 hover:underline font-bold cursor-pointer"
               >
                 Clear Selection
@@ -1190,6 +1343,32 @@ const CheckInPermissions = () => {
                           </span>
                         )}
                       </div>
+
+                      {/* Eligibility Indicators: Previous Tasks & Yesterday Attendance */}
+                      {eligibilityByStudent[student._id] && (
+                        <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-200/50 dark:border-slate-800 text-[10px]">
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-bold ${
+                              eligibilityByStudent[student._id].completedAllPrevTasks
+                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                            }`}
+                          >
+                            <ClipboardCheck size={10} />
+                            Prev Tasks: {eligibilityByStudent[student._id].completedPrevTasksCount}/{eligibilityByStudent[student._id].totalPrevTasks}
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-bold ${
+                              eligibilityByStudent[student._id].presentYesterday
+                                ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400'
+                                : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                            }`}
+                          >
+                            <UserCheck size={10} />
+                            Yest: {eligibilityByStudent[student._id].yesterdayStatus}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Bottom Action Row (for Leave student or quick actions) */}
