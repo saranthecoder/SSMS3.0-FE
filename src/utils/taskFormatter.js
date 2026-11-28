@@ -51,3 +51,60 @@ export const countSubmissionTextLines = (rawContent) => {
 
   return trimmedEnd.split('\n').length;
 };
+
+export const MAX_URL_LENGTH = 2048;
+
+/**
+ * Validates that a link field contains strictly a single HTTP/HTTPS URL and not pasted code or plain text.
+ */
+export const validateSubmissionUrl = (rawUrl, fieldLabel = 'Submission Link') => {
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) {
+    return {
+      valid: false,
+      message: `"${fieldLabel}" is required. Please enter a valid URL starting with https:// or http://.`
+    };
+  }
+
+  const trimmed = rawUrl.trim();
+  if (trimmed.length > MAX_URL_LENGTH) {
+    return {
+      valid: false,
+      message: `"${fieldLabel}" is too long (max ${MAX_URL_LENGTH} characters).`
+    };
+  }
+
+  if (/\s/.test(trimmed) || /[{}<>`]/.test(trimmed)) {
+    return {
+      valid: false,
+      message: `Only a valid URL link is allowed in "${fieldLabel}" (code, spaces, and multi-line text are not permitted).`
+    };
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return {
+      valid: false,
+      message: `Enter a complete, valid URL starting with https:// or http:// (do not paste code).`
+    };
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return {
+      valid: false,
+      message: `"${fieldLabel}" must start with https:// or http://.`
+    };
+  }
+
+  const host = (parsed.hostname || '').toLowerCase();
+  const isValidDomain = /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/.test(host) || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(host);
+  if (!isValidDomain) {
+    return {
+      valid: false,
+      message: `"${fieldLabel}" must contain a valid domain URL (e.g. https://github.com/... or https://drive.google.com/...).`
+    };
+  }
+
+  return { valid: true, url: trimmed };
+};

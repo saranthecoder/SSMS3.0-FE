@@ -7,7 +7,7 @@ import 'react-quill-new/dist/quill.snow.css';
 import { Loader2, Upload, ExternalLink, Lock, Calendar, FileText as FileTextIcon, UploadCloud, Link as LinkIcon, AlignLeft, Download, CheckCircle, ChevronDown, ChevronUp, Clock, AlertTriangle, X, Award, Eye, Coins, Copy, Check } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { soundManager } from '../../utils/soundManager';
-import { sanitizeTaskHtml, MAX_TEXT_SUBMISSION_LINES, countSubmissionTextLines } from '../../utils/taskFormatter';
+import { sanitizeTaskHtml, MAX_TEXT_SUBMISSION_LINES, countSubmissionTextLines, validateSubmissionUrl } from '../../utils/taskFormatter';
 import GoldCoinIcon, { getGoldCoinHtml } from '../../components/GoldCoinIcon';
 
 const escapeHtml = (value) => {
@@ -267,9 +267,9 @@ const MyTasks = () => {
     const hasRequiredLinks = Array.isArray(activeTask.requiredLinks) && activeTask.requiredLinks.length > 0;
     if (hasRequiredLinks) {
       for (const reqLink of activeTask.requiredLinks) {
-        if (!reqLink.isMandatory) continue;
         const matched = studentSubmittedLinks.find(sl => sl && sl.label === reqLink.label);
-        if (!matched || !String(matched.url || '').trim()) {
+        const val = String(matched?.url || '').trim();
+        if (reqLink.isMandatory && !val) {
           Swal.fire({
             title: 'Task Not Submitted',
             text: `Mandatory link "${reqLink.label}" is missing. Please provide a valid URL before submitting.`,
@@ -277,6 +277,18 @@ const MyTasks = () => {
             confirmButtonColor: '#6366f1'
           });
           return;
+        }
+        if (val) {
+          const urlCheck = validateSubmissionUrl(val, reqLink.label);
+          if (!urlCheck.valid) {
+            Swal.fire({
+              title: 'Task Not Submitted',
+              text: urlCheck.message,
+              icon: 'error',
+              confirmButtonColor: '#6366f1'
+            });
+            return;
+          }
         }
       }
     } else if (subData.submissionType === 'text') {
@@ -300,14 +312,17 @@ const MyTasks = () => {
         });
         return;
       }
-    } else if (subData.submissionType === 'link' && !String(subData.linkUrl || '').trim()) {
-      Swal.fire({
-        title: 'Task Not Submitted',
-        text: 'Please provide a valid Project Link / GitHub URL before submitting.',
-        icon: 'warning',
-        confirmButtonColor: '#6366f1'
-      });
-      return;
+    } else if (subData.submissionType === 'link') {
+      const linkCheck = validateSubmissionUrl(subData.linkUrl, 'Project Link / GitHub URL');
+      if (!linkCheck.valid) {
+        Swal.fire({
+          title: 'Task Not Submitted',
+          text: linkCheck.message,
+          icon: 'error',
+          confirmButtonColor: '#6366f1'
+        });
+        return;
+      }
     }
 
     setUploading(true);
@@ -1469,6 +1484,8 @@ const MyTasks = () => {
                   </h3>
                   {activeTask.requiredLinks.map((reqLink, idx) => {
                     const currentVal = studentSubmittedLinks.find(sl => sl.label === reqLink.label)?.url || '';
+                    const trimmedVal = currentVal.trim();
+                    const urlCheck = trimmedVal ? validateSubmissionUrl(trimmedVal, reqLink.label) : { valid: true };
                     return (
                       <div key={idx} className="space-y-1.5">
                         <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center justify-between">
@@ -1480,7 +1497,7 @@ const MyTasks = () => {
                         <input
                           required={reqLink.isMandatory}
                           type="url"
-                          className="input-field"
+                          className={`input-field ${!urlCheck.valid ? '!border-rose-500 ring-1 ring-rose-500/40' : ''}`}
                           placeholder="https://..."
                           value={currentVal}
                           onChange={(e) => {
@@ -1494,6 +1511,12 @@ const MyTasks = () => {
                             setStudentSubmittedLinks(updated);
                           }}
                         />
+                        {!urlCheck.valid && (
+                          <p className="text-xs font-semibold text-rose-500 flex items-center gap-1">
+                            <AlertTriangle size={12} className="shrink-0" />
+                            <span>{urlCheck.message}</span>
+                          </p>
+                        )}
                       </div>
                     );
                   })}
@@ -1564,12 +1587,31 @@ const MyTasks = () => {
                     );
                   })()}
 
-                  {subData.submissionType === 'link' && (
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Project Link / GitHub URL</label>
-                      <input required type="url" className="input-field" placeholder="https://..." value={subData.linkUrl} onChange={e => setSubData({...subData, linkUrl: e.target.value})} />
-                    </div>
-                  )}
+                  {subData.submissionType === 'link' && (() => {
+                    const trimmedLink = String(subData.linkUrl || '').trim();
+                    const linkCheck = trimmedLink ? validateSubmissionUrl(trimmedLink, 'Project Link / GitHub URL') : { valid: true };
+                    return (
+                      <div className="space-y-1.5">
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                          Project Link / GitHub URL <span className="text-xs text-slate-400 font-normal">(URL Link Only — Do Not Paste Code)</span>
+                        </label>
+                        <input
+                          required
+                          type="url"
+                          className={`input-field ${!linkCheck.valid ? '!border-rose-500 ring-1 ring-rose-500/40' : ''}`}
+                          placeholder="https://github.com/..."
+                          value={subData.linkUrl}
+                          onChange={e => setSubData({...subData, linkUrl: e.target.value})}
+                        />
+                        {!linkCheck.valid && (
+                          <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-start gap-2">
+                            <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+                            <span>{linkCheck.message}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
 
@@ -1582,18 +1624,41 @@ const MyTasks = () => {
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setActiveTask(null)} className="flex-1 py-2 px-4 rounded-lg font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 transition-colors">Cancel</button>
                 {(() => {
-                  const isTextLimitExceeded = !(activeTask.requiredLinks && activeTask.requiredLinks.length > 0)
+                  const hasCustomLinks = Boolean(activeTask.requiredLinks && activeTask.requiredLinks.length > 0);
+                  const isTextLimitExceeded = !hasCustomLinks
                     && subData.submissionType === 'text'
                     && countSubmissionTextLines(subData.textContent) > MAX_TEXT_SUBMISSION_LINES;
+                  const hasInvalidSingleLink = !hasCustomLinks
+                    && subData.submissionType === 'link'
+                    && String(subData.linkUrl || '').trim().length > 0
+                    && !validateSubmissionUrl(subData.linkUrl, 'Project Link / GitHub URL').valid;
+                  const hasInvalidRequiredLink = hasCustomLinks && activeTask.requiredLinks.some(reqLink => {
+                    const matched = studentSubmittedLinks.find(sl => sl && sl.label === reqLink.label);
+                    const val = String(matched?.url || '').trim();
+                    return val.length > 0 && !validateSubmissionUrl(val, reqLink.label).valid;
+                  });
+                  const isSubmitDisabled = uploading || isTextLimitExceeded || hasInvalidSingleLink || hasInvalidRequiredLink;
+                  const disabledReason = isTextLimitExceeded
+                    ? `Text submission exceeds the ${MAX_TEXT_SUBMISSION_LINES}-line limit`
+                    : (hasInvalidSingleLink || hasInvalidRequiredLink)
+                      ? 'Invalid link: enter a valid HTTP/HTTPS URL (no code or spaces)'
+                      : 'Submit Work';
+
                   return (
                     <button
                       type="submit"
-                      disabled={uploading || isTextLimitExceeded}
-                      title={isTextLimitExceeded ? `Text submission exceeds the ${MAX_TEXT_SUBMISSION_LINES}-line limit` : 'Submit Work'}
+                      disabled={isSubmitDisabled}
+                      title={disabledReason}
                       className="flex-1 btn-primary flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {uploading ? <Loader2 size={18} className="animate-spin" /> : null}
-                      {uploading ? 'Submitting...' : isTextLimitExceeded ? `Limit Exceeded (Max ${MAX_TEXT_SUBMISSION_LINES} Lines)` : 'Submit Work'}
+                      {uploading
+                        ? 'Submitting...'
+                        : isTextLimitExceeded
+                          ? `Limit Exceeded (Max ${MAX_TEXT_SUBMISSION_LINES} Lines)`
+                          : (hasInvalidSingleLink || hasInvalidRequiredLink)
+                            ? 'Valid URL Link Required'
+                            : 'Submit Work'}
                     </button>
                   );
                 })()}
