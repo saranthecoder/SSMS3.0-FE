@@ -16,3 +16,38 @@ export const sanitizeTaskHtml = (html) => {
     // Convert dark/murky greens to luminous emerald (#34d399) with bold weight
     .replace(/color\s*:\s*(?:#008000|#166534|#15803d|#2e7d32|#27ae60|rgb\(\s*0\s*,\s*128\s*,\s*0\s*\)|rgb\(\s*22\s*,\s*101\s*,\s*52\s*\)|rgb\(\s*21\s*,\s*128\s*,\s*61\s*\)|rgb\(\s*39\s*,\s*174\s*,\s*96\s*\)|rgb\(\s*46\s*,\s*125\s*,\s*50\s*\)|rgb\(\s*24\s*,\s*128\s*,\s*56\s*\))/gi, 'color: #34d399; font-weight: 600');
 };
+
+export const MAX_TEXT_SUBMISSION_LINES = 100;
+
+/**
+ * Counts logical text/code lines in a plain-text or rich-text (ReactQuill HTML) submission.
+ */
+export const countSubmissionTextLines = (rawContent) => {
+  if (!rawContent || typeof rawContent !== 'string') return 0;
+
+  let text = rawContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Empty Quill paragraphs like <p><br></p> represent a single blank line
+  text = text.replace(/<(?:p|div|li|h[1-6]|blockquote)[^>]*>\s*<br\s*\/?>\s*<\/(?:p|div|li|h[1-6]|blockquote)>/gi, '\n');
+
+  // Convert explicit breaks and closing block tags to newlines
+  text = text
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|li|h[1-6]|tr|blockquote|pre)>/gi, '\n');
+
+  // Strip remaining HTML tags and decode common entities
+  text = text
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\u00A0/g, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+
+  const trimmedEnd = text.replace(/\n+$/g, '');
+  if (!trimmedEnd.trim()) return 0;
+
+  return trimmedEnd.split('\n').length;
+};

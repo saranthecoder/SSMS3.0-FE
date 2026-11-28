@@ -7,7 +7,7 @@ import 'react-quill-new/dist/quill.snow.css';
 import { Loader2, Upload, ExternalLink, Lock, Calendar, FileText as FileTextIcon, UploadCloud, Link as LinkIcon, AlignLeft, Download, CheckCircle, ChevronDown, ChevronUp, Clock, AlertTriangle, X, Award, Eye, Coins, Copy, Check } from 'lucide-react';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import { soundManager } from '../../utils/soundManager';
-import { sanitizeTaskHtml } from '../../utils/taskFormatter';
+import { sanitizeTaskHtml, MAX_TEXT_SUBMISSION_LINES, countSubmissionTextLines } from '../../utils/taskFormatter';
 import GoldCoinIcon, { getGoldCoinHtml } from '../../components/GoldCoinIcon';
 
 const escapeHtml = (value) => {
@@ -263,6 +263,53 @@ const MyTasks = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (uploading || !activeTask) return;
+
+    const hasRequiredLinks = Array.isArray(activeTask.requiredLinks) && activeTask.requiredLinks.length > 0;
+    if (hasRequiredLinks) {
+      for (const reqLink of activeTask.requiredLinks) {
+        if (!reqLink.isMandatory) continue;
+        const matched = studentSubmittedLinks.find(sl => sl && sl.label === reqLink.label);
+        if (!matched || !String(matched.url || '').trim()) {
+          Swal.fire({
+            title: 'Task Not Submitted',
+            text: `Mandatory link "${reqLink.label}" is missing. Please provide a valid URL before submitting.`,
+            icon: 'warning',
+            confirmButtonColor: '#6366f1'
+          });
+          return;
+        }
+      }
+    } else if (subData.submissionType === 'text') {
+      const lineCount = countSubmissionTextLines(subData.textContent);
+      if (lineCount === 0) {
+        Swal.fire({
+          title: 'Task Not Submitted',
+          text: `Your text submission is empty. Please write or paste your answer/code (maximum ${MAX_TEXT_SUBMISSION_LINES} lines).`,
+          icon: 'warning',
+          confirmButtonColor: '#6366f1'
+        });
+        return;
+      }
+      if (lineCount > MAX_TEXT_SUBMISSION_LINES) {
+        const excess = lineCount - MAX_TEXT_SUBMISSION_LINES;
+        Swal.fire({
+          title: 'Task Not Submitted',
+          text: `Your text submission has ${lineCount} lines, which exceeds the ${MAX_TEXT_SUBMISSION_LINES}-line limit by ${excess} line${excess > 1 ? 's' : ''}. Please shorten it or switch to Link submission.`,
+          icon: 'error',
+          confirmButtonColor: '#6366f1'
+        });
+        return;
+      }
+    } else if (subData.submissionType === 'link' && !String(subData.linkUrl || '').trim()) {
+      Swal.fire({
+        title: 'Task Not Submitted',
+        text: 'Please provide a valid Project Link / GitHub URL before submitting.',
+        icon: 'warning',
+        confirmButtonColor: '#6366f1'
+      });
+      return;
+    }
+
     setUploading(true);
     try {
       let fileUrl = null;
@@ -328,7 +375,10 @@ const MyTasks = () => {
         Swal.fire({ title: 'Success', text: 'Task submitted successfully!', icon: 'success' });
       }
     } catch (error) {
-      Swal.fire({ title: 'Error', text: error.response?.data?.message || 'Error submitting task', icon: 'error' });
+      const reason = error.response?.data?.message || (error.response
+        ? `Submission failed with server status ${error.response.status}.`
+        : 'Network connection error while submitting your work. Please check your internet and try again.');
+      Swal.fire({ title: 'Task Not Submitted', text: reason, icon: 'error' });
     } finally {
       setUploading(false);
     }
@@ -1473,20 +1523,46 @@ const MyTasks = () => {
                   </div>
 
                   {/* Dynamic Submission Input */}
-                  {subData.submissionType === 'text' && (
-                    <div className="flex flex-col">
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Text / Code Submission</label>
-                      <div className="bg-white dark:bg-slate-900 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
-                        <ReactQuill 
-                          theme="snow" 
-                          value={subData.textContent} 
-                          onChange={(val) => setSubData({...subData, textContent: val})} 
-                          modules={quillModules}
-                          className="h-64 mb-12 text-slate-900 dark:text-white"
-                        />
+                  {subData.submissionType === 'text' && (() => {
+                    const textLineCount = countSubmissionTextLines(subData.textContent);
+                    const isOverLineLimit = textLineCount > MAX_TEXT_SUBMISSION_LINES;
+                    const excessLines = textLineCount - MAX_TEXT_SUBMISSION_LINES;
+                    return (
+                      <div className="flex flex-col">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                            Text / Code Submission <span className="text-xs text-slate-400 font-normal">(Max {MAX_TEXT_SUBMISSION_LINES} lines)</span>
+                          </label>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
+                            isOverLineLimit
+                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                              : textLineCount >= 90
+                                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                          }`}>
+                            {textLineCount} / {MAX_TEXT_SUBMISSION_LINES} lines
+                          </span>
+                        </div>
+                        <div className={`bg-white dark:bg-slate-900 rounded-lg overflow-hidden border ${isOverLineLimit ? 'border-rose-500 ring-1 ring-rose-500/40' : 'border-slate-200 dark:border-slate-700'}`}>
+                          <ReactQuill 
+                            theme="snow" 
+                            value={subData.textContent} 
+                            onChange={(val) => setSubData({...subData, textContent: val})} 
+                            modules={quillModules}
+                            className="h-64 mb-12 text-slate-900 dark:text-white"
+                          />
+                        </div>
+                        {isOverLineLimit && (
+                          <div className="mt-2 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-start gap-2">
+                            <AlertTriangle size={15} className="shrink-0 mt-0.5" />
+                            <span>
+                              Task cannot be submitted: {textLineCount} lines entered, which exceeds the {MAX_TEXT_SUBMISSION_LINES}-line limit by {excessLines} line{excessLines > 1 ? 's' : ''}. Reduce your text or use Link submission.
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {subData.submissionType === 'link' && (
                     <div>
