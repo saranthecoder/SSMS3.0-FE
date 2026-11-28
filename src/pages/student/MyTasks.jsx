@@ -1581,10 +1581,22 @@ const MyTasks = () => {
 
               <div className="pt-4 flex gap-3">
                 <button type="button" onClick={() => setActiveTask(null)} className="flex-1 py-2 px-4 rounded-lg font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-white/10 hover:bg-slate-200 transition-colors">Cancel</button>
-                <button type="submit" disabled={uploading} className="flex-1 btn-primary flex justify-center items-center gap-2">
-                  {uploading ? <Loader2 size={18} className="animate-spin" /> : null}
-                  {uploading ? 'Submitting...' : 'Submit Work'}
-                </button>
+                {(() => {
+                  const isTextLimitExceeded = !(activeTask.requiredLinks && activeTask.requiredLinks.length > 0)
+                    && subData.submissionType === 'text'
+                    && countSubmissionTextLines(subData.textContent) > MAX_TEXT_SUBMISSION_LINES;
+                  return (
+                    <button
+                      type="submit"
+                      disabled={uploading || isTextLimitExceeded}
+                      title={isTextLimitExceeded ? `Text submission exceeds the ${MAX_TEXT_SUBMISSION_LINES}-line limit` : 'Submit Work'}
+                      className="flex-1 btn-primary flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {uploading ? <Loader2 size={18} className="animate-spin" /> : null}
+                      {uploading ? 'Submitting...' : isTextLimitExceeded ? `Limit Exceeded (Max ${MAX_TEXT_SUBMISSION_LINES} Lines)` : 'Submit Work'}
+                    </button>
+                  );
+                })()}
               </div>
             </form>
           </div>
